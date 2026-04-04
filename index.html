@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#0E0B06">
+    <meta name="description"
+        content="Tirupati Jewelles – Fine Gold & Silver Jewellery. Coming Soon. Bettiah, West Champaran, Bihar.">
+    <meta property="og:title" content="Tirupati Jewelles – Coming Soon">
+    <meta property="og:description" content="Fine Gold & Silver Jewellery. Bettiah, Bihar. Launching Soon.">
+    <title>Tirupati Jewelles – Coming Soon</title>
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;500;600;700&family=Cormorant+Garamond:ital,wght@0,300;0,400;1,300;1,400;1,500&family=DM+Sans:wght@300;400;500&display=swap"
+        rel="stylesheet">
+
+    <style>
+        /* ============================================================
+   RESET & ROOT
+============================================================ */
+        *,
+        *::before,
+        *::after {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        :root {
+            --gold: #C9A84C;
+            --gold-lt: #E8C96A;
+            --gold-pale: #F5E6B8;
+            --gold-deep: #7A5C1E;
+            --gold-subtle: rgba(201, 168, 76, 0.12);
+            --bg: #0E0B06;
+            --bg2: #1A1208;
+            --bg3: #241A0C;
+            --cream: #F7F0E3;
+            --muted: #8A7050;
+            --radius: 6px;
+            --max: 480px;
+        }
+
+        html {
+            font-size: 16px;
+            scroll-behavior: smooth;
+            -webkit-text-size-adjust: 100%;
+        }
+
+        body {
+            min-height: 100dvh;
+            background: var(--bg);
+            color: var(--cream);
+            font-family: 'DM Sans', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+            position: relative;
+        }
+
+        /* ============================================================
+   ANIMATED BACKGROUND
+============================================================ */
+        .bg-canvas {
+            position: fixed;
+            inset: 0;
+            z-index: 0;
+            pointer-events: none;
+            overflow: hidden;
+        }
+
+        .blob {
+            position: absolute;
+            border-radius: 50%;
+            filter: blur(80px);
+            opacity: 0.18;
+        }
+
+        .blob-1 {
+            width: 500px;
+            height: 500px;
+            background: radial-gradient(circle, #C9A84C, transparent 70%);
+            top: -150px;
+            left: 50%;
+            transform: translateX(-50%);
+            animation: pulse-blob 8s ease-in-out infinite alternate;
+        }
+
+        .blob-2 {
+            width: 300px;
+            height: 300px;
+            background: radial-gradient(circle, #8A6B22, transparent 70%);
+            bottom: 10%;
+            right: -80px;
+            opacity: 0.14;
+        }
+
+        .blob-3 {
+            width: 200px;
+            height: 200px;
+            background: radial-gradient(circle, #C9A84C, transparent 70%);
+            bottom: 30%;
+            left: -60px;
+            opacity: 0.10;
+        }
+
+        @keyframes pulse-blob {
+            from {
+                opacity: 0.12;
+                transform: translateX(-50%) scale(1);
+            }
+
+            to {
+                opacity: 0.22;
+                transform: translateX(-50%) scale(1.15);
+            }
+        }
+
+        .grain {
+            position: fixed;
+            inset: -50%;
+            width: 200%;
+            height: 200%;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='1'/%3E%3C/svg%3E");
+            opacity: 0.025;
+            pointer-events: none;
+            z-index: 1;
+            animation: grain-move 8s steps(2) infinite;
+        }
+
+        @keyframes grain-move {
+            0% {
+                transform: translate(0, 0);
+            }
+
+            25% {
+                transform: translate(-2%, -2%);
+            }
+
+            50% {
+                transform: translate(2%, 1%);
+            }
+
+            75% {
+                transform: translate(-1%, 2%);
+            }
+
+            100% {
+                transform: translate(0, 0);
+            }
+        }
+
+        .particles {
+            position: fixed;
+            inset: 0;
+            pointer-events: none;
+            z-index: 2;
+        }
+
+        .pt {
+            position: absolute;
+            border-radius: 50%;
+            background: var(--gold);
+            opacity: 0;
+            animation: pt-rise var(--d) ease-in var(--dl) infinite;
+        }
+
+        @keyframes pt-rise {
+            0% {
+                transform: translateY(100vh) scale(0);
+                opacity: 0;
+            }
+
+            5% {
+                opacity: 0.5;
+            }
+
+            95% {
+                opacity: 0.2;
+            }
+
+            100% {
+                transform: translateY(-5vh) scale(1.5);
+                opacity: 0;
+            }
+        }
+
+        /* ============================================================
+   DECORATIVE RING
+============================================================ */
+        .ring-wrap {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: min(90vw, 600px);
+            height: min(90vw, 600px);
+            opacity: 0.045;
+            pointer-events: none;
+            z-index: 2;
+            animation: ring-spin 90s linear infinite;
+        }
+
+        @keyframes ring-spin {
+            to {
+                transform: translate(-50%, -50%) rotate(360deg);
+            }
+        }
+
+        /* ============================================================
+   CORNER ACCENTS
+============================================================ */
+        .corners {
+            position: fixed;
+            inset: 16px;
+            pointer-events: none;
+            z-index: 8;
+        }
+
+        .corner {
+            position: absolute;
+            width: 28px;
+            height: 28px;
+            border-color: rgba(201, 168, 76, 0.2);
+            border-style: solid;
+        }
+
+        .corner.tl {
+            top: 0;
+            left: 0;
+            border-width: 0.5px 0 0 0.5px;
+        }
+
+        .corner.tr {
+            top: 0;
+            right: 0;
+            border-width: 0.5px 0.5px 0 0;
+        }
+
+        .corner.bl {
+            bottom: 0;
+            left: 0;
+            border-width: 0 0 0.5px 0.5px;
+        }
+
+        .corner.br {
+            bottom: 0;
+            right: 0;
+            border-width: 0 0.5px 0.5px 0;
+        }
+
+        /* ============================================================
+   PAGE LAYOUT
+============================================================ */
+        .page {
+            position: relative;
+            z-index: 10;
+            width: 100%;
+            max-width: var(--max);
+            margin: 0 auto;
+            padding: 48px 24px max(32px, env(safe-area-inset-bottom));
+            padding-top: max(48px, env(safe-area-inset-top, 48px));
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* ============================================================
+   TOP BADGE
+============================================================ */
+        .top-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 16px;
+            border: 0.5px solid rgba(201, 168, 76, 0.35);
+            border-radius: 50px;
+            background: rgba(201, 168, 76, 0.06);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            margin-bottom: 28px;
+            animation: fade-up 1s ease 0.2s both;
+        }
+
+        .badge-dot {
+            width: 5px;
+            height: 5px;
+            border-radius: 50%;
+            background: var(--gold);
+            animation: dot-pulse 2s ease infinite;
+        }
+
+        @keyframes dot-pulse {
+
+            0%,
+            100% {
+                opacity: 1;
+                transform: scale(1);
+            }
+
+            50% {
+                opacity: 0.4;
+                transform: scale(0.7);
+            }
+        }
+
+        .badge-text {
+            font-size: 0.62rem;
+            letter-spacing: 0.28em;
+            color: var(--gold);
+            text-transform: uppercase;
+            font-weight: 500;
+        }
+
+        /* ============================================================
+   LOGO MARK
+============================================================ */
+        .logo-mark {
+            margin-bottom: 18px;
+            animation: fade-up 1s ease 0.35s both;
+        }
+
+        .logo-mark svg {
+            width: 52px;
+            height: 52px;
+        }
+
+        /* ============================================================
+   BRAND NAME
+============================================================ */
+        .brand-wrap {
+            text-align: center;
+            margin-bottom: 10px;
+            animation: fade-up 1s ease 0.5s both;
+        }
+
+        .brand-name {
+            font-family: 'Cinzel', serif;
+            font-size: clamp(2.8rem, 10.5vw, 4.2rem);
+            font-weight: 700;
+            letter-spacing: 0.1em;
+            line-height: 1;
+            background: linear-gradient(150deg,
+                    #C9A84C 0%,
+                    #F5E6B8 35%,
+                    #E8C96A 55%,
+                    #C9A84C 75%,
+                    #7A5C1E 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            display: block;
+        }
+
+        .brand-sub {
+            font-family: 'Cinzel', serif;
+            font-size: clamp(0.72rem, 2.8vw, 0.88rem);
+            letter-spacing: 0.45em;
+            color: var(--gold);
+            opacity: 0.6;
+            margin-top: 6px;
+            display: block;
+        }
+
+        /* ============================================================
+   ORNAMENT DIVIDER
+============================================================ */
+        .ornament {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+            max-width: 320px;
+            margin: 22px auto;
+            animation: fade-up 1s ease 0.65s both;
+        }
+
+        .orn-line {
+            flex: 1;
+            height: 0.5px;
+            background: linear-gradient(to right, transparent, var(--gold-deep), transparent);
+        }
+
+        .orn-icon {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .orn-diamond {
+            width: 5px;
+            height: 5px;
+            background: var(--gold);
+            transform: rotate(45deg);
+            flex-shrink: 0;
+        }
+
+        .orn-diamond.sm {
+            width: 3px;
+            height: 3px;
+            opacity: 0.5;
+        }
+
+        /* ============================================================
+   TAGLINE + LOCATION
+============================================================ */
+        .tagline-wrap {
+            text-align: center;
+            margin-bottom: 8px;
+            animation: fade-up 1s ease 0.75s both;
+        }
+
+        .tagline {
+            font-family: 'Cormorant Garamond', serif;
+            font-style: italic;
+            font-size: clamp(1.4rem, 5.5vw, 1.9rem);
+            font-weight: 300;
+            color: var(--cream);
+            opacity: 0.88;
+            line-height: 1.35;
+        }
+
+        .location-tag {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            margin-top: 12px;
+            font-size: 0.62rem;
+            letter-spacing: 0.22em;
+            color: var(--muted);
+            text-transform: uppercase;
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        /* ============================================================
+   COUNTDOWN
+============================================================ */
+        .countdown-section {
+            width: 100%;
+            margin: 30px 0 26px;
+            animation: fade-up 1s ease 0.9s both;
+        }
+
+        .section-label {
+            text-align: center;
+            font-size: 0.6rem;
+            letter-spacing: 0.3em;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-bottom: 14px;
+        }
+
+        .countdown-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            width: 100%;
+        }
+
+        .cd-block {
+            background: rgba(255, 255, 255, 0.03);
+            border: 0.5px solid rgba(201, 168, 76, 0.2);
+            border-radius: var(--radius);
+            padding: 14px 8px 12px;
+            text-align: center;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .cd-block::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(135deg, rgba(201, 168, 76, 0.05) 0%, transparent 60%);
+            pointer-events: none;
+        }
+
+        .cd-num {
+            font-family: 'Cinzel', serif;
+            font-size: clamp(1.8rem, 7.5vw, 2.8rem);
+            font-weight: 600;
+            color: var(--gold-lt);
+            display: block;
+            line-height: 1;
+            letter-spacing: 0.02em;
+        }
+
+        .cd-lbl {
+            font-size: 0.52rem;
+            letter-spacing: 0.2em;
+            color: var(--muted);
+            text-transform: uppercase;
+            margin-top: 5px;
+            display: block;
+        }
+
+        /* ============================================================
+   EMAIL FORM
+============================================================ */
+        .notify-section {
+            width: 100%;
+            margin-bottom: 22px;
+            animation: fade-up 1s ease 1.05s both;
+        }
+
+        .notify-form {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            width: 100%;
+        }
+
+        .notify-input {
+            width: 100%;
+            padding: 15px 18px;
+            background: rgba(255, 255, 255, 0.04);
+            border: 0.5px solid rgba(201, 168, 76, 0.25);
+            border-radius: var(--radius);
+            color: var(--cream);
+            font-family: 'DM Sans', sans-serif;
+            font-size: 0.9rem;
+            outline: none;
+            transition: border-color 0.3s, background 0.3s;
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            -webkit-appearance: none;
+            appearance: none;
+        }
+
+        .notify-input::placeholder {
+            color: var(--muted);
+            font-size: 0.85rem;
+        }
+
+        .notify-input:focus {
+            border-color: rgba(201, 168, 76, 0.6);
+            background: rgba(255, 255, 255, 0.06);
+        }
+
+        .notify-btn {
+            width: 100%;
+            padding: 15px 24px;
+            background: linear-gradient(135deg, #C9A84C 0%, #E8C96A 50%, #C9A84C 100%);
+            background-size: 200% auto;
+            border: none;
+            border-radius: var(--radius);
+            color: #1A1208;
+            font-family: 'Cinzel', serif;
+            font-size: 0.75rem;
+            font-weight: 700;
+            letter-spacing: 0.22em;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: background-position 0.4s, transform 0.15s, opacity 0.2s;
+            -webkit-appearance: none;
+            appearance: none;
+            touch-action: manipulation;
+        }
+
+        .notify-btn:hover {
+            background-position: right center;
+        }
+
+        .notify-btn:active {
+            transform: scale(0.98);
+            opacity: 0.92;
+        }
+
+        /* row layout on wider phones */
+        @media (min-width: 400px) {
+            .notify-form {
+                flex-direction: row;
+                gap: 0;
+                border: 0.5px solid rgba(201, 168, 76, 0.25);
+                border-radius: var(--radius);
+                overflow: hidden;
+                background: rgba(255, 255, 255, 0.04);
+                backdrop-filter: blur(8px);
+                -webkit-backdrop-filter: blur(8px);
+            }
+
+            .notify-input {
+                border: none;
+                border-radius: 0;
+                background: transparent;
+                backdrop-filter: none;
+                flex: 1;
+            }
+
+            .notify-input:focus {
+                background: transparent;
+            }
+
+            .notify-btn {
+                width: auto;
+                border-radius: 0;
+                white-space: nowrap;
+                flex-shrink: 0;
+                padding: 15px 20px;
+                font-size: 0.68rem;
+            }
+        }
+
+        /* Success */
+        .success-msg {
+            display: none;
+            text-align: center;
+            padding: 18px 16px;
+            background: rgba(201, 168, 76, 0.07);
+            border: 0.5px solid rgba(201, 168, 76, 0.28);
+            border-radius: var(--radius);
+        }
+
+        .success-msg.show {
+            display: block;
+        }
+
+        .notify-form.hide {
+            display: none;
+        }
+
+        .success-icon {
+            font-family: 'Cinzel', serif;
+            font-size: 1.3rem;
+            color: var(--gold);
+            display: block;
+            margin-bottom: 7px;
+        }
+
+        .success-text {
+            font-family: 'Cormorant Garamond', serif;
+            font-style: italic;
+            font-size: 1.05rem;
+            color: var(--cream);
+            opacity: 0.88;
+        }
+
+        .success-sub {
+            font-size: 0.65rem;
+            color: var(--muted);
+            letter-spacing: 0.1em;
+            margin-top: 5px;
+        }
+
+        /* ============================================================
+   SOCIAL ROW
+============================================================ */
+        .social-section {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 14px;
+            margin-bottom: 28px;
+            animation: fade-up 1s ease 1.2s both;
+        }
+
+        .social-label {
+            font-size: 0.6rem;
+            letter-spacing: 0.2em;
+            color: var(--muted);
+            text-transform: uppercase;
+        }
+
+        .social-links {
+            display: flex;
+            gap: 10px;
+        }
+
+        .social-link {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 38px;
+            height: 38px;
+            border: 0.5px solid rgba(201, 168, 76, 0.22);
+            border-radius: 50%;
+            color: var(--muted);
+            text-decoration: none;
+            background: rgba(255, 255, 255, 0.02);
+            transition: border-color 0.2s, color 0.2s, background 0.2s;
+            touch-action: manipulation;
+        }
+
+        .social-link:hover,
+        .social-link:active {
+            border-color: rgba(201, 168, 76, 0.65);
+            color: var(--gold);
+            background: var(--gold-subtle);
+        }
+
+        .social-link svg {
+            width: 15px;
+            height: 15px;
+        }
+
+        /* ============================================================
+   FEATURE CARDS
+============================================================ */
+        .features {
+            width: 100%;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 10px;
+            margin-bottom: 30px;
+            animation: fade-up 1s ease 1.35s both;
+        }
+
+        .feat-card {
+            background: rgba(255, 255, 255, 0.025);
+            border: 0.5px solid rgba(201, 168, 76, 0.12);
+            border-radius: var(--radius);
+            padding: 14px 10px;
+            text-align: center;
+        }
+
+        .feat-icon {
+            font-size: 1.3rem;
+            display: block;
+            margin-bottom: 7px;
+        }
+
+        .feat-title {
+            font-family: 'Cinzel', serif;
+            font-size: 0.56rem;
+            letter-spacing: 0.1em;
+            color: var(--gold);
+            text-transform: uppercase;
+            display: block;
+            line-height: 1.5;
+        }
+
+        .feat-sub {
+            font-size: 0.58rem;
+            color: var(--muted);
+            display: block;
+            margin-top: 3px;
+            line-height: 1.4;
+        }
+
+        /* ============================================================
+   FOOTER
+============================================================ */
+        .footer {
+            width: 100%;
+            border-top: 0.5px solid rgba(201, 168, 76, 0.1);
+            padding-top: 22px;
+            text-align: center;
+            animation: fade-up 1s ease 1.5s both;
+        }
+
+        .footer-loc {
+            font-size: 0.63rem;
+            letter-spacing: 0.16em;
+            color: var(--muted);
+            text-transform: uppercase;
+            line-height: 1.9;
+        }
+
+        .footer-rating {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            margin-top: 10px;
+            padding: 5px 14px;
+            background: rgba(201, 168, 76, 0.07);
+            border: 0.5px solid rgba(201, 168, 76, 0.18);
+            border-radius: 50px;
+        }
+
+        .stars {
+            color: var(--gold);
+            font-size: 0.7rem;
+            letter-spacing: 1px;
+        }
+
+        .rating-text {
+            font-size: 0.62rem;
+            color: var(--muted);
+            letter-spacing: 0.08em;
+        }
+
+        .copyright {
+            margin-top: 14px;
+            font-size: 0.52rem;
+            letter-spacing: 0.15em;
+            color: rgba(138, 112, 80, 0.45);
+            text-transform: uppercase;
+        }
+
+        /* ============================================================
+   ANIMATIONS
+============================================================ */
+        @keyframes fade-up {
+            from {
+                opacity: 0;
+                transform: translateY(22px);
+            }
+
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* ============================================================
+   RESPONSIVE
+============================================================ */
+        @media (min-width: 520px) {
+            :root {
+                --max: 520px;
+            }
+
+            .page {
+                padding-left: 32px;
+                padding-right: 32px;
+            }
+        }
+
+        @media (max-width: 320px) {
+            .brand-name {
+                font-size: 2.3rem;
+            }
+
+            .cd-num {
+                font-size: 1.65rem;
+            }
+
+            .countdown-grid {
+                gap: 6px;
+            }
+
+            .cd-block {
+                padding: 10px 4px;
+            }
+
+            .features {
+                gap: 7px;
+            }
+
+            .feat-card {
+                padding: 10px 6px;
+            }
+        }
+
+        @media (max-height: 620px) and (orientation: landscape) {
+            .logo-mark {
+                display: none;
+            }
+
+            .page {
+                justify-content: flex-start;
+                padding-top: 20px;
+            }
+
+            .top-badge {
+                margin-bottom: 12px;
+            }
+
+            .ornament {
+                margin: 14px auto;
+            }
+
+            .countdown-section {
+                margin: 16px 0 14px;
+            }
+
+            .features {
+                margin-bottom: 16px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- Background -->
+    <div class="bg-canvas">
+        <div class="blob blob-1"></div>
+        <div class="blob blob-2"></div>
+        <div class="blob blob-3"></div>
+    </div>
+    <div class="grain"></div>
+    <div class="particles" id="particles"></div>
+
+    <!-- Mandala ring -->
+    <div class="ring-wrap" aria-hidden="true">
+        <svg viewBox="0 0 500 500" xmlns="http://www.w3.org/2000/svg" fill="none">
+            <circle cx="250" cy="250" r="244" stroke="#C9A84C" stroke-width="0.6" />
+            <circle cx="250" cy="250" r="225" stroke="#C9A84C" stroke-width="0.3" />
+            <circle cx="250" cy="250" r="205" stroke="#C9A84C" stroke-width="0.6" />
+            <circle cx="250" cy="250" r="185" stroke="#C9A84C" stroke-width="0.3" stroke-dasharray="4 6" />
+            <g stroke="#C9A84C" stroke-width="0.4" opacity="0.8">
+                <line x1="250" y1="6" x2="250" y2="494" />
+                <line x1="6" y1="250" x2="494" y2="250" />
+                <line x1="77" y1="77" x2="423" y2="423" />
+                <line x1="423" y1="77" x2="77" y2="423" />
+                <line x1="250" y1="6" x2="423" y2="77" />
+                <line x1="423" y1="77" x2="494" y2="250" />
+                <line x1="494" y1="250" x2="423" y2="423" />
+                <line x1="423" y1="423" x2="250" y2="494" />
+                <line x1="250" y1="494" x2="77" y2="423" />
+                <line x1="77" y1="423" x2="6" y2="250" />
+                <line x1="6" y1="250" x2="77" y2="77" />
+                <line x1="77" y1="77" x2="250" y2="6" />
+            </g>
+            <g fill="#C9A84C" opacity="0.9">
+                <polygon points="250,14 257,30 243,30" />
+                <polygon points="250,486 257,470 243,470" />
+                <polygon points="14,250 30,257 30,243" />
+                <polygon points="486,250 470,257 470,243" />
+                <polygon points="83,83 97,80 90,94" />
+                <polygon points="417,83 417,97 403,90" />
+                <polygon points="417,417 403,410 410,396" />
+                <polygon points="83,417 90,403 97,417" />
+            </g>
+            <circle cx="250" cy="250" r="7" fill="#C9A84C" opacity="0.6" />
+            <circle cx="250" cy="250" r="3.5" fill="#F5E6B8" />
+        </svg>
+    </div>
+
+    <!-- Corner accents -->
+    <div class="corners" aria-hidden="true">
+        <div class="corner tl"></div>
+        <div class="corner tr"></div>
+        <div class="corner bl"></div>
+        <div class="corner br"></div>
+    </div>
+
+    <!-- ===== MAIN PAGE ===== -->
+    <main class="page">
+
+        <!-- Badge -->
+        <div class="top-badge">
+            <div class="badge-dot"></div>
+            <span class="badge-text">Launching Soon</span>
+        </div>
+
+        <!-- Logo mark -->
+        <div class="logo-mark" aria-hidden="true">
+            <svg viewBox="0 0 80 80" xmlns="http://www.w3.org/2000/svg" fill="none">
+                <circle cx="40" cy="40" r="38" stroke="#C9A84C" stroke-width="0.8" />
+                <circle cx="40" cy="40" r="30" stroke="#C9A84C" stroke-width="0.4" stroke-dasharray="3 4" />
+                <polygon points="40,14 56,30 40,58 24,30" stroke="#C9A84C" stroke-width="1"
+                    fill="rgba(201,168,76,0.08)" />
+                <line x1="24" y1="30" x2="56" y2="30" stroke="#C9A84C" stroke-width="0.5" />
+                <line x1="40" y1="14" x2="40" y2="58" stroke="#C9A84C" stroke-width="0.3" opacity="0.4" />
+                <line x1="40" y1="14" x2="24" y2="30" stroke="#E8C96A" stroke-width="0.5" />
+                <line x1="40" y1="14" x2="56" y2="30" stroke="#E8C96A" stroke-width="0.5" />
+                <line x1="32" y1="30" x2="40" y2="58" stroke="#C9A84C" stroke-width="0.3" opacity="0.5" />
+                <line x1="48" y1="30" x2="40" y2="58" stroke="#C9A84C" stroke-width="0.3" opacity="0.5" />
+            </svg>
+        </div>
+
+        <!-- Brand -->
+        <div class="brand-wrap">
+            <span class="brand-name">TIRUPATI<br>JEWELLES</span>
+            <span class="brand-sub">Fine Jewellery</span>
+        </div>
+
+        <!-- Ornament -->
+        <div class="ornament">
+            <div class="orn-line"></div>
+            <div class="orn-icon">
+                <div class="orn-diamond sm"></div>
+                <div class="orn-diamond"></div>
+                <div class="orn-diamond sm"></div>
+            </div>
+            <div class="orn-line"></div>
+        </div>
+
+        <!-- Tagline -->
+        <div class="tagline-wrap">
+            <p class="tagline">Something golden<br>is being crafted…</p>
+            <div class="location-tag">
+                <svg width="9" height="12" viewBox="0 0 10 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <path
+                        d="M5 0C2.24 0 0 2.24 0 5C0 8.5 5 12 5 12S10 8.5 10 5C10 2.24 7.76 0 5 0ZM5 6.5C4.17 6.5 3.5 5.83 3.5 5C3.5 4.17 4.17 3.5 5 3.5C5.83 3.5 6.5 4.17 6.5 5C6.5 5.83 5.83 6.5 5 6.5Z"
+                        fill="currentColor" />
+                </svg>
+                Meena Bazaar · Bettiah · W. Champaran · Bihar
+            </div>
+        </div>
+
+        <!-- Countdown -->
+        <div class="countdown-section">
+            <div class="section-label">Website launches in</div>
+            <div class="countdown-grid">
+                <div class="cd-block">
+                    <span class="cd-num" id="days">00</span>
+                    <span class="cd-lbl">Days</span>
+                </div>
+                <div class="cd-block">
+                    <span class="cd-num" id="hours">00</span>
+                    <span class="cd-lbl">Hours</span>
+                </div>
+                <div class="cd-block">
+                    <span class="cd-num" id="minutes">00</span>
+                    <span class="cd-lbl">Mins</span>
+                </div>
+                <div class="cd-block">
+                    <span class="cd-num" id="seconds">00</span>
+                    <span class="cd-lbl">Secs</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Email notify -->
+        <div class="notify-section">
+            <div class="section-label" style="margin-bottom:14px;">Get notified when we launch</div>
+
+            <div class="notify-form" id="notifyForm">
+                <input type="email" id="emailInput" class="notify-input" placeholder="Your email address"
+                    inputmode="email" autocomplete="email" autocapitalize="none" autocorrect="off" />
+                <button class="notify-btn" id="notifyBtn" type="button">
+                    Notify Me
+                </button>
+            </div>
+
+            <div class="success-msg" id="successMsg">
+                <span class="success-icon">✦</span>
+                <div class="success-text">Thank you for your interest!</div>
+                <div class="success-sub">We will reach out as soon as we launch.</div>
+            </div>
+        </div>
+
+        <!-- Social links -->
+        <div class="social-section">
+            <span class="social-label">Follow</span>
+            <div class="social-links">
+                <a href="https://instagram.com/_tirupati_jewelers_" target="_blank" rel="noopener noreferrer"
+                    class="social-link" aria-label="Instagram">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <rect x="2" y="2" width="20" height="20" rx="5" />
+                        <circle cx="12" cy="12" r="4" />
+                        <circle cx="17.5" cy="6.5" r="0.5" fill="currentColor" />
+                    </svg>
+                </a>
+                <a href="tel:+918846007297" class="social-link" aria-label="Call Us">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <path
+                            d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.81 19.79 19.79 0 012 2.18 2 2 0 014 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14v2.92z" />
+                    </svg>
+                </a>
+                <a href="https://maps.google.com/?q=Tirupati+Jewelles+Meena+Bazaar+Bettiah+Bihar" target="_blank"
+                    rel="noopener noreferrer" class="social-link" aria-label="Google Maps">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
+                        stroke-linejoin="round">
+                        <polygon points="3 6 9 3 15 6 21 3 21 18 15 21 9 18 3 21" />
+                        <line x1="9" y1="3" x2="9" y2="18" />
+                        <line x1="15" y1="6" x2="15" y2="21" />
+                    </svg>
+                </a>
+            </div>
+        </div>
+
+        <!-- Features -->
+        <div class="features">
+            <div class="feat-card">
+                <span class="feat-icon">💍</span>
+                <span class="feat-title">Gold &amp; Silver</span>
+                <span class="feat-sub">Hallmarked purity</span>
+            </div>
+            <div class="feat-card">
+                <span class="feat-icon">⭐</span>
+                <span class="feat-title">5.0 Rated</span>
+                <span class="feat-sub">Trusted quality</span>
+            </div>
+            <div class="feat-card">
+                <span class="feat-icon">🏅</span>
+                <span class="feat-title">Legacy</span>
+                <span class="feat-sub">Craftsmanship</span>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <div class="footer-loc">
+                Meena Bazaar, Sonar Patti, Kamalnath Nagar<br>
+                Bettiah · West Champaran · Bihar 845438
+            </div>
+            <div style="margin-top:10px;">
+                <div class="footer-rating">
+                    <span class="stars">★★★★★</span>
+                    <span class="rating-text">5.0 · Google Reviews</span>
+                </div>
+            </div>
+            <p class="copyright">© 2025 Tirupati Jewelles · All Rights Reserved</p>
+        </footer>
+
+    </main>
+
+    <script>
+        /* Particles */
+        (function () {
+            var wrap = document.getElementById('particles');
+            for (var i = 0; i < 38; i++) {
+                var p = document.createElement('div');
+                p.className = 'pt';
+                var s = Math.random() > 0.7 ? 3 : 1.5;
+                p.style.cssText = 'width:' + s + 'px;height:' + s + 'px;left:' + (Math.random() * 100) + 'vw;--d:' + (7 + Math.random() * 15) + 's;--dl:' + (Math.random() * 14) + 's';
+                wrap.appendChild(p);
+            }
+        })();
+
+        /* Countdown – 90 days */
+        var target = new Date();
+        target.setDate(target.getDate() + 90);
+        function pad(n) { return String(Math.floor(n)).padStart(2, '0'); }
+        function tick() {
+            var diff = target - Date.now();
+            if (diff <= 0) { ['days', 'hours', 'minutes', 'seconds'].forEach(function (id) { document.getElementById(id).textContent = '00'; }); return; }
+            document.getElementById('days').textContent = pad(diff / 86400000);
+            document.getElementById('hours').textContent = pad((diff % 86400000) / 3600000);
+            document.getElementById('minutes').textContent = pad((diff % 3600000) / 60000);
+            document.getElementById('seconds').textContent = pad((diff % 60000) / 1000);
+        }
+        tick(); setInterval(tick, 1000);
+
+        /* Notify */
+        function handleNotify() {
+            var inp = document.getElementById('emailInput');
+            var val = inp.value.trim();
+            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+                inp.style.borderColor = 'rgba(220,80,60,0.7)';
+                inp.focus();
+                setTimeout(function () { inp.style.borderColor = ''; }, 2200);
+                return;
+            }
+            document.getElementById('notifyForm').classList.add('hide');
+            document.getElementById('successMsg').classList.add('show');
+        }
+        document.getElementById('notifyBtn').addEventListener('click', handleNotify);
+        document.getElementById('emailInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') handleNotify(); });
+    </script>
+</body>
+
+</html>
