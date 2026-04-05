@@ -1019,8 +1019,8 @@
             <div class="section-label" style="margin-bottom:14px;">Get notified when we launch</div>
 
             <div class="notify-form" id="notifyForm">
-                <input type="email" id="emailInput" class="notify-input" placeholder="Your email address"
-                    inputmode="email" autocomplete="email" autocapitalize="none" autocorrect="off" />
+                <input type="text" id="contactInput" class="notify-input" placeholder="Email or WhatsApp number"
+                    inputmode="text" autocomplete="off" autocapitalize="none" autocorrect="off" />
                 <button class="notify-btn" id="notifyBtn" type="button">
                     Notify Me
                 </button>
@@ -1053,7 +1053,7 @@
                             d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07A19.5 19.5 0 013.07 10.81 19.79 19.79 0 012 2.18 2 2 0 014 0h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 7.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 14v2.92z" />
                     </svg>
                 </a>
-                <a href="https://maps.google.com/?q=Tirupati+Jewelles+Meena+Bazaar+Bettiah+Bihar" target="_blank"
+                <a href="https://maps.app.goo.gl/qSCTW3EusEkNp5sf6" target="_blank"
                     rel="noopener noreferrer" class="social-link" aria-label="Google Maps">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"
                         stroke-linejoin="round">
@@ -1114,9 +1114,8 @@
             }
         })();
 
-        /* Countdown – 90 days */
-        var target = new Date();
-        target.setDate(target.getDate() + 90);
+        /* Countdown – fixed launch date: 5 July 2026 */
+        var target = new Date('2026-07-05T00:00:00');
         function pad(n) { return String(Math.floor(n)).padStart(2, '0'); }
         function tick() {
             var diff = target - Date.now();
@@ -1129,20 +1128,40 @@
         tick(); setInterval(tick, 1000);
 
         /* Notify */
-        function handleNotify() {
-            var inp = document.getElementById('emailInput');
+        async function handleNotify() {
+            var inp = document.getElementById('contactInput');
             var val = inp.value.trim();
-            if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val)) {
+            var isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val);
+            var isPhone = /^[\+]?[\d\s\-\(\)]{7,15}$/.test(val);
+            if (!isEmail && !isPhone) {
                 inp.style.borderColor = 'rgba(220,80,60,0.7)';
                 inp.focus();
                 setTimeout(function () { inp.style.borderColor = ''; }, 2200);
                 return;
             }
+            var btn = document.getElementById('notifyBtn');
+            btn.disabled = true;
+            btn.textContent = '...';
+            try {
+                await fetch('https://api.web3forms.com/submit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        access_key: 'c5bbb482-13eb-4007-ab73-9fa44da54b02',
+                        subject: '✨ New Customer Interest – Tirupati Jewelles',
+                        from_name: 'Tirupati Jewelles Website',
+                        'Owner': 'Honey Soni',
+                        'Customer Contact (Email / WhatsApp)': val,
+                        'Store': 'Tirupati Jewelles – Meena Bazaar, Bettiah, Bihar',
+                        'Message': 'A customer has expressed interest and wants to be notified at launch. Please follow up soon!'
+                    })
+                });
+            } catch (e) { /* show success regardless */ }
             document.getElementById('notifyForm').classList.add('hide');
             document.getElementById('successMsg').classList.add('show');
         }
         document.getElementById('notifyBtn').addEventListener('click', handleNotify);
-        document.getElementById('emailInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') handleNotify(); });
+        document.getElementById('contactInput').addEventListener('keydown', function (e) { if (e.key === 'Enter') handleNotify(); });
     </script>
 </body>
 
