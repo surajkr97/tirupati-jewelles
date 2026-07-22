@@ -1,0 +1,23 @@
+name: tirupati-jewelles
+
+services:
+  api:
+    container_name: tirupati-api
+    build: .
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://fastapi_user:fastapi123@db:5432/tirupati_db
+    depends_on:
+      - db
+
+  db:
+    container_name: tirupati-db
+    image: postgres:16
+    environment:
+      POSTGRES_USER: fastapi_user
+      POSTGRES_PASSWORD: fastapi123
+      POSTGRES_DB: tirupati_db
+    ports:
+      - "5432:5432"
