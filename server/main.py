@@ -12,3 +12,7 @@ app.add_middleware(
 )
 
 app.include_router(rates.router)
+
+@app.get("/health")
+async def health():
+    return {"status": "ok"}
