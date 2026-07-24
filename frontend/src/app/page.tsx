@@ -11,6 +11,8 @@ import {
   GiGemPendant,
 } from "react-icons/gi";
 
+import { FaInstagram } from "react-icons/fa";
+
 interface RateOut {
   metal: string;
   purity: string;
@@ -111,7 +113,7 @@ function HeroBanner() {
         <button
           onClick={() =>
             openWhatsApp(
-              "नमस्ते! मुझे आपकी ज्वेलरी कलेक्शन कलेक्शन में रुचि है। कृपया और जानकारी साझा करें।",
+              "नमस्ते! मुझे आपकी ज्वेलरी कलेक्शन में रुचि है। कृपया और जानकारी साझा करें।",
             )
           }
           className="bg-[#B98A4A] hover:bg-[#a67a3f] transition-colors text-white text-sm font-medium tracking-wide px-5 py-2.5 rounded-lg w-fit shadow-sm cursor-pointer"
@@ -139,26 +141,26 @@ export default function Home() {
   const [silverHistory, setSilverHistory] = useState<RateHistory | null>(null);
   const [loading, setLoading] = useState(true);
 
-useEffect(() => {
-  async function fetchData() {
-    try {
-      const [liveRes, historyRes] = await Promise.all([
-        fetch(`${API_BASE}/rates/live`),
-        fetch(`${API_BASE}/rates/history?metal=silver&purity=999&hours=24`),
-      ]);
-      setLiveRates(await liveRes.json());
-      setSilverHistory(await historyRes.json());
-    } catch (err) {
-      console.error("Failed to load rates:", err);
-    } finally {
-      setLoading(false);
+  useEffect(() => {
+    async function fetchData() {
+      try {
+        const [liveRes, historyRes] = await Promise.all([
+          fetch(`${API_BASE}/rates/live`),
+          fetch(`${API_BASE}/rates/history?metal=silver&purity=999&hours=24`),
+        ]);
+        setLiveRates(await liveRes.json());
+        setSilverHistory(await historyRes.json());
+      } catch (err) {
+        console.error("Failed to load rates:", err);
+      } finally {
+        setLoading(false);
+      }
     }
-  }
 
-  fetchData();
-  const interval = setInterval(fetchData, 30000);
-  return () => clearInterval(interval);
-}, []);
+    fetchData();
+    const interval = setInterval(fetchData, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const goldRates = liveRates.filter((r) => r.metal === "gold");
   const silverRate = liveRates.find((r) => r.metal === "silver");
@@ -176,21 +178,15 @@ useEffect(() => {
   return (
     <main className="max-w-md mx-auto bg-[#FBF8F3] min-h-screen">
       <header className="flex items-center justify-between px-5 py-4 border-b border-[#EDE4D3]">
-        <button
-          aria-label="Menu"
+        <a
+          href="https://www.instagram.com/_tirupati_jewelers_"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Instagram"
           className="w-9 h-9 flex items-center justify-center rounded-full border border-[#EDE4D3] text-gray-900 hover:bg-white transition-colors"
         >
-          <svg
-            width="18"
-            height="18"
-            viewBox="0 0 20 20"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.75"
-          >
-            <path d="M3 6h18M3 12h18M3 18h18" />
-          </svg>
-        </button>
+          <FaInstagram size={18} strokeWidth={1.75} />
+        </a>
         <div className="text-center">
           <h1 className="font-display text-xl tracking-wide text-gray-900">
             TIRUPATI
@@ -362,7 +358,7 @@ useEffect(() => {
           <button
             onClick={() =>
               openWhatsApp(
-                "नमस्ते! मुझे आपकी ज्वेलरी कलेक्शन कलेक्शन में रुचि है। कृपया और जानकारी साझा करें।",
+                "नमस्ते! मुझे आपकी ज्वेलरी कलेक्शन में रुचि है। कृपया और जानकारी साझा करें।",
               )
             }
             className="text-xs text-amber-700 font-medium cursor-pointer"

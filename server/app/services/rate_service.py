@@ -22,6 +22,10 @@ SILVER_PURITIES = {
     "999": 0.999,
 }
 
+INDIA_PREMIUM = {
+    "gold": 1.15,  # international spot -> India retail: +15%
+    "silver": 1.22,  # international spot -> India retail: +22%
+}
 
 def refresh_gold_rates(db: Session) -> list[GoldRate]:
     """
@@ -35,7 +39,8 @@ def refresh_gold_rates(db: Session) -> list[GoldRate]:
 
     for raw in raw_rates:
         metal = raw["metal"]
-        pure_rate = raw["pure_rate_per_gram"]
+        international_rate = raw["pure_rate_per_gram"]
+        india_rate = international_rate * INDIA_PREMIUM[metal]
         recorded_at = raw["recorded_at"]
 
         purities = GOLD_PURITIES if metal == "gold" else SILVER_PURITIES
@@ -44,7 +49,7 @@ def refresh_gold_rates(db: Session) -> list[GoldRate]:
             row = GoldRate(
                 metal_type=metal,
                 purity=purity_label,
-                rate_per_gram=pure_rate * fraction,
+                rate_per_gram=india_rate * fraction,
                 recorded_at=recorded_at,
                 source="gold-api.com",
             )
@@ -63,48 +68,6 @@ DISPLAY_UNITS = {
     "gold": 10,
     "silver": 1000,
 }
-
-
-# def get_live_rates(db: Session) -> list[GoldRateOut]:
-#     combos = [("gold", p) for p in GOLD_PURITIES] + [
-#         ("silver", p) for p in SILVER_PURITIES
-#     ]
-#     results = []
-
-#     for metal, purity in combos:
-#         rows = (
-#             db.query(GoldRate)
-#             .filter(GoldRate.metal_type == metal, GoldRate.purity == purity)
-#             .order_by(GoldRate.recorded_at.desc())
-#             .limit(2)
-#             .all()
-#         )
-
-#         if not rows:
-#             continue
-
-#         latest = rows[0]
-#         previous = rows[1] if len(rows) > 1 else None
-
-#         multiplier = DISPLAY_UNITS[metal]
-#         rate_display = float(latest.rate_per_gram) * multiplier
-#         change_display = (
-#             float(latest.rate_per_gram - previous.rate_per_gram) * multiplier
-#             if previous
-#             else 0.0
-#         )
-
-#         results.append(
-#             GoldRateOut(
-#                 metal=metal,
-#                 purity=purity,
-#                 rate=round(rate_display),
-#                 change=round(change_display),
-#                 recorded_at=latest.recorded_at,
-#             )
-#         )
-
-#     return results
 
 
 def get_live_rates(db: Session) -> list[GoldRateOut]:

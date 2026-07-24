@@ -17,6 +17,12 @@ app.add_middleware(
 
 app.include_router(rates.router)
 
+
+@app.get("/")
+def read_root():
+    return {"message": "Welcome to the Tirupati Jewelles API!"}
+
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
