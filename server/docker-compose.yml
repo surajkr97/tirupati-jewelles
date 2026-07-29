@@ -32,5 +32,29 @@ services:
     ports:
       - "6379:6379"
 
+  worker:
+    container_name: tirupati-worker
+    build: .
+    command: celery -A app.celery_app worker --loglevel=info
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://fastapi_user:fastapi123@db:5432/tirupati_db
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
+  beat:
+    container_name: tirupati-beat
+    build: .
+    command: celery -A app.celery_app beat --loglevel=info
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://fastapi_user:fastapi123@db:5432/tirupati_db
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - db
+      - redis
+
 volumes:
   pgdata:

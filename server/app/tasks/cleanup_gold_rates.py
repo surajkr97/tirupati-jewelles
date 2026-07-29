@@ -1,9 +1,11 @@
+from app.celery_app import celery_app
 from datetime import datetime, timedelta, timezone
 
 from app.database import SessionLocal
 from app.models.gold_rate import GoldRate
 
 
+@celery_app.task(name="cleanup_gold_rates")
 def run():
     db = SessionLocal()
     try:

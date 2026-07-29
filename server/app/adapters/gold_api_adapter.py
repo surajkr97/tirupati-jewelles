@@ -3,6 +3,8 @@ from datetime import datetime
 
 TROY_OUNCE_IN_GRAMS = 31.1034768
 
+USD_TO_INR = 95.75
+
 METAL_SYMBOLS = {
     "gold": "XAU",
     "silver": "XAG",
@@ -21,7 +23,7 @@ class GoldApiAdapter:
             )
 
         symbol = METAL_SYMBOLS[metal]
-        url = f"{self.base_url}/price/{symbol}/INR"
+        url = f"{self.base_url}/price/{symbol}/USD"
 
         try:
             response = self.session.get(url, timeout=10)
@@ -37,8 +39,9 @@ class GoldApiAdapter:
 
         data = response.json()
 
-        price_per_troy_ounce = data["price"]
-        pure_rate_per_gram = price_per_troy_ounce / TROY_OUNCE_IN_GRAMS
+        price_per_troy_ounce_usd = data["price"]
+        price_per_troy_ounce_inr = price_per_troy_ounce_usd * USD_TO_INR
+        pure_rate_per_gram = price_per_troy_ounce_inr / TROY_OUNCE_IN_GRAMS
 
         recorded_at = datetime.fromisoformat(data["updatedAt"].replace("Z", "+00:00"))
 
