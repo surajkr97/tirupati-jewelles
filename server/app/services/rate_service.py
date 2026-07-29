@@ -1,6 +1,9 @@
+import json
+
 from sqlalchemy.orm import Session
 
 from app.adapters.gold_api_adapter import GoldApiAdapter
+from app.cache import redis_client
 from app.models.gold_rate import GoldRate
 from app.schemas.gold_rate import GoldRateOut
 
@@ -10,6 +13,9 @@ from app.schemas.gold_rate import RatePoint, RateHistoryOut
 from datetime import datetime, timedelta, timezone
 
 IST = timezone(timedelta(hours=5, minutes=30))
+
+LIVE_RATES_CACHE_KEY = "rates:live"
+LIVE_RATES_CACHE_TTL_SECONDS = 300
 
 GOLD_PURITIES = {
     "999": 0.999,  # 24K
@@ -26,6 +32,7 @@ INDIA_PREMIUM = {
     "gold": 1.15,  # international spot -> India retail: +15%
     "silver": 1.22,  # international spot -> India retail: +22%
 }
+
 
 def refresh_gold_rates(db: Session) -> list[GoldRate]:
     """
@@ -61,6 +68,8 @@ def refresh_gold_rates(db: Session) -> list[GoldRate]:
     for row in new_rows:
         db.refresh(row)
 
+    redis_client.delete(LIVE_RATES_CACHE_KEY)
+
     return new_rows
 
 
@@ -71,6 +80,10 @@ DISPLAY_UNITS = {
 
 
 def get_live_rates(db: Session) -> list[GoldRateOut]:
+    cached = redis_client.get(LIVE_RATES_CACHE_KEY)
+    if cached is not None:
+        return [GoldRateOut(**item) for item in json.loads(cached)]
+
     combos = [("gold", p) for p in GOLD_PURITIES] + [
         ("silver", p) for p in SILVER_PURITIES
     ]
@@ -117,6 +130,13 @@ def get_live_rates(db: Session) -> list[GoldRateOut]:
                 recorded_at=latest.recorded_at,
             )
         )
+
+    redis_client.set(
+        LIVE_RATES_CACHE_KEY,
+        json.dumps([r.model_dump(mode="json") for r in results]),
+        ex=LIVE_RATES_CACHE_TTL_SECONDS,
+    )
+
     return results
 
 

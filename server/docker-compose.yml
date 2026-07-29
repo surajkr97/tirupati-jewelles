@@ -9,8 +9,10 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: postgresql://fastapi_user:fastapi123@db:5432/tirupati_db
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       - db
+      - redis
 
   db:
     container_name: tirupati-db
@@ -24,6 +26,11 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
 
-  volumes:
-    pgdata:
-  
+  redis:
+    container_name: tirupati-redis
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+volumes:
+  pgdata:
