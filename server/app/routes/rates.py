@@ -20,7 +20,7 @@ def read_live_rates(db: Session = Depends(get_db)):
 
 @router.get("/history", response_model=RateHistoryOut)
 def read_rate_history(
-    metal: str, purity: str, hours: int = 24, db: Session = Depends(get_db)
+    metal: str, purity: str, hours: int = 168, db: Session = Depends(get_db)
 ):
     return get_rate_history(db, metal, purity, hours)
 

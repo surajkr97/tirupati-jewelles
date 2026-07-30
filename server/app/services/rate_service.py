@@ -15,7 +15,8 @@ from datetime import datetime, timedelta, timezone
 IST = timezone(timedelta(hours=5, minutes=30))
 
 LIVE_RATES_CACHE_KEY = "rates:live"
-LIVE_RATES_CACHE_TTL_SECONDS = 300
+
+LIVE_RATES_CACHE_TTL_SECONDS = 86400
 
 GOLD_PURITIES = {
     "999": 0.999,  # 24K
@@ -141,7 +142,7 @@ def get_live_rates(db: Session) -> list[GoldRateOut]:
 
 
 def get_rate_history(
-    db: Session, metal: str, purity: str, hours: int = 24
+    db: Session, metal: str, purity: str, hours: int = 168
 ) -> RateHistoryOut:
     since = datetime.now(timezone.utc) - timedelta(hours=hours)
 
