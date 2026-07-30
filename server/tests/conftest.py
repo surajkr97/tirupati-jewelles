@@ -4,6 +4,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from fastapi.testclient import TestClient
 
+from app.cache import redis_client
 from app.database import Base, get_db
 from main import app
 
@@ -14,6 +15,13 @@ engine = create_engine(
     connect_args={"check_same_thread": False},
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+@pytest.fixture(autouse=True)
+def clear_redis_cache():
+    redis_client.flushdb()
+    yield
+    redis_client.flushdb()
 
 
 @pytest.fixture()
