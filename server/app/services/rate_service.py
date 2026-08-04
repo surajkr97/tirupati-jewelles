@@ -1,16 +1,12 @@
 import json
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.orm import Session
 
 from app.adapters.gold_api_adapter import GoldApiAdapter
 from app.cache import redis_client
 from app.models.gold_rate import GoldRate
-from app.schemas.gold_rate import GoldRateOut
-
-from datetime import datetime, timedelta, timezone
-from app.schemas.gold_rate import RatePoint, RateHistoryOut
-
-from datetime import datetime, timedelta, timezone
+from app.schemas.gold_rate import GoldRateOut, RateHistoryOut, RatePoint
 
 IST = timezone(timedelta(hours=5, minutes=30))
 
