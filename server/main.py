@@ -1,6 +1,8 @@
 from fastapi import FastAPI
-from app.routes import rates
 from fastapi.middleware.cors import CORSMiddleware
+
+from app.auth.router import router as auth_router
+from app.routes.rates import router as rates_router
 
 app = FastAPI()
 
@@ -9,13 +11,18 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:3000",
         "https://www.tirupatijewelles.com",
-        "https://tirupati-jewelles.vercel.app"
+        "https://tirupati-jewelles.vercel.app",
     ],
     allow_methods=["*"],
     allow_headers=["*"],
+    # Required for the browser to send/store the auth cookie on cross-origin
+    # requests. Note this is incompatible with allow_origins=["*"] — the origin
+    # list above must stay explicit.
+    allow_credentials=True,
 )
 
-app.include_router(rates.router)
+app.include_router(rates_router)
+app.include_router(auth_router)
 
 
 @app.get("/")

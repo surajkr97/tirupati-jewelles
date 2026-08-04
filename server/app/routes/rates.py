@@ -1,5 +1,7 @@
 from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.orm import Session
+
+from app.core.config import settings
 from app.database import get_db
 from app.schemas.gold_rate import GoldRateOut, RateHistoryOut
 from app.services.rate_service import (
@@ -7,8 +9,6 @@ from app.services.rate_service import (
     get_rate_history,
     refresh_gold_rates,
 )
-from app.core.config import settings
-
 
 router = APIRouter(prefix="/rates", tags=["rates"])
 

@@ -2,8 +2,7 @@
 from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 from app.models.gold_rate import GoldRate
-from app.services.rate_service import refresh_gold_rates
-from app.services.rate_service import get_live_rates
+from app.services.rate_service import get_live_rates, refresh_gold_rates
 
 IST = timezone(timedelta(hours=5, minutes=30))
 

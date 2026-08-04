@@ -1,6 +1,6 @@
-from app.celery_app import celery_app
 from datetime import datetime, timedelta, timezone
 
+from app.celery_app import celery_app
 from app.database import SessionLocal
 from app.models.gold_rate import GoldRate
 
