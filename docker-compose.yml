@@ -1,0 +1,41 @@
+name: tirupati-jewelles
+
+# Brings up the whole stack — Postgres, Redis, FastAPI, Celery worker + beat,
+# and the Next.js frontend — with a single `docker compose up` from the repo root.
+#
+# `include` pulls in the existing server stack rather than duplicating it, so
+# server/docker-compose.yml stays the single source of truth for the backend and
+# still works standalone. Paths inside an included file resolve relative to that
+# file, so its `build: .` and `env_file: .env` still point at server/.
+include:
+  - server/docker-compose.yml
+
+services:
+  web:
+    container_name: tirupati-web
+    build:
+      context: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      # Two URLs for the same API, because "localhost" means different things
+      # depending on who resolves it.
+      #
+      # Browser-side code (fetch in a Client Component) runs on your machine, so
+      # localhost:8000 is the published api port — correct.
+      NEXT_PUBLIC_API_URL: http://localhost:8000
+      # Server Components run *inside this container*, where localhost is the web
+      # container itself and nothing listens on 8000. Compose DNS resolves the
+      # service name instead.
+      INTERNAL_API_URL: http://api:8000
+    volumes:
+      # Source is mounted so edits hot-reload without a rebuild.
+      - ./frontend:/app
+      # Anonymous volumes that shadow the bind mount, keeping the container's
+      # own node_modules and build cache instead of the host's. Without these,
+      # the macOS-built binaries in your host node_modules leak into the Linux
+      # container and the dev server fails to start.
+      - /app/node_modules
+      - /app/.next
+    depends_on:
+      - api
