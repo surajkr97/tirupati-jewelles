@@ -1,0 +1,25 @@
+# Normalise line endings in the repo regardless of the contributor's OS.
+* text=auto eol=lf
+
+# Lockfiles are machine-generated and enormous (pnpm-lock.yaml is ~7,300 lines), which
+# makes every commit that touches a dependency look like a 10k-line change on GitHub.
+#
+# `linguist-generated=true` tells GitHub to collapse them in diffs and pull requests by
+# default, and to exclude them from the repository's language statistics. The file is
+# still fully tracked — CI runs `pnpm install --frozen-lockfile`, which requires it, and
+# deleting it would break reproducible builds.
+pnpm-lock.yaml linguist-generated=true
+
+# Prisma migrations are generated too, but they are reviewable SQL and a migration diff is
+# exactly the thing you want a reviewer to look at. Deliberately NOT collapsed.
+
+# Binary — never try to diff or merge these.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.avif binary
+*.ico binary
+*.pdf binary
+*.woff binary
+*.woff2 binary
