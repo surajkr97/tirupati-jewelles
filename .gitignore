@@ -1,0 +1,33 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Environment — never commit real values (.env.example is the template)
+.env
+.env.*
+!.env.example
+
+# Test / build artefacts
+coverage/
+test-results/
+playwright-report/
+blob-report/
+.playwright/
+
+# Python — dormant Celery worker
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+celerybeat-schedule*
+
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp

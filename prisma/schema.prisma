@@ -1,0 +1,190 @@
+// Data model — MASTER-SPEC §5.
+// Created by Phase 1 (specs/01-cleanup-scaffold.md §1.6).
+//
+// Money is BigInt PAISE everywhere. Never Float, never Decimal for currency.
+// Decimal is used only for percentages (makingPct, gstPct), where it is exact and small.
+// See MASTER-SPEC §4.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────── users & auth
+
+model User {
+  id            String   @id @default(uuid())
+  phone         String?  @unique // E.164, +91XXXXXXXXXX
+  email         String?  @unique
+  passwordHash  String?
+  name          String?
+  phoneVerified Boolean  @default(false)
+  emailVerified Boolean  @default(false)
+  role          Role     @default(CUSTOMER)
+  orders        Order[]
+  createdAt     DateTime @default(now())
+
+  @@index([phone])
+}
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+model OtpCode {
+  id         String    @id @default(uuid())
+  identifier String // phone or email
+  channel    Channel
+  codeHash   String // hashed, never plaintext
+  purpose    String // SIGNUP | LOGIN | CLAIM_ORDER
+  attempts   Int       @default(0)
+  consumedAt DateTime?
+  expiresAt  DateTime
+  createdAt  DateTime  @default(now())
+
+  @@index([identifier, purpose])
+}
+
+enum Channel {
+  SMS
+  EMAIL
+}
+
+// ─────────────────────────────────────────────────────────────────────── rates
+
+model MetalRate {
+  id          String   @id @default(uuid())
+  metal       Metal
+  purity      Purity
+  ratePerGram BigInt // PAISE per gram
+  effectiveAt DateTime @default(now())
+  setByUserId String
+
+  @@index([metal, purity, effectiveAt])
+}
+
+enum Metal {
+  GOLD
+  SILVER
+}
+
+enum Purity {
+  K22_916
+  K18_750
+  SILVER_999
+}
+
+// ───────────────────────────────────────────────────────────────────── catalog
+
+model Category {
+  id        String    @id @default(uuid())
+  name      String
+  slug      String    @unique
+  imageUrl  String?
+  sortOrder Int       @default(0)
+  isActive  Boolean   @default(true)
+  products  Product[]
+}
+
+model Product {
+  id          String         @id @default(uuid())
+  name        String
+  slug        String         @unique
+  description String?
+  categoryId  String
+  category    Category       @relation(fields: [categoryId], references: [id])
+  metal       Metal
+  purity      Purity
+  weightMg    Int // milligrams
+  makingPct   Decimal        @db.Decimal(5, 2)
+  stoneCharge BigInt         @default(0) // paise
+  hasHallmark Boolean        @default(true)
+  hallmarkNo  String?
+  bisCertNo   String?
+  images      ProductImage[]
+  isActive    Boolean        @default(true)
+  isFeatured  Boolean        @default(false)
+  createdAt   DateTime       @default(now())
+
+  @@index([categoryId, isActive])
+}
+
+model ProductImage {
+  id        String  @id @default(uuid())
+  productId String
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+  url       String
+  alt       String?
+  sortOrder Int     @default(0)
+}
+
+model MediaSlot {
+  id        String   @id @default(uuid())
+  slotKey   String   @unique // HERO_BANNER | OFFER_STRIP | CATEGORY_TILE_1 ...
+  imageUrl  String?
+  linkUrl   String?
+  headline  String?
+  subtext   String?
+  isActive  Boolean  @default(true)
+  updatedAt DateTime @updatedAt
+}
+
+// ────────────────────────────────────────────────────────────── orders & bills
+
+model Order {
+  id              String      @id @default(uuid())
+  orderNo         String      @unique // JW-2026-0001
+  userId          String? // null until claimed
+  user            User?       @relation(fields: [userId], references: [id])
+  customerPhone   String // E.164 — the claim key
+  customerName    String?
+  items           OrderItem[]
+  subtotal        BigInt
+  gstAmount       BigInt
+  grandTotal      BigInt
+  billPdfKey      String? // UUID path segment, unguessable
+  sentViaWa       Boolean     @default(false)
+  sentAt          DateTime?
+  createdByUserId String
+  createdAt       DateTime    @default(now())
+
+  @@index([customerPhone])
+  @@index([userId])
+}
+
+model OrderItem {
+  id          String  @id @default(uuid())
+  orderId     String
+  order       Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId   String?
+  name        String
+  metal       Metal
+  purity      Purity
+  weightMg    Int
+  ratePerGram BigInt // SNAPSHOT at bill time — never recompute a historical bill
+  makingPct   Decimal @db.Decimal(5, 2)
+  stoneCharge BigInt  @default(0)
+  gstPct      Decimal @db.Decimal(5, 2)
+  lineTotal   BigInt
+}
+
+// ─────────────────────────────────────────────────────────────────────── audit
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  actorId   String
+  action    String // RATE_SET | ORDER_CREATE | BILL_SEND | PRODUCT_EDIT
+  entity    String
+  entityId  String
+  before    Json?
+  after     Json?
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([entity, entityId])
+}

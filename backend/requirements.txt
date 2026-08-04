@@ -1,0 +1,10 @@
+# Celery worker — dormant infrastructure (specs/01-cleanup-scaffold.md §1.3).
+#
+# Deliberately minimal. The pre-rebuild requirements.txt carried FastAPI, SQLAlchemy,
+# Alembic, pydantic, PyJWT, argon2, httpx, pytest and `requests` (the live-price API
+# client) — all deleted with the application layer. See specs/INVENTORY.md.
+#
+# Do not add application dependencies here until Phase 9 activates real tasks.
+
+celery==5.6.3
+redis==8.0.1

@@ -1,0 +1,25 @@
+/**
+ * Created by Phase 1 (specs/01-cleanup-scaffold.md §1.7).
+ *
+ * Phase 1 establishes only the page background and text colour so the shell is not
+ * white-on-white. The full token set, type scale and spacing restrictions are Phase 2
+ * (specs/02-design-system.md §2.1) — do not add component styling here before then.
+ */
+@import 'tailwindcss';
+
+@theme {
+  /* MASTER-SPEC §3 — the two needed to render a page. Rest land in Phase 2. */
+  --color-cream: #faf7f4;
+  --color-ink: #1a1613;
+  --color-muted: #8a817c;
+}
+
+:root {
+  color-scheme: light;
+}
+
+body {
+  background-color: var(--color-cream);
+  color: var(--color-ink);
+  -webkit-font-smoothing: antialiased;
+}

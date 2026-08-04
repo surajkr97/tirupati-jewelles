@@ -1,44 +1,129 @@
+# Rewritten by Phase 1 (specs/01-cleanup-scaffold.md).
+#
+# Replaces the pytest workflow that tested the deleted FastAPI app. Service containers for
+# Postgres and Redis mirror docker-compose so the suite exercises the real cache-aside path
+# rather than a mock.
+
 name: Tests
 
 on:
   push:
-    branches: [master]
+    branches: [master, v2]
   pull_request:
-    branches: [master]
+    branches: [master, v2]
 
 jobs:
   test:
     runs-on: ubuntu-latest
 
     services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: ci
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-timeout 5s --health-retries 10
+
       redis:
         image: redis:7-alpine
-        ports:
-          - 6379:6379
-
-    defaults:
-      run:
-        working-directory: server
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
 
     env:
-      DATABASE_URL: postgresql://fake:fake@localhost:5432/fake
+      # CI-only throwaway values. lib/env.ts throws at boot on anything missing, so the
+      # full MASTER-SPEC §9 set has to be present even for a unit-test run.
+      DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
       REDIS_URL: redis://localhost:6379/0
-      SECRET_KEY: test-secret-key
-      # Guards the X-Refresh-Key header on /rates/internal/refresh.
-      REFRESH_SECRET_KEY: test-refresh-secret-key
-      # Signs refresh JWTs. Deliberately a different value — see .env.example.
-      REFRESH_TOKEN_SECRET: test-refresh-token-secret
+      SESSION_SECRET: ci-session-secret-that-is-long-enough-32b
+      OTP_PEPPER: ci-otp-pepper-that-is-long-enough-32-bytes
+      SMS_PROVIDER_KEY: ci-placeholder
+      SMTP_URL: smtp://ci:ci@localhost:1025
+      UPLOAD_PROVIDER_KEY: ci-placeholder
+      ALLOWED_IMAGE_HOSTS: res.cloudinary.com,utfs.io
+      SEED_ADMIN_EMAIL: admin@example.com
+      SEED_ADMIN_PASSWORD: ci-admin-password
+      NEXT_PUBLIC_OWNER_WA: '919876543210'
+      NEXT_PUBLIC_TICKER_JITTER: 'true'
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
         with:
-          python-version: "3.11"
+          node-version: 24
+          cache: pnpm
 
-      - name: Install dependencies
-        run: pip install -r requirements.txt
+      - run: pnpm install --frozen-lockfile
 
-      - name: Run tests
-        run: pytest
+      - name: Apply migrations
+        run: pnpm exec prisma migrate deploy
+
+      - name: Seed (twice — must be idempotent, Phase 1 §1.6)
+        run: |
+          pnpm seed
+          pnpm seed
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Typecheck + build
+        run: pnpm build
+
+      - name: Unit tests
+        run: pnpm test
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: E2E tests
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  celery:
+    runs-on: ubuntu-latest
+    name: Celery worker (dormant infrastructure)
+
+    services:
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
+
+    env:
+      REDIS_URL: redis://localhost:6379/0
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - run: pip install -r backend/requirements.txt
+
+      # Guards specs/01-cleanup-scaffold.md acceptance criterion 3. If someone deletes the
+      # dormant worker as dead code, this job fails and says so.
+      - name: health.ping returns pong
+        working-directory: backend
+        run: |
+          celery -A celery_app.celery worker --loglevel=info --detach
+          sleep 8
+          python -c "
+          from celery_app.tasks.health import ping
+          assert ping.delay().get(timeout=20) == 'pong'
+          print('health.ping -> pong')
+          "

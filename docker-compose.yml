@@ -1,41 +1,75 @@
+# Rewritten by Phase 1 (specs/01-cleanup-scaffold.md §1.3).
+#
+# Replaces the pre-rebuild pair of compose files (root + server/) and their `include:`
+# indirection with one file. The FastAPI `api` service is gone; the Celery worker stays as
+# dormant infrastructure and must not be removed.
+#
+# SEC-001: Postgres and Redis bind to 127.0.0.1 ONLY.
+#
+# The pre-rebuild file used `6379:6379`, which Docker expands to 0.0.0.0:6379 — an
+# unauthenticated Redis on every interface, remotely reachable from any machine on the
+# same wifi. `127.0.0.1:6379:6379` publishes to loopback only, so `pnpm dev` on the host
+# still connects while nothing off-box can. Redis additionally now requires a password.
+#
+# Do not drop the 127.0.0.1 prefix when editing this file.
+
 name: tirupati-jewelles
 
-# Brings up the whole stack — Postgres, Redis, FastAPI, Celery worker + beat,
-# and the Next.js frontend — with a single `docker compose up` from the repo root.
-#
-# `include` pulls in the existing server stack rather than duplicating it, so
-# server/docker-compose.yml stays the single source of truth for the backend and
-# still works standalone. Paths inside an included file resolve relative to that
-# file, so its `build: .` and `env_file: .env` still point at server/.
-include:
-  - server/docker-compose.yml
-
 services:
-  web:
-    container_name: tirupati-web
-    build:
-      context: ./frontend
-    ports:
-      - "3000:3000"
+  db:
+    container_name: tirupati-db
+    image: postgres:16
+    restart: unless-stopped
     environment:
-      # Two URLs for the same API, because "localhost" means different things
-      # depending on who resolves it.
-      #
-      # Browser-side code (fetch in a Client Component) runs on your machine, so
-      # localhost:8000 is the published api port — correct.
-      NEXT_PUBLIC_API_URL: http://localhost:8000
-      # Server Components run *inside this container*, where localhost is the web
-      # container itself and nothing listens on 8000. Compose DNS resolves the
-      # service name instead.
-      INTERNAL_API_URL: http://api:8000
+      # SEC-002: credentials come from .env. The old fastapi_user/fastapi123 pair was
+      # hardcoded here and is committed in git history — it has been rotated, not moved.
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env}
+    ports:
+      - '127.0.0.1:5432:5432'
     volumes:
-      # Source is mounted so edits hot-reload without a rebuild.
-      - ./frontend:/app
-      # Anonymous volumes that shadow the bind mount, keeping the container's
-      # own node_modules and build cache instead of the host's. Without these,
-      # the macOS-built binaries in your host node_modules leak into the Linux
-      # container and the dev server fails to start.
-      - /app/node_modules
-      - /app/.next
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    container_name: tirupati-redis
+    image: redis:7-alpine
+    restart: unless-stopped
+    command:
+      ['redis-server', '--requirepass', '${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}']
+    ports:
+      - '127.0.0.1:6379:6379'
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ['CMD-SHELL', 'redis-cli -a "$$REDIS_PASSWORD" ping | grep -q PONG']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      # The healthcheck needs the password; it is already in this container's env.
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD}
+
+  # Dormant infrastructure — specs/01-cleanup-scaffold.md §1.3 and
+  # backend/celery_app/README.md. It connects, logs "ready", and does nothing else.
+  # DO NOT DELETE. Phase 9 §9.3 gives it real work.
+  worker:
+    container_name: tirupati-worker
+    build:
+      context: ./backend
+    restart: unless-stopped
+    command: ['celery', '-A', 'celery_app.celery', 'worker', '--loglevel=info']
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
     depends_on:
-      - api
+      redis:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  redisdata:
