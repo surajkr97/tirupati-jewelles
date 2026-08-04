@@ -24,7 +24,10 @@ jobs:
       DATABASE_URL: postgresql://fake:fake@localhost:5432/fake
       REDIS_URL: redis://localhost:6379/0
       SECRET_KEY: test-secret-key
+      # Guards the X-Refresh-Key header on /rates/internal/refresh.
       REFRESH_SECRET_KEY: test-refresh-secret-key
+      # Signs refresh JWTs. Deliberately a different value — see .env.example.
+      REFRESH_TOKEN_SECRET: test-refresh-token-secret
 
     steps:
       - uses: actions/checkout@v4
