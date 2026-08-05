@@ -21,7 +21,8 @@
     "db:studio": "prisma studio",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "verify:upload": "tsx scripts/verify-upload.mts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

@@ -10,8 +10,15 @@ import { Metal, Purity } from '@prisma/client';
 import { z } from 'zod';
 
 import { requireAdmin, UnauthorisedError } from '@/lib/auth/guard';
-import { clientIp, errorJson, json, parseBody, serverError } from '@/lib/http';
-import { fromDisplayUnit, setRate } from '@/lib/rates';
+import {
+  clientIp,
+  errorJson,
+  json,
+  parseBody,
+  requireSameOrigin,
+  serverError,
+} from '@/lib/http';
+import { fromDisplayUnit, isValidCombination, setRate } from '@/lib/rates';
 
 export const dynamic = 'force-dynamic';
 
@@ -32,13 +39,17 @@ const setRateSchema = z.object({
   confirmed: z.boolean().optional(),
 });
 
-/** Purities that belong to each metal — rejects GOLD/SILVER_999 and similar nonsense. */
-const VALID_COMBINATIONS: Record<string, string[]> = {
-  GOLD: ['K22_916', 'K18_750'],
-  SILVER: ['SILVER_999'],
-};
-
 export async function POST(request: Request) {
+  /**
+   * Authorisation FIRST, then CSRF — the order matters on an admin route.
+   *
+   * `requireSameOrigin` answers 403, and a 403 from `/api/admin/rates` tells an
+   * unauthenticated caller the route exists. §3.6 and §4 SECURITY both require 404 for
+   * everyone who is not an admin, so the identity check has to run first and swallow every
+   * non-admin into the same 404 regardless of where they posted from.
+   *
+   * An admin posting cross-origin still gets the 403, which is the case the check is for.
+   */
   let admin;
   try {
     admin = await requireAdmin();
@@ -48,12 +59,18 @@ export async function POST(request: Request) {
     throw err;
   }
 
+  // CSRF: reject a cross-origin state change (Phase 7 §7 SECURITY).
+  const crossOrigin = await requireSameOrigin();
+  if (crossOrigin) return crossOrigin;
+
   const parsed = await parseBody(request, setRateSchema);
   if (!parsed.ok) return parsed.response;
 
   const { metal, purity, displayRupees, confirmed } = parsed.data;
 
-  if (!VALID_COMBINATIONS[metal]?.includes(purity)) {
+  // Rejects GOLD/SILVER_999 and similar nonsense. Shared with GET /api/rates/history so
+  // the two routes cannot disagree about what a valid pair is.
+  if (!isValidCombination(metal as Metal, purity as Purity)) {
     return errorJson(`${purity} is not a valid purity for ${metal}.`, 400);
   }
 

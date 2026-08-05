@@ -1,0 +1,54 @@
+/**
+ * Admin shell.
+ * Created by Phase 7 (specs/07-admin-panel.md §7.1).
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  §7.1: "SSR only, `force-dynamic`, `noindex`. Role checked in proxy **and** re-checked in
+ *  every handler and page. Non-admins get 404, never 403."
+ *
+ *  `requireAdminPage()` here calls `notFound()`, so a signed-in customer who guesses the
+ *  URL gets the same 404 as a stranger. `proxy.ts` already rewrites `/admin` to a 404 when
+ *  there is no session cookie, but it runs at the edge and can only see whether a cookie
+ *  *exists* — not whether it is valid or what role it carries. That is precisely why the
+ *  check is repeated here, and why every action repeats it again.
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * §7 design intent: "The admin is a jeweller, not an operator of a CRUD dashboard. They
+ * will use this on a phone, standing in a shop, between customers." Same tokens as the
+ * storefront, same bottom nav pattern — no dense enterprise chrome.
+ */
+import type { Metadata } from 'next';
+
+import { AdminNav, AdminNavSpacer } from '@/components/admin/admin-nav';
+import { requireAdminPage } from '@/lib/auth/guard';
+
+/** Per-admin and never cacheable (§7.1, MASTER-SPEC §6). */
+export const dynamic = 'force-dynamic';
+
+export const metadata: Metadata = {
+  title: { default: 'Admin', template: '%s · Admin' },
+  // §7.1. Belt and braces with `proxy.ts`, which 404s the whole tree for a signed-out
+  // visitor — a crawler has no cookie, so it never sees this anyway.
+  robots: { index: false, follow: false, nocache: true },
+};
+
+export default async function AdminLayout({ children }: { children: React.ReactNode }) {
+  // The boundary. Renders the 404 page for anyone who is not an ADMIN.
+  const admin = await requireAdminPage();
+
+  return (
+    <div className="flex min-h-dvh flex-col bg-cream">
+      <header className="sticky top-0 z-30 border-b border-line bg-cream/90 backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between gap-4 px-[20px] py-4 md:px-[40px]">
+          <p className="text-h3 font-semibold text-ink">Shop admin</p>
+          <p className="truncate text-small text-muted">{admin.email ?? admin.name}</p>
+        </div>
+      </header>
+
+      <main className="flex-1">{children}</main>
+
+      <AdminNavSpacer />
+      <AdminNav />
+    </div>
+  );
+}

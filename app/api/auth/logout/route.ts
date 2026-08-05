@@ -9,7 +9,7 @@
  * clear the cookie rather than fail with a 401.
  */
 import { destroyAllSessions, destroySession, getSession } from '@/lib/auth/session';
-import { json, parseBody, serverError } from '@/lib/http';
+import { json, parseBody, requireSameOrigin, serverError } from '@/lib/http';
 import { z } from 'zod';
 
 export const dynamic = 'force-dynamic';
@@ -20,6 +20,10 @@ const logoutSchema = z.object({
 });
 
 export async function POST(request: Request) {
+  // CSRF: reject a cross-origin state change (Phase 7 §7 SECURITY).
+  const crossOrigin = await requireSameOrigin();
+  if (crossOrigin) return crossOrigin;
+
   try {
     // The body is optional; a bare logout with no payload is the common case.
     const parsed = await parseBody(request, logoutSchema).catch(() => null);

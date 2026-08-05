@@ -10,11 +10,22 @@
 import { OtpPurpose, verifyOtp } from '@/lib/auth/otp';
 import { consumeAll, OTP_LIMITS } from '@/lib/auth/rate-limit';
 import { signupVerifySchema } from '@/lib/auth/schemas';
-import { clientIp, errorJson, json, parseBody, serverError } from '@/lib/http';
+import {
+  clientIp,
+  errorJson,
+  json,
+  parseBody,
+  requireSameOrigin,
+  serverError,
+} from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
+  // CSRF: reject a cross-origin state change (Phase 7 §7 SECURITY).
+  const crossOrigin = await requireSameOrigin();
+  if (crossOrigin) return crossOrigin;
+
   const parsed = await parseBody(request, signupVerifySchema);
   if (!parsed.ok) return parsed.response;
 

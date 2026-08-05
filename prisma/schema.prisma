@@ -109,6 +109,7 @@ model Product {
   images      ProductImage[]
   isActive    Boolean        @default(true)
   isFeatured  Boolean        @default(false)
+  enquiries   Enquiry[]
   createdAt   DateTime       @default(now())
 
   @@index([categoryId, isActive])
@@ -187,4 +188,97 @@ model AuditLog {
   createdAt DateTime @default(now())
 
   @@index([entity, entityId])
+}
+
+// ──────────────────────────────────────────────────────────────────── calculator
+
+/// Shareable calculator result (Phase 5 §5.5).
+///
+/// Not in MASTER-SPEC §5's data model — see DECISIONS.md D-015 for why this lives in
+/// Postgres rather than Redis. The short version: §5.5 promises a link that still works in
+/// 30 days and still shows the same price, and a cache is the wrong home for a durable
+/// promise.
+model CalculatorShare {
+  id   String @id @default(uuid())
+  /// Short, unguessable path segment. Same reasoning as a bill PDF key: the URL is the
+  /// only thing guarding it, so it must not be enumerable.
+  slug String @unique
+
+  /// The item set exactly as submitted, re-validated on read.
+  items Json
+
+  /// Rates SNAPSHOTTED at share time, paise per gram by purity. §5.5: "recomputes with
+  /// rates snapshotted at share time, so a shared link doesn't silently change price."
+  /// Same principle as OrderItem.ratePerGram — a quote must not move under the recipient.
+  rates Json
+
+  /// Shown on the page so the recipient knows how old the quote is.
+  ratesAt   DateTime
+  createdAt DateTime @default(now())
+  /// 30 days from creation (§5.5).
+  expiresAt DateTime
+
+  /// Phase 9 will sweep expired rows; the index makes that cheap.
+  @@index([expiresAt])
+}
+
+// ────────────────────────────────────────────────────────────────────── enquiries
+
+/// A WhatsApp enquiry, logged for the Phase 7 admin dashboard (Phase 6 §6.3).
+///
+/// Not in MASTER-SPEC §5 — see DECISIONS.md D-017. `AuditLog` was the alternative and is
+/// the wrong shape: its `actorId` is non-null and means "the admin who did this", whereas
+/// almost every enquiry is anonymous. Overloading it would make the audit trail unusable
+/// for the thing it exists for.
+///
+/// Deliberately thin. §6.3 logs "product, timestamp, session" and nothing else; an enquiry
+/// is a signal that someone was interested, not a record about a person.
+model Enquiry {
+  id        String   @id @default(uuid())
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+  /// Opaque session id when the visitor has one. Never a phone number or a name — the
+  /// message goes to WhatsApp, and we do not have those details at this point anyway.
+  sessionId String?
+  /// `PRODUCT` or `FLOATING` — which surface the enquiry came from.
+  source    String
+  createdAt DateTime @default(now())
+
+  @@index([productId, createdAt])
+  @@index([createdAt])
+}
+
+// ───────────────────────────────────────────────────────────────────── settings
+
+/// Shop settings (Phase 7 §7.9).
+///
+/// Not in MASTER-SPEC §5 — see DECISIONS.md D-022. A single row, keyed on a constant, so
+/// there is no "which settings row is live?" question and no way to end up with two.
+model Settings {
+  /// Always `singleton`. A check constraint in spirit: one row, forever.
+  id String @id @default("singleton")
+
+  shopName      String  @default("Tirupati Jewelles")
+  address       String?
+  gstin         String?
+  contactPhone  String? @map("contact_phone")
+  ownerWhatsApp String? @map("owner_whatsapp")
+
+  /// Defaults for the calculator and new products. MASTER-SPEC §4 puts GST at 3.
+  defaultGstPct    Decimal @default(3.00) @db.Decimal(5, 2)
+  defaultMakingPct Decimal @default(12.00) @db.Decimal(5, 2)
+
+  /// Phase 8 bill numbering — `JW-2026-0001`.
+  billPrefix   String @default("JW")
+  billSequence Int    @default(1)
+
+  /// §7.9: "Ticker jitter on/off — surface the env flag in the UI so the owner can disable
+  /// it without a deploy." Null means "follow NEXT_PUBLIC_TICKER_JITTER"; a boolean
+  /// overrides it. MASTER-SPEC §8 calls the off-switch the legal insurance.
+  tickerJitter Boolean?
+
+  businessHours String?
+  holidayNotice String?
+
+  updatedAt DateTime @updatedAt
 }

@@ -55,8 +55,23 @@ const serverSchema = z.object({
    */
   SMS_PROVIDER_KEY: z.string().optional(),
 
-  // Phase 7 (uploads + the SSRF-guarded image URL field).
-  UPLOAD_PROVIDER_KEY: z.string().min(1),
+  /**
+   * Cloudinary — direct-to-provider signed uploads (Phase 7 §7.8).
+   *
+   * Replaces MASTER-SPEC §9's single `UPLOAD_PROVIDER_KEY`, because Cloudinary needs three
+   * values and one string cannot hold them (D-025).
+   *
+   * The cloud name and API key are public — both appear in delivery URLs and in every
+   * signed request. The SECRET is the only one that matters: it signs upload parameters
+   * server-side and must never reach the browser. It is read here and nowhere else, so
+   * there is exactly one place to audit.
+   *
+   * Optional so the application still boots without them — §7.6's paste-a-URL path works
+   * regardless, and a missing key disables the upload button rather than crashing at start.
+   */
+  CLOUDINARY_CLOUD_NAME: z.string().optional(),
+  CLOUDINARY_API_KEY: z.string().optional(),
+  CLOUDINARY_API_SECRET: z.string().optional(),
   ALLOWED_IMAGE_HOSTS: z
     .string()
     .min(1)
@@ -88,11 +103,30 @@ const clientSchema = z.object({
     .enum(['true', 'false'])
     .default('true')
     .transform((v) => v === 'true'),
+
+  /**
+   * The site's public origin, e.g. `https://tirupatijewelles.com`.
+   *
+   * Added by Phase 6 (§6.3). The WhatsApp enquiry message embeds an absolute link back to
+   * the product, and the server cannot reliably know its own public origin behind a proxy.
+   * The alternative — reading `window.location.origin` in an effect — would mean the link
+   * is wrong in the server-rendered HTML and only corrected after hydration, so it would
+   * be wrong for a visitor with JavaScript disabled and briefly wrong for everyone else.
+   *
+   * Known at build time, so the message is identical on the server and the client and no
+   * effect is needed. Trailing slash stripped so `${SITE_URL}/products/x` never doubles up.
+   */
+  NEXT_PUBLIC_SITE_URL: z
+    .string()
+    .url('NEXT_PUBLIC_SITE_URL must be an absolute URL, e.g. https://example.com')
+    .default('http://localhost:3000')
+    .transform((v) => v.replace(/\/+$/, '')),
 });
 
 const clientValues = {
   NEXT_PUBLIC_OWNER_WA: process.env.NEXT_PUBLIC_OWNER_WA,
   NEXT_PUBLIC_TICKER_JITTER: process.env.NEXT_PUBLIC_TICKER_JITTER,
+  NEXT_PUBLIC_SITE_URL: process.env.NEXT_PUBLIC_SITE_URL,
 };
 
 function fail(scope: string, error: z.ZodError): never {

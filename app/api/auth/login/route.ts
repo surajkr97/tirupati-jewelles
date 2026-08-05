@@ -20,12 +20,13 @@ import { loginSchema } from '@/lib/auth/schemas';
 import { createSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
 import {
+  GENERIC_AUTH_ERROR,
   clientIp,
   errorJson,
-  GENERIC_AUTH_ERROR,
   json,
   padTo,
   parseBody,
+  requireSameOrigin,
   serverError,
 } from '@/lib/http';
 
@@ -46,6 +47,10 @@ async function decoy(password: string): Promise<void> {
 }
 
 export async function POST(request: Request) {
+  // CSRF: reject a cross-origin state change (Phase 7 §7 SECURITY).
+  const crossOrigin = await requireSameOrigin();
+  if (crossOrigin) return crossOrigin;
+
   const startedAt = Date.now();
 
   const parsed = await parseBody(request, loginSchema);

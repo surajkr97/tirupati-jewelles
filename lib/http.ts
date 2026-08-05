@@ -91,6 +91,66 @@ export function parseQuery<S extends z.ZodType>(
 }
 
 /**
+ * Reject a state-changing request that did not come from our own origin.
+ *
+ * Created by Phase 7 (specs/07-admin-panel.md §7 SECURITY: "CSRF: state-changing routes
+ * require `SameSite=Lax` plus an origin check").
+ *
+ * ── Why this exists when the cookie is already SameSite=Lax ──
+ * Lax does block the session cookie on a cross-site POST, so this is defence in depth
+ * rather than a hole being closed. But it makes the browser's default the *only* control,
+ * and Lax has edge cases — a same-site-but-different-subdomain attacker, and browsers that
+ * treat the default differently. One header check costs nothing and removes the dependency.
+ *
+ * `Origin` is sent by every browser on a cross-origin request and on same-origin POSTs, and
+ * it cannot be set by page JavaScript. A request with NO origin header is allowed through:
+ * that is a server-to-server caller (curl, the Playwright request fixture, a health check),
+ * which is not a CSRF scenario — CSRF requires a browser with an ambient cookie, and a
+ * browser always sends the header.
+ *
+ * Applied to every mutating handler in the application, not only Phase 7's. A control that
+ * only guards code written after it was invented has a hole in the shape of the older code.
+ */
+export async function requireSameOrigin(): Promise<NextResponse | null> {
+  const h = await headers();
+  const origin = h.get('origin');
+
+  // No Origin — not a browser form post. See above.
+  if (!origin) return null;
+
+  const host = h.get('host');
+  if (!host) return errorJson('Bad request.', 400);
+
+  let parsed: URL;
+  try {
+    parsed = new URL(origin);
+  } catch {
+    return errorJson('Bad request.', 400);
+  }
+
+  /**
+   * In production the origin must be https.
+   *
+   * `Host` carries no scheme, so comparing hosts alone would accept
+   * `http://shop.example` against a host of `shop.example` — the ports normalise away and
+   * the two look identical. That admits a downgraded origin, which is exactly the position
+   * a network attacker wants to be in. Development is exempt because it runs on
+   * `http://localhost`.
+   */
+  if (env.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
+    return errorJson('Bad request.', 403);
+  }
+
+  if (parsed.host !== host) {
+    // Deliberately terse. Naming the expected origin would help an attacker tune, and a
+    // legitimate caller never sees this.
+    return errorJson('Bad request.', 403);
+  }
+
+  return null;
+}
+
+/**
  * Best-effort client IP for rate limiting.
  *
  * `x-forwarded-for` is client-controlled unless a trusted proxy overwrites it. Vercel and

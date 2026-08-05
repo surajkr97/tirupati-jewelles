@@ -23,7 +23,11 @@ const TEST_ENV: Record<string, string> = {
   SESSION_SECRET: 'test-session-secret-that-is-long-enough-32',
   OTP_PEPPER: 'test-otp-pepper-that-is-long-enough-32-byte',
   EMAIL_FROM: 'Tirupati Jewelles <test@example.com>',
-  UPLOAD_PROVIDER_KEY: 'test-upload-key',
+  // Cloudinary (Phase 7 §7.8). Obviously fake — the signing tests assert the algorithm,
+  // not the account, and nothing in the suite calls Cloudinary.
+  CLOUDINARY_CLOUD_NAME: 'test-cloud',
+  CLOUDINARY_API_KEY: '000000000000000',
+  CLOUDINARY_API_SECRET: 'test-cloudinary-secret',
   ALLOWED_IMAGE_HOSTS: 'res.cloudinary.com,utfs.io',
   SEED_ADMIN_EMAIL: 'admin@example.com',
   SEED_ADMIN_PASSWORD: 'test-admin-password',
@@ -40,3 +44,20 @@ for (const [key, value] of Object.entries(TEST_ENV)) {
 
 /** True when a real test database is configured. DB suites gate on this. */
 export const HAS_TEST_DB = Boolean(process.env.TEST_DATABASE_URL);
+
+/**
+ * jsdom has no `ResizeObserver`.
+ *
+ * Added by Phase 6 for `components/shell/sticky-bar.tsx`, which measures itself so the
+ * layout can reserve exactly the right space. The component degrades gracefully without
+ * the API, but stubbing it here means the tests exercise the observing path rather than
+ * quietly taking the fallback — a test that skips the code it is meant to cover is worse
+ * than no test.
+ */
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  globalThis.ResizeObserver = class {
+    observe(): void {}
+    unobserve(): void {}
+    disconnect(): void {}
+  } as unknown as typeof ResizeObserver;
+}

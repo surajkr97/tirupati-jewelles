@@ -18,12 +18,24 @@ import { issueOtp, OtpPurpose } from '@/lib/auth/otp';
 import { consumeAll, OTP_LIMITS } from '@/lib/auth/rate-limit';
 import { passwordForgotSchema } from '@/lib/auth/schemas';
 import { db } from '@/lib/db';
-import { clientIp, errorJson, json, padTo, parseBody, serverError } from '@/lib/http';
+import {
+  clientIp,
+  errorJson,
+  json,
+  padTo,
+  parseBody,
+  requireSameOrigin,
+  serverError,
+} from '@/lib/http';
 import { sendOtp } from '@/lib/notify';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
+  // CSRF: reject a cross-origin state change (Phase 7 §7 SECURITY).
+  const crossOrigin = await requireSameOrigin();
+  if (crossOrigin) return crossOrigin;
+
   const startedAt = Date.now();
 
   const parsed = await parseBody(request, passwordForgotSchema);

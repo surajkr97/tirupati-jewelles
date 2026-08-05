@@ -11,11 +11,15 @@ import { checkPassword } from '@/lib/auth/password-policy';
 import { signupCompleteSchema } from '@/lib/auth/schemas';
 import { createSession } from '@/lib/auth/session';
 import { db } from '@/lib/db';
-import { errorJson, json, parseBody, serverError } from '@/lib/http';
+import { errorJson, json, parseBody, requireSameOrigin, serverError } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
+  // CSRF: reject a cross-origin state change (Phase 7 §7 SECURITY).
+  const crossOrigin = await requireSameOrigin();
+  if (crossOrigin) return crossOrigin;
+
   const parsed = await parseBody(request, signupCompleteSchema);
   if (!parsed.ok) return parsed.response;
 
