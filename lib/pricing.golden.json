@@ -1,0 +1,596 @@
+[
+  {
+    "name": "a plain 10 g 22K chain at the shop's standard 12% making",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 10000,
+      "makingPct": 12,
+      "stoneCharge": "0",
+      "gstPct": 3
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "11842000",
+      "makingCharge": "1421040",
+      "stoneCharge": "0",
+      "subtotal": "13263040",
+      "gstAmount": "397891",
+      "lineTotal": "13660931"
+    },
+    "exact": {
+      "metalValue": "11842000",
+      "makingCharge": "1421040",
+      "subtotal": "13263040",
+      "gstAmount": "1989456/5",
+      "lineTotal": "68304656/5"
+    }
+  },
+  {
+    "name": "zero weight \u2014 a blank row a customer has not filled in yet",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 0,
+      "makingPct": 12,
+      "stoneCharge": "0",
+      "gstPct": 3
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "0",
+      "makingCharge": "0",
+      "stoneCharge": "0",
+      "subtotal": "0",
+      "gstAmount": "0",
+      "lineTotal": "0"
+    },
+    "exact": {
+      "metalValue": "0",
+      "makingCharge": "0",
+      "subtotal": "0",
+      "gstAmount": "0",
+      "lineTotal": "0"
+    }
+  },
+  {
+    "name": "the smallest weight the schema can hold: 0.001 g",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 1,
+      "makingPct": 12,
+      "stoneCharge": "0",
+      "gstPct": 3
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "1184",
+      "makingCharge": "142",
+      "stoneCharge": "0",
+      "subtotal": "1326",
+      "gstAmount": "40",
+      "lineTotal": "1366"
+    },
+    "exact": {
+      "metalValue": "5921/5",
+      "makingCharge": "17763/125",
+      "subtotal": "165788/125",
+      "gstAmount": "124341/3125",
+      "lineTotal": "4269041/3125"
+    }
+  },
+  {
+    "name": "99999 g \u2014 the \u00a75 TEST upper bound",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 99999000,
+      "makingPct": 12,
+      "stoneCharge": "0",
+      "gstPct": 3
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "118418815800",
+      "makingCharge": "14210257896",
+      "stoneCharge": "0",
+      "subtotal": "132629073696",
+      "gstAmount": "3978872211",
+      "lineTotal": "136607945907"
+    },
+    "exact": {
+      "metalValue": "118418815800",
+      "makingCharge": "14210257896",
+      "subtotal": "132629073696",
+      "gstAmount": "99471805272/25",
+      "lineTotal": "3415198647672/25"
+    }
+  },
+  {
+    "name": "making 0% \u2014 a bullion sale, no craftsmanship charged",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 10000,
+      "makingPct": 0,
+      "stoneCharge": "0",
+      "gstPct": 3
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "11842000",
+      "makingCharge": "0",
+      "stoneCharge": "0",
+      "subtotal": "11842000",
+      "gstAmount": "355260",
+      "lineTotal": "12197260"
+    },
+    "exact": {
+      "metalValue": "11842000",
+      "makingCharge": "0",
+      "subtotal": "11842000",
+      "gstAmount": "355260",
+      "lineTotal": "12197260"
+    }
+  },
+  {
+    "name": "making 100% \u2014 the ceiling; labour doubling the metal price",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 10000,
+      "makingPct": 100,
+      "stoneCharge": "0",
+      "gstPct": 3
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "11842000",
+      "makingCharge": "11842000",
+      "stoneCharge": "0",
+      "subtotal": "23684000",
+      "gstAmount": "710520",
+      "lineTotal": "24394520"
+    },
+    "exact": {
+      "metalValue": "11842000",
+      "makingCharge": "11842000",
+      "subtotal": "23684000",
+      "gstAmount": "710520",
+      "lineTotal": "24394520"
+    }
+  },
+  {
+    "name": "18K gold, a lighter alloy at a lower rate",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K18_750",
+      "weightMg": 8500,
+      "makingPct": 15,
+      "stoneCharge": "0",
+      "gstPct": 3
+    },
+    "ratePerGram": "969300",
+    "expected": {
+      "metalValue": "8239050",
+      "makingCharge": "1235858",
+      "stoneCharge": "0",
+      "subtotal": "9474908",
+      "gstAmount": "284247",
+      "lineTotal": "9759155"
+    },
+    "exact": {
+      "metalValue": "8239050",
+      "makingCharge": "2471715/2",
+      "subtotal": "18949815/2",
+      "gstAmount": "11369889/40",
+      "lineTotal": "390366189/40"
+    }
+  },
+  {
+    "name": "silver, priced per gram from a per-kilogram quote",
+    "input": {
+      "metal": "SILVER",
+      "purity": "SILVER_999",
+      "weightMg": 1000000,
+      "makingPct": 8,
+      "stoneCharge": "0",
+      "gstPct": 3
+    },
+    "ratePerGram": "15890",
+    "expected": {
+      "metalValue": "15890000",
+      "makingCharge": "1271200",
+      "stoneCharge": "0",
+      "subtotal": "17161200",
+      "gstAmount": "514836",
+      "lineTotal": "17676036"
+    },
+    "exact": {
+      "metalValue": "15890000",
+      "makingCharge": "1271200",
+      "subtotal": "17161200",
+      "gstAmount": "514836",
+      "lineTotal": "17676036"
+    }
+  },
+  {
+    "name": "a stone charge on its own \u2014 a setting with no new metal",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 0,
+      "makingPct": 12,
+      "stoneCharge": "1500000",
+      "gstPct": 3
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "0",
+      "makingCharge": "0",
+      "stoneCharge": "1500000",
+      "subtotal": "1500000",
+      "gstAmount": "45000",
+      "lineTotal": "1545000"
+    },
+    "exact": {
+      "metalValue": "0",
+      "makingCharge": "0",
+      "subtotal": "1500000",
+      "gstAmount": "45000",
+      "lineTotal": "1545000"
+    }
+  },
+  {
+    "name": "BANKERS ROUND DOWN: exact 26644.5 paise, floor is even",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 20,
+      "makingPct": 12.5,
+      "stoneCharge": "0",
+      "gstPct": 0
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "23684",
+      "makingCharge": "2960",
+      "stoneCharge": "0",
+      "subtotal": "26644",
+      "gstAmount": "0",
+      "lineTotal": "26644"
+    },
+    "exact": {
+      "metalValue": "23684",
+      "makingCharge": "5921/2",
+      "subtotal": "53289/2",
+      "gstAmount": "0",
+      "lineTotal": "53289/2"
+    }
+  },
+  {
+    "name": "BANKERS ROUND UP: exact 32565.5 paise, floor is odd",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 25,
+      "makingPct": 10,
+      "stoneCharge": "0",
+      "gstPct": 0
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "29605",
+      "makingCharge": "2960",
+      "stoneCharge": "0",
+      "subtotal": "32565",
+      "gstAmount": "1",
+      "lineTotal": "32566"
+    },
+    "exact": {
+      "metalValue": "29605",
+      "makingCharge": "5921/2",
+      "subtotal": "65131/2",
+      "gstAmount": "0",
+      "lineTotal": "65131/2"
+    }
+  },
+  {
+    "name": "GST 0% \u2014 an exempt or pre-GST historical line",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 10000,
+      "makingPct": 12,
+      "stoneCharge": "0",
+      "gstPct": 0
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "11842000",
+      "makingCharge": "1421040",
+      "stoneCharge": "0",
+      "subtotal": "13263040",
+      "gstAmount": "0",
+      "lineTotal": "13263040"
+    },
+    "exact": {
+      "metalValue": "11842000",
+      "makingCharge": "1421040",
+      "subtotal": "13263040",
+      "gstAmount": "0",
+      "lineTotal": "13263040"
+    }
+  },
+  {
+    "name": "GST 5% \u2014 a rate change the admin can configure",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 10000,
+      "makingPct": 12,
+      "stoneCharge": "0",
+      "gstPct": 5
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "11842000",
+      "makingCharge": "1421040",
+      "stoneCharge": "0",
+      "subtotal": "13263040",
+      "gstAmount": "663152",
+      "lineTotal": "13926192"
+    },
+    "exact": {
+      "metalValue": "11842000",
+      "makingCharge": "1421040",
+      "subtotal": "13263040",
+      "gstAmount": "663152",
+      "lineTotal": "13926192"
+    }
+  },
+  {
+    "name": "GST 1.5% \u2014 one half of the CGST/SGST split",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 10000,
+      "makingPct": 12,
+      "stoneCharge": "0",
+      "gstPct": 1.5
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "11842000",
+      "makingCharge": "1421040",
+      "stoneCharge": "0",
+      "subtotal": "13263040",
+      "gstAmount": "198946",
+      "lineTotal": "13461986"
+    },
+    "exact": {
+      "metalValue": "11842000",
+      "makingCharge": "1421040",
+      "subtotal": "13263040",
+      "gstAmount": "994728/5",
+      "lineTotal": "67309928/5"
+    }
+  },
+  {
+    "name": "a 3-decimal weight, 8.475 g",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 8475,
+      "makingPct": 12,
+      "stoneCharge": "0",
+      "gstPct": 3
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "10036095",
+      "makingCharge": "1204331",
+      "stoneCharge": "0",
+      "subtotal": "11240426",
+      "gstAmount": "337213",
+      "lineTotal": "11577639"
+    },
+    "exact": {
+      "metalValue": "10036095",
+      "makingCharge": "6021657/5",
+      "subtotal": "56202132/5",
+      "gstAmount": "42151599/125",
+      "lineTotal": "1447204899/125"
+    }
+  },
+  {
+    "name": "a heavy bridal set: 85.5 g at 15% with stones",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 85500,
+      "makingPct": 15,
+      "stoneCharge": "4500000",
+      "gstPct": 3
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "101249100",
+      "makingCharge": "15187365",
+      "stoneCharge": "4500000",
+      "subtotal": "120936465",
+      "gstAmount": "3628094",
+      "lineTotal": "124564559"
+    },
+    "exact": {
+      "metalValue": "101249100",
+      "makingCharge": "15187365",
+      "subtotal": "120936465",
+      "gstAmount": "72561879/20",
+      "lineTotal": "2491291179/20"
+    }
+  },
+  {
+    "name": "a fractional making rate, 12.5%",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 12000,
+      "makingPct": 12.5,
+      "stoneCharge": "0",
+      "gstPct": 3
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "14210400",
+      "makingCharge": "1776300",
+      "stoneCharge": "0",
+      "subtotal": "15986700",
+      "gstAmount": "479601",
+      "lineTotal": "16466301"
+    },
+    "exact": {
+      "metalValue": "14210400",
+      "makingCharge": "1776300",
+      "subtotal": "15986700",
+      "gstAmount": "479601",
+      "lineTotal": "16466301"
+    }
+  },
+  {
+    "name": "weight ending .999 \u2014 the worst case for decimal parsing",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 5999,
+      "makingPct": 12,
+      "stoneCharge": "0",
+      "gstPct": 3
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "7104016",
+      "makingCharge": "852482",
+      "stoneCharge": "0",
+      "subtotal": "7956498",
+      "gstAmount": "238695",
+      "lineTotal": "8195193"
+    },
+    "exact": {
+      "metalValue": "35520079/5",
+      "makingCharge": "106560237/125",
+      "subtotal": "994562212/125",
+      "gstAmount": "745921659/3125",
+      "lineTotal": "25609976959/3125"
+    }
+  },
+  {
+    "name": "a stone charge carrying paise, \u20b912,345.67",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K18_750",
+      "weightMg": 6250,
+      "makingPct": 10,
+      "stoneCharge": "1234567",
+      "gstPct": 3
+    },
+    "ratePerGram": "969300",
+    "expected": {
+      "metalValue": "6058125",
+      "makingCharge": "605812",
+      "stoneCharge": "1234567",
+      "subtotal": "7898504",
+      "gstAmount": "236956",
+      "lineTotal": "8135460"
+    },
+    "exact": {
+      "metalValue": "6058125",
+      "makingCharge": "1211625/2",
+      "subtotal": "15797009/2",
+      "gstAmount": "47391027/200",
+      "lineTotal": "1627091927/200"
+    }
+  },
+  {
+    "name": "everything at once: 18K, decimal weight, decimal making, stones",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K18_750",
+      "weightMg": 3333,
+      "makingPct": 12.5,
+      "stoneCharge": "987654",
+      "gstPct": 3
+    },
+    "ratePerGram": "969300",
+    "expected": {
+      "metalValue": "3230677",
+      "makingCharge": "403835",
+      "stoneCharge": "987654",
+      "subtotal": "4622166",
+      "gstAmount": "138664",
+      "lineTotal": "4760830"
+    },
+    "exact": {
+      "metalValue": "32306769/10",
+      "makingCharge": "32306769/80",
+      "subtotal": "369773241/80",
+      "gstAmount": "1109319723/8000",
+      "lineTotal": "38086643823/8000"
+    }
+  },
+  {
+    "name": "INTERMEDIATE ROUNDING TRAP: subtotal is 26644.5 paise, then 3% GST",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 20,
+      "makingPct": 12.5,
+      "stoneCharge": "0",
+      "gstPct": 3
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "23684",
+      "makingCharge": "2960",
+      "stoneCharge": "0",
+      "subtotal": "26644",
+      "gstAmount": "800",
+      "lineTotal": "27444"
+    },
+    "exact": {
+      "metalValue": "23684",
+      "makingCharge": "5921/2",
+      "subtotal": "53289/2",
+      "gstAmount": "159867/200",
+      "lineTotal": "5488767/200"
+    }
+  },
+  {
+    "name": "the same trap one paise the other way: subtotal 32565.5, then 3% GST",
+    "input": {
+      "metal": "GOLD",
+      "purity": "K22_916",
+      "weightMg": 25,
+      "makingPct": 10,
+      "stoneCharge": "0",
+      "gstPct": 3
+    },
+    "ratePerGram": "1184200",
+    "expected": {
+      "metalValue": "29605",
+      "makingCharge": "2960",
+      "stoneCharge": "0",
+      "subtotal": "32565",
+      "gstAmount": "977",
+      "lineTotal": "33542"
+    },
+    "exact": {
+      "metalValue": "29605",
+      "makingCharge": "5921/2",
+      "subtotal": "65131/2",
+      "gstAmount": "195393/200",
+      "lineTotal": "6708493/200"
+    }
+  }
+]
