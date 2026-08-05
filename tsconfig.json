@@ -30,7 +30,9 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    ".next-jitter-off/types/**/*.ts",
+    ".next-jitter-off/dev/types/**/*.ts"
   ],
   "exclude": ["node_modules", "backend"]
 }

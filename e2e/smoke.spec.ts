@@ -25,7 +25,9 @@ test('ticker is above the fold at 375px', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-375', 'Fold position is a mobile concern');
 
   await page.goto('/');
-  const box = await page.getByRole('radiogroup', { name: 'Metal and purity' }).boundingBox();
+  const box = await page
+    .getByRole('radiogroup', { name: 'Metal and purity' })
+    .boundingBox();
 
   // §4.5: "it does not go below a marketing banner."
   expect(box?.y ?? Infinity).toBeLessThan(667);

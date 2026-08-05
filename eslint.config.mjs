@@ -16,6 +16,9 @@ const config = [
     ignores: [
       'node_modules/**',
       '.next/**',
+      // The Playwright jitter-off server builds into .next-jitter-off (playwright.config.ts).
+      // Generated output, same as .next — linting it reports 300 errors in code nobody wrote.
+      '.next-*/**',
       'backend/**',
       'prisma/migrations/**',
       'next-env.d.ts',

@@ -4,6 +4,8 @@ node_modules/
 
 # Next.js
 .next/
+# Alternate build dirs (the Playwright jitter-off server uses .next-jitter-off).
+.next-*/
 out/
 next-env.d.ts
 *.tsbuildinfo

@@ -15,10 +15,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import useSWR from 'swr';
 
+import { RateDelta } from '@/components/rates/rate-delta';
+import { RateDisclaimer } from '@/components/rates/rate-disclaimer';
 import { Sparkline } from '@/components/rates/sparkline';
 import { Card, SegmentedControl } from '@/components/ui';
 import { clientEnv } from '@/lib/env';
-import { formatINR, formatPercent } from '@/lib/money';
+import { formatINR } from '@/lib/money';
 import { nextTick, TICK_INTERVAL_MS } from '@/lib/ticker-jitter';
 import { cn } from '@/lib/utils/cn';
 
@@ -154,13 +156,12 @@ export function RateTicker({
   const changeUp = change >= 0n;
   const points = (history[face] ?? []).map(BigInt);
 
-  const updatedAt = new Date(current.effectiveAt).toLocaleTimeString('en-IN', {
-    hour: 'numeric',
-    minute: '2-digit',
-  });
-
   return (
-    <Card className="flex flex-col gap-6">
+    // The three test ids are a deliberate seam. The headline figure is a formatted currency
+    // string with no accessible name, so an E2E test would otherwise have to match on
+    // `p[aria-live]` or on the digits themselves — both of which break the moment the
+    // markup or the rate changes, and neither of which says what it is looking for.
+    <Card className="flex flex-col gap-6" data-testid="rate-ticker">
       <SegmentedControl
         label="Metal and purity"
         options={OPTIONS}
@@ -189,36 +190,45 @@ export function RateTicker({
              */
             aria-live="polite"
             aria-atomic="true"
+            data-testid="ticker-value"
           >
             {formatINR(displayed)}
           </p>
-          <p className="text-small text-muted">{current.unit}</p>
+          <p className="text-small text-muted" data-testid="ticker-unit">
+            {current.unit}
+          </p>
         </div>
 
-        <p
-          className={cn(
-            'flex items-center gap-1 text-body font-medium tabular',
-            changeUp ? 'text-up' : 'text-down',
-          )}
-        >
-          {/* The arrow carries the meaning as well as the colour — §4 DESIGN requires
-              up/down to be legible to a colour-blind reader. */}
-          <span aria-hidden="true">{changeUp ? '▲' : '▼'}</span>
-          <span className="sr-only">{changeUp ? 'Up' : 'Down'}</span>
-          {formatINR(change < 0n ? -change : change)} ({formatPercent(change, truth)})
-        </p>
+        {/* The TRUE change against the previous admin rate — never the jitter's
+            per-tick direction, which is noise and would show a "▼ 2%" fall that never
+            happened. `direction` above colours the number; this line reports reality. */}
+        <RateDelta change={change} base={truth} />
 
-        {points.length >= 2 && <Sparkline points={points} rising={changeUp} />}
+        {/*
+          The slot is always reserved, even when there is nothing to draw.
+
+          Rendering the sparkline conditionally made the card change height when switching
+          between a metal with rate history and one without — a visible jump, and exactly
+          the layout shift §4 TEST asserts against. It only surfaced once the Phase 7 admin
+          tests gave one purity a second rate row, which is the kind of state a fixed
+          fixture never produces.
+        */}
+        <div className="h-8">
+          {points.length >= 2 && <Sparkline points={points} rising={changeUp} />}
+        </div>
       </div>
 
       {/*
         Always visible, never hidden in 10px grey (§4 DESIGN). MASTER-SPEC §8: the
         disclaimer plus the calculator using true rates is the mitigation for displaying
         a price that differs from the transaction price. Do not remove it.
+
+        Shared with /rates so §4.6's "the same disclaimer" cannot quietly stop being true.
+        It formats in IST explicitly — this component is server-rendered before it
+        hydrates, and a UTC server against an IST browser would print two different times
+        for the same instant and blow up hydration.
       */}
-      <p className="text-small text-muted">
-        Indicative rate · Updated {updatedAt} · Final price confirmed in store.
-      </p>
+      <RateDisclaimer effectiveAt={current.effectiveAt} />
     </Card>
   );
 }

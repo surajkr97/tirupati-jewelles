@@ -12,7 +12,7 @@
  * So this **fails closed** — a Redis fault denies the request. The blast radius is bounded
  * because only auth and billing routes use it; browsing, rates and the calculator stay up.
  */
-import { redis } from '@/lib/redis';
+import { ensureReady, redis } from '@/lib/redis';
 
 export interface RateLimitRule {
   /** Identifier for the counter, e.g. `otp:send:+919876543210`. */
@@ -39,6 +39,17 @@ export interface RateLimitResult {
  */
 export async function consume(rule: RateLimitRule): Promise<RateLimitResult> {
   const key = `rl:${rule.key}`;
+
+  /**
+   * Wait for the first connection before counting.
+   *
+   * This limiter fails closed, so a command rejected merely because the socket was still
+   * opening denied a legitimate request. The symptom was that the first login attempt
+   * after every deploy or restart returned 429 "Too many attempts. Try again later." and
+   * then succeeded on retry. `ensureReady` is settled for the life of the process after
+   * the first attempt, so a genuinely down Redis still fails closed immediately.
+   */
+  await ensureReady();
 
   try {
     const pipeline = redis.multi();

@@ -17,9 +17,10 @@
 import 'server-only';
 
 import { Metal, Purity } from '@prisma/client';
-import { revalidateTag } from 'next/cache';
+import { revalidatePath, revalidateTag } from 'next/cache';
 
 import { db } from '@/lib/db';
+import type { RatesByPurity } from '@/lib/pricing';
 import { cached, invalidate, redis } from '@/lib/redis';
 
 export const RATES_CACHE_KEY = 'rates:current';
@@ -28,6 +29,35 @@ export const RATES_TAG = 'rates';
 
 /** A rate more than this far from the previous one needs `confirmed: true` (§4.2). */
 export const SANITY_THRESHOLD = 0.2;
+
+/**
+ * ISR'd routes that render a rate, invalidated whenever one changes.
+ *
+ * MASTER-SPEC §6 promises a rate change "appears without waiting for the ISR window", and
+ * `revalidateTag` alone does not deliver that: Next 16 only invalidates entries that
+ * carry the tag, applied via `fetch(next.tags)` or `cacheTag()` inside a `'use cache'`
+ * function. These pages read Postgres directly and are cached by `export const
+ * revalidate`, so nothing here is tagged and the tag call matches nothing.
+ *
+ * Measured rather than assumed: against a production build, setting a rate updated
+ * `/api/rates` immediately while `/` and `/rates` kept serving the old figure for the full
+ * 300s. `/` self-corrects after five minutes because the ticker refetches over SWR;
+ * `/rates` is server-rendered with no client fetch, so it had no way to catch up at all.
+ *
+ * `/products/[slug]` is a dynamic segment, so it is revalidated with `type: 'page'` — that
+ * form invalidates every product page at once, which is what a rate change needs. Added in
+ * Phase 6, discharging the `@DEV:` note Phase 4 left against DEBT-014.
+ */
+export const RATE_SURFACES = ['/', '/rates', '/collections'] as const;
+
+/**
+ * Dynamic routes that render a price, revalidated by pattern rather than by path.
+ *
+ * `revalidatePath('/products/[slug]', 'page')` matches every product page. Listing them
+ * individually would mean querying every active slug on every rate change, and missing one
+ * means a wrong price on a customer's screen.
+ */
+export const RATE_SURFACE_PATTERNS = ['/products/[slug]', '/collections/[slug]'] as const;
 
 // ── Unit conversion — the ONLY place it happens (§4.1) ─────────────────────
 
@@ -74,18 +104,52 @@ export interface Rates {
   silver999: RateFace;
 }
 
+/** The display unit label for a metal (MASTER-SPEC §4): ₹ per 10 g, ₹ per 1 kg. */
+export function unitLabel(metal: Metal): string {
+  return metal === Metal.GOLD ? 'per 10 grams' : 'per 1 kilogram';
+}
+
 export const RATE_FACES = [
-  { key: 'gold22', metal: Metal.GOLD, purity: Purity.K22_916, unit: 'per 10 grams' },
-  { key: 'gold18', metal: Metal.GOLD, purity: Purity.K18_750, unit: 'per 10 grams' },
+  {
+    key: 'gold22',
+    metal: Metal.GOLD,
+    purity: Purity.K22_916,
+    label: 'Gold 22K',
+    unit: unitLabel(Metal.GOLD),
+  },
+  {
+    key: 'gold18',
+    metal: Metal.GOLD,
+    purity: Purity.K18_750,
+    label: 'Gold 18K',
+    unit: unitLabel(Metal.GOLD),
+  },
   {
     key: 'silver999',
     metal: Metal.SILVER,
     purity: Purity.SILVER_999,
-    unit: 'per 1 kilogram',
+    label: 'Silver 999',
+    unit: unitLabel(Metal.SILVER),
   },
 ] as const;
 
 export type RateKey = (typeof RATE_FACES)[number]['key'];
+
+/**
+ * Which purities belong to which metal.
+ *
+ * Lives here rather than in a route because two routes now need it (`POST /api/admin/rates`
+ * and `GET /api/rates/history`), and two copies of a validation table drift. `GOLD` +
+ * `SILVER_999` is a well-formed request for a rate that cannot exist.
+ */
+export const VALID_COMBINATIONS: Record<Metal, readonly Purity[]> = {
+  [Metal.GOLD]: [Purity.K22_916, Purity.K18_750],
+  [Metal.SILVER]: [Purity.SILVER_999],
+};
+
+export function isValidCombination(metal: Metal, purity: Purity): boolean {
+  return VALID_COMBINATIONS[metal].includes(purity);
+}
 
 export function toDisplayUnit(metal: Metal, perGram: bigint): bigint {
   return metal === Metal.GOLD ? perGramToPer10g(perGram) : perGramToPerKg(perGram);
@@ -142,10 +206,46 @@ async function loadRatesFromDb(): Promise<Rates> {
   return Object.fromEntries(entries) as unknown as Rates;
 }
 
+/**
+ * Rates in the shape the pricing engine takes (Phase 5 §5.1).
+ *
+ * Server-side callers — the share endpoint, and Phase 8's bill generator — go through here
+ * rather than rebuilding the mapping. The browser has its own path in `lib/rates.keys.ts`,
+ * because this module is `server-only`.
+ */
+export function toRatesByPurity(rates: Rates): RatesByPurity {
+  return {
+    K22_916: rates.gold22.perGram,
+    K18_750: rates.gold18.perGram,
+    SILVER_999: rates.silver999.perGram,
+  };
+}
+
+/** The newest `effectiveAt` across the three faces — what a rate snapshot is dated by. */
+export function newestEffectiveAt(rates: Rates): Date {
+  const times = RATE_FACES.map((face) => new Date(rates[face.key].effectiveAt).getTime())
+    .filter((time) => Number.isFinite(time) && time > 0)
+    .sort((a, b) => a - b);
+
+  // No rate has ever been set. `now` is the honest answer: the snapshot is of an empty
+  // table taken at this moment, not of some rate from 1970.
+  return new Date(times.at(-1) ?? Date.now());
+}
+
 export interface HistoryPoint {
   rate: bigint;
   at: string;
 }
+
+/**
+ * Most rows any single history read will return.
+ *
+ * The table is append-only, so it only grows. An admin correcting the rate a few times a
+ * day for a year is several thousand rows — and `GET /api/rates/history` is public and
+ * unauthenticated, so without a ceiling the response size is set by how long the shop has
+ * been trading. 500 points is far more than a 30-day table or a sparkline can render.
+ */
+export const MAX_HISTORY_POINTS = 500;
 
 /** Sparkline data (§4.1). Reads Postgres — the Redis sorted set is a Phase 9 rollup. */
 export async function getRateHistory(
@@ -157,11 +257,15 @@ export async function getRateHistory(
 
   const rows = await db.metalRate.findMany({
     where: { metal, purity, effectiveAt: { gte: since } },
-    orderBy: { effectiveAt: 'asc' },
+    // Newest first so the cap drops the OLDEST points when the window is dense. Taking the
+    // first 500 ascending would silently hide today's rate behind last month's.
+    orderBy: { effectiveAt: 'desc' },
+    take: MAX_HISTORY_POINTS,
     select: { ratePerGram: true, effectiveAt: true },
   });
 
-  return rows.map((row) => ({
+  // Callers want chronological order; the sparkline draws left to right.
+  return rows.reverse().map((row) => ({
     rate: toDisplayUnit(metal, row.ratePerGram),
     at: row.effectiveAt.toISOString(),
   }));
@@ -246,8 +350,16 @@ export async function setRate(input: SetRateInput): Promise<SetRateResult> {
    *
    * `'max'` invalidates every entry under the tag regardless of age, which is what a rate
    * change needs: a stale product price is wrong money on a customer's screen.
+   *
+   * Kept because §4.1 asks for it and because Phase 6/7 will introduce genuinely tagged
+   * data — but on its own it invalidates nothing today. The line below is what actually
+   * refreshes the pages. See RATE_SURFACES.
    */
   revalidateTag(RATES_TAG, 'max');
+  for (const path of RATE_SURFACES) revalidatePath(path);
+  // `type: 'page'` is required for a path containing a dynamic segment, and is what makes
+  // one call cover every product rather than one product.
+  for (const pattern of RATE_SURFACE_PATTERNS) revalidatePath(pattern, 'page');
 
   return { ok: true, ratePerGram };
 }

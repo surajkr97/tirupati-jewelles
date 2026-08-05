@@ -31,6 +31,7 @@ import { db } from '@/lib/db';
 import { formatINR, formatPercent } from '@/lib/money';
 import {
   fromDisplayUnit,
+  isValidCombination,
   perGramToPer10g,
   perGramToPerKg,
   per10gToPerGram,
@@ -83,6 +84,27 @@ describe('unit conversion', () => {
       value = per10gToPerGram(perGramToPer10g(value));
     }
     expect(value).toBe(1_184_237n);
+  });
+});
+
+describe('metal / purity pairing', () => {
+  it.each([
+    [Metal.GOLD, Purity.K22_916],
+    [Metal.GOLD, Purity.K18_750],
+    [Metal.SILVER, Purity.SILVER_999],
+  ])('%s + %s is valid', (metal, purity) => {
+    expect(isValidCombination(metal, purity)).toBe(true);
+  });
+
+  it.each([
+    [Metal.GOLD, Purity.SILVER_999],
+    [Metal.SILVER, Purity.K22_916],
+    [Metal.SILVER, Purity.K18_750],
+  ])('%s + %s is rejected', (metal, purity) => {
+    // A well-formed request for a rate that cannot exist. Both the admin POST and the
+    // public history GET reject it rather than returning an empty result, which would
+    // read as "no data yet" and hide the mistake.
+    expect(isValidCombination(metal, purity)).toBe(false);
   });
 });
 

@@ -1,0 +1,13 @@
+# Generated output — never format what a tool wrote.
+node_modules/
+.next/
+# The Playwright jitter-off server's build dir (playwright.config.ts).
+.next-*/
+out/
+coverage/
+test-results/
+playwright-report/
+blob-report/
+pnpm-lock.yaml
+prisma/migrations/
+backend/
