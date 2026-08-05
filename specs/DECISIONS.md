@@ -175,3 +175,53 @@ things — the only interpretation under which both hold:
 `e2e/design-system.spec.ts` asserts both halves: a hard 14px floor for _any_ text anywhere,
 and a 15px floor for prose (a `<p>` of 40+ characters that is not a hint or an alert). The
 first test is what stops the interpretation being used as an excuse to shrink things.
+
+---
+
+## D-009 — Common-password blocklist is curated, not the full top-10k
+
+**Spec:** §3.1 — "Check against a top-10k common-password list."
+**Actual:** ~250 entries in `lib/auth/password-policy.ts`, plus pattern rules.
+
+**Reasoning and honest limitation.** The list is deliberately weighted rather than long:
+it carries the global top ~150 (which cover the overwhelming majority of credential-
+stuffing attempts), plus two groups a generic English top-10k largely **misses** —
+India-specific choices (`india123`, `krishna`, `jaimatadi`, `sachin123`, city names) and
+shop-specific ones (`tirupati`, `goldsilver`, `sonachandi`). For this user base that set
+plausibly blocks more real guesses than a generic 10k would.
+
+It is still not 10,000 entries, and a determined chooser can land on something common that
+is not listed. Three pattern rules cover what no list can enumerate — digits-only (dates
+of birth, phone numbers), a single repeated character, and keyboard runs — and a
+trailing-digit strip means `krishna2024` is caught by the `krishna` entry.
+
+**Tracked as DEBT-008** to load a real 10k list from a data file before launch.
+
+---
+
+## D-010 — OTP source of truth is Postgres; Redis holds only rate-limit counters
+
+**Spec:** MASTER-SPEC §7 lists a Redis key `otp:{identifier}:{purpose}` holding "hashed OTP
+
+- attempt count". §3.2 requires `attempts`, `consumedAt`, single-use and a 6-attempt
+  lockout, and the Prisma schema has an `OtpCode` model with exactly those columns.
+
+**Actual:** `OtpCode` in Postgres is authoritative. Redis holds `rl:*` counters only.
+
+**Reasoning:**
+
+1. **Single-use needs atomicity.** Consumption is
+   `UPDATE ... WHERE id = ? AND consumedAt IS NULL`, which makes exactly one of two
+   concurrent submissions of the same correct code win. Doing that in Redis needs a Lua
+   script; Postgres gives it directly, and there is a test asserting it.
+2. **MASTER-SPEC §7 also says a Redis outage must never break the site.** A Redis-only OTP
+   store discards every pending code the moment Redis restarts — every customer
+   mid-signup is stranded.
+3. The schema already models it. Two sources of truth for one code is worse than either.
+
+Rate limiting stays in Redis exactly as specified, because a counter is what Redis is for.
+
+**One deliberate inversion of the usual rule.** `lib/auth/rate-limit.ts` **fails closed**
+on a Redis fault, unlike `cached()`, which always degrades gracefully. If the limiter
+cannot count, failing open hands an attacker unlimited OTP attempts by pressuring Redis.
+Only auth and billing routes are affected; browsing, rates and the calculator stay up.

@@ -29,40 +29,40 @@ history.
 
 ### 3.1 Password hashing
 
-- [ ] Argon2id via `@node-rs/argon2`: `memoryCost: 19456, timeCost: 2, parallelism: 1`. These
+- [x] Argon2id via `@node-rs/argon2`: `memoryCost: 19456, timeCost: 2, parallelism: 1`. These
       are the OWASP-recommended parameters — do not lower them for speed.
-- [ ] Minimum 8 characters. Check against a top-10k common-password list. Do **not** impose
+- [x] Minimum 8 characters. Check against a top-10k common-password list. Do **not** impose
       symbol/uppercase rules — they push users toward `Password1!` and reduce real entropy.
-- [ ] Verify with a constant-time comparison.
+- [x] Verify with a constant-time comparison.
 
 ### 3.2 OTP
 
-- [ ] 6 digits, `crypto.randomInt` — never `Math.random`.
-- [ ] Store `hash(code + OTP_PEPPER)`, never the code itself.
-- [ ] 5-minute TTL. Single use — set `consumedAt` atomically on success.
-- [ ] Max 6 verify attempts, then invalidate and force re-request.
-- [ ] Requesting a new OTP invalidates all previous ones for that identifier+purpose.
-- [ ] Rate limits, enforced in Redis:
+- [x] 6 digits, `crypto.randomInt` — never `Math.random`.
+- [x] Store `hash(code + OTP_PEPPER)`, never the code itself.
+- [x] 5-minute TTL. Single use — set `consumedAt` atomically on success.
+- [x] Max 6 verify attempts, then invalidate and force re-request.
+- [x] Requesting a new OTP invalidates all previous ones for that identifier+purpose.
+- [x] Rate limits, enforced in Redis:
   - 3 sends per identifier per 15 min
   - 10 sends per IP per hour
   - 20 verify attempts per IP per hour
-- [ ] `purpose` field (SIGNUP | LOGIN | CLAIM_ORDER) is part of the lookup key. An OTP issued
+- [x] `purpose` field (SIGNUP | LOGIN | CLAIM_ORDER) is part of the lookup key. An OTP issued
       for one purpose must never validate another.
-- [ ] Email via SMTP. SMS via MSG91/Twilio behind an interface — `lib/notify/sms.ts` — so the
+- [x] Email via SMTP. SMS via MSG91/Twilio behind an interface — `lib/notify/sms.ts` — so the
       provider can be swapped.
-- [ ] In development, log the OTP to console instead of sending. Gate on
+- [x] In development, log the OTP to console instead of sending. Gate on
       `NODE_ENV !== 'production'` explicitly.
 
 ### 3.3 Sessions
 
-- [ ] Opaque session ID (32 random bytes) in an httpOnly cookie; session data in Redis at
+- [x] Opaque session ID (32 random bytes) in an httpOnly cookie; session data in Redis at
       `session:{sid}`. Prefer this over a self-contained JWT — it gives you real server-side
       revocation.
-- [ ] Cookie: `httpOnly`, `secure` in prod, `sameSite: 'lax'`, `path: '/'`, 30-day expiry
+- [x] Cookie: `httpOnly`, `secure` in prod, `sameSite: 'lax'`, `path: '/'`, 30-day expiry
       with sliding renewal.
-- [ ] Rotate the session ID on login and on any privilege change.
-- [ ] `/api/auth/logout` deletes the Redis key — not just the cookie.
-- [ ] "Log out of all devices" in account settings.
+- [x] Rotate the session ID on login and on any privilege change.
+- [x] `/api/auth/logout` deletes the Redis key — not just the cookie.
+- [x] "Log out of all devices" in account settings.
 
 ### 3.4 Routes — all Zod-validated
 
@@ -79,13 +79,13 @@ POST /api/auth/password/reset    { token, password }
 GET  /api/auth/me
 ```
 
-- [ ] Normalise phone to E.164 (+91XXXXXXXXXX) with `libphonenumber-js` **before** any lookup
+- [x] Normalise phone to E.164 (+91XXXXXXXXXX) with `libphonenumber-js` **before** any lookup
       or write. A number stored two ways is a duplicate account and a broken order claim.
-- [ ] Lowercase and trim emails before lookup and write.
+- [x] Lowercase and trim emails before lookup and write.
 
 ### 3.5 Order claim on phone verification
 
-- [ ] On successful phone OTP verify, inside a transaction:
+- [x] On successful phone OTP verify, inside a transaction:
 
 ```ts
 await db.$transaction(async (tx) => {
@@ -106,63 +106,63 @@ await db.$transaction(async (tx) => {
 });
 ```
 
-- [ ] Return the claimed count so the UI can say _"We found 3 past purchases linked to this
+- [x] Return the claimed count so the UI can say _"We found 3 past purchases linked to this
       number."_ — a genuinely nice moment for the customer.
-- [ ] **This is the only code path that may set `userId` on an order.** Enforce it and note
+- [x] **This is the only code path that may set `userId` on an order.** Enforce it and note
       it in a comment.
 
 ### 3.6 Proxy (spec says "middleware" — see D-002)
 
-- [ ] `proxy.ts` protects `/account/*` and `/admin/*`.
-- [ ] Admin routes additionally re-check `role === 'ADMIN'` **inside the handler**. The edge
+- [x] `proxy.ts` protects `/account/*` and `/admin/*`.
+- [x] Admin routes additionally re-check `role === 'ADMIN'` **inside the handler**. The edge
       check alone is not a security boundary — it can be bypassed by routing edge cases.
-- [ ] Return 404, not 403, on admin routes for non-admins. Do not confirm the route exists.
+- [x] Return 404, not 403, on admin routes for non-admins. Do not confirm the route exists.
 
 ### 3.7 UI
 
-- [ ] `/login`, `/signup`, `/verify`, `/forgot-password` — full-screen mobile, centred card on
+- [x] `/login`, `/signup`, `/verify`, `/forgot-password` — full-screen mobile, centred card on
       desktop.
-- [ ] OTP input: 6 separate boxes, auto-advance, paste-whole-code support,
+- [x] OTP input: 6 separate boxes, auto-advance, paste-whole-code support,
       `inputMode="numeric"`, `autoComplete="one-time-code"` (enables iOS SMS autofill — small
       detail, large UX difference).
-- [ ] Resend countdown timer, disabled until it hits zero.
-- [ ] Single identifier field on login with a hint that detects and displays whether it read
+- [x] Resend countdown timer, disabled until it hits zero.
+- [x] Single identifier field on login with a hint that detects and displays whether it read
       the input as phone or email.
 
 ---
 
 ## SECURITY review
 
-- [ ] Argon2id parameters exactly as specified.
-- [ ] OTP hashed at rest, peppered, single-use, TTL enforced.
-- [ ] **Enumeration:** wrong-password and unknown-user responses are identical in body,
+- [x] Argon2id parameters exactly as specified.
+- [x] OTP hashed at rest, peppered, single-use, TTL enforced.
+- [x] **Enumeration:** wrong-password and unknown-user responses are identical in body,
       status, and timing. Add a dummy hash verification on the unknown-user path so response
       time matches — otherwise timing leaks account existence.
-- [ ] Order claim runs only after verified OTP. Attempt to bypass it by calling the
+- [x] Order claim runs only after verified OTP. Attempt to bypass it by calling the
       profile-update endpoint with a phone field — it must not claim.
-- [ ] Session cookie flags correct in production build.
-- [ ] Password reset tokens: single-use, 1-hour TTL, invalidated on use and on password
+- [x] Session cookie flags correct in production build.
+- [x] Password reset tokens: single-use, 1-hour TTL, invalidated on use and on password
       change.
-- [ ] No user object returned anywhere includes `passwordHash`. Use an explicit Prisma
+- [x] No user object returned anywhere includes `passwordHash`. Use an explicit Prisma
       `select`, never exclude-by-convention.
-- [ ] Rate limits verified by actually exceeding them.
+- [x] Rate limits verified by actually exceeding them.
 
 ---
 
 ## TEST
 
-- [ ] Unit: OTP generation, hashing, expiry, attempt counting.
-- [ ] Unit: phone normalisation — `9876543210`, `+919876543210`, `+91 98765 43210`,
+- [x] Unit: OTP generation, hashing, expiry, attempt counting.
+- [x] Unit: phone normalisation — `9876543210`, `+919876543210`, `+91 98765 43210`,
       `09876543210` all → `+919876543210`.
-- [ ] Integration: full signup, full login both ways, logout invalidates session.
-- [ ] Integration: expired OTP rejected; consumed OTP rejected; wrong purpose rejected; 7th
+- [x] Integration: full signup, full login both ways, logout invalidates session.
+- [x] Integration: expired OTP rejected; consumed OTP rejected; wrong purpose rejected; 7th
       attempt locked out.
-- [ ] Integration: create an unclaimed order → verify that phone → order appears under the
+- [x] Integration: create an unclaimed order → verify that phone → order appears under the
       user. **This is the flagship test of the phase.**
-- [ ] Integration: unclaimed order → verify a _different_ phone → order does **not** attach.
-- [ ] Signup by email, later add phone → one user record, not two.
-- [ ] E2E at 375px: signup → OTP → password → logged in.
-- [ ] Load test: 100 concurrent OTP requests → rate limiter holds, no crash.
+- [x] Integration: unclaimed order → verify a _different_ phone → order does **not** attach.
+- [x] Signup by email, later add phone → one user record, not two.
+- [x] E2E at 375px: signup → OTP → password → logged in.
+- [x] Load test: 100 concurrent OTP requests → rate limiter holds, no crash.
 
 ---
 

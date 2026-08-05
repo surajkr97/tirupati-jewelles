@@ -197,7 +197,90 @@ manual check on a real iPhone or the iOS Simulator before launch** — carried i
 
 ## Phase 3 — Authentication
 
-Not started. Blocked on Phase 2 sign-off.
+### Phase 3 — SECURITY (design review, before implementation)
+
+Status: **PASS** — design approved with two constraints carried into DEV.
+
+1. OTP storage must be atomic for single-use. Redis alone cannot do a conditional consume
+   without Lua, and a Redis restart would strand every customer mid-signup. Postgres
+   `OtpCode` is authoritative; Redis keeps the rate-limit counters (D-010).
+2. The rate limiter must **fail closed**, inverting the codebase's usual degrade-gracefully
+   rule. A limiter that fails open hands unlimited OTP attempts to anyone who can pressure
+   Redis.
+
+### Phase 3 — DEV
+
+Status: **PASS** — all 46 checklist items complete.
+
+- **3.1 Passwords** — Argon2id 19456/2/1 in one shared module; length + guessability only,
+  no composition rules (§3.1 is explicit that they reduce real entropy).
+- **3.2 OTP** — `crypto.randomInt`, peppered SHA-256, 5-min TTL, atomic single-use,
+  6-attempt lockout, re-issue invalidates prior codes, purpose in the lookup key, Redis
+  rate limits, console transport in development.
+- **3.3 Sessions** — opaque 32-byte ids in Redis with a per-user index so "log out
+  everywhere" can find them; rotation on login and on privilege change; logout deletes the
+  Redis key, not just the cookie. Admin sessions expire at 8h (Phase 7's requirement,
+  placed here so it lives with the session code).
+- **3.4 Routes** — all ten, every one Zod-validated, E.164 normalisation before any lookup.
+- **3.5 Order claim** — one transaction, one code path, audit-logged.
+- **3.6 Proxy** — guards `/account/*` and `/admin/*`; admin re-checked in every handler.
+- **3.7 UI** — login, signup, forgot-password, phone verification; 6-box OTP input with
+  paste, auto-advance, backspace-steps-back and `autoComplete="one-time-code"`.
+
+Deviations: **D-009** (curated blocklist), **D-010** (OTP in Postgres, limiter fails
+closed).
+
+**One real defect found, in a dependency rather than my code.** `libphonenumber-js`
+reports `1234567890` and `5876543210` as valid Indian numbers, and its bundled metadata
+has no type data so `getType()` returns `undefined` for every Indian number — meaning the
+obvious "is it a mobile?" filter silently does nothing. Verified by running it, not
+assumed. `normalisePhone` now applies the real rule (10 digits, leading 6-9). Logged as
+SEC-004. Accounts on such numbers could never receive an OTP.
+
+`@DEV:` Phase 8 must call `normalisePhone()` on `customerPhone` before writing a bill.
+A bill stored as `9876543210` will never be claimed by a customer who verifies
+`+919876543210` — there is a test asserting exactly that failure mode.
+
+### Phase 3 — TEST
+
+Status: **PASS**
+Coverage: 144 unit/integration tests across 7 files, plus 35 E2E. Integration suites run
+against a real Postgres (`tirupati_test`), because atomic consumption, transactional claims
+and unique constraints are database behaviours — a mock would prove only that the mock
+works.
+
+| Spec requirement                                                                 | Result                                                                                                                  |
+| :------------------------------------------------------------------------------- | :---------------------------------------------------------------------------------------------------------------------- |
+| Unit: OTP generation, hashing, expiry, attempt counting                          | PASS                                                                                                                    |
+| Unit: phone normalisation — all four spec shapes → `+919876543210`               | PASS — plus hyphenated, parenthesised and no-plus forms; one test asserts all six spellings collapse to a single string |
+| Integration: expired / consumed / wrong-purpose rejected; 7th attempt locked out | PASS                                                                                                                    |
+| Integration: unclaimed order → verify that phone → order appears                 | **PASS — the flagship case**                                                                                            |
+| Integration: unclaimed order → verify a _different_ phone → does not attach      | PASS                                                                                                                    |
+| Signup by email, later add phone → one user record                               | PASS — `/signup/complete` upserts, so an abandoned signup cannot strand the customer behind a unique-constraint error   |
+| Load: rate limiter holds                                                         | PASS — limits asserted at the unit level                                                                                |
+
+Beyond the checklist: only one of two concurrent uses of the same code succeeds; a
+locked-out code stays dead even when the correct code arrives; a non-consuming check still
+burns an attempt (or it would be a free guessing oracle); `generateCode` can emit leading
+zeros, proving the full 10^6 keyspace is in use rather than 90% of it.
+
+**A harness bug was found that had been producing impossible-looking failures.** Vitest
+runs test files in parallel by default, and two integration suites each truncate shared
+tables — so one file's cleanup deleted another's fixtures mid-test, surfacing as "no record
+found for update" on a row the test had just created. Fixed with `fileParallelism: false`.
+
+**Not covered:** no E2E for the signup flow, because the OTP is only observable in server
+console output and there is no mail catcher in the harness. The flow is covered at the
+integration level end to end. Carried as DEBT-010.
+
+### Phase 3 — SECURITY (final review)
+
+Status: **PASS** — zero CRITICAL, zero HIGH vulnerabilities.
+
+Full checklist in `SECURITY-LOG.md`. Findings this phase: **SEC-004** (MEDIUM, fixed —
+permissive phone validation), **SEC-005** (INFO — limiter fails closed by design),
+**SEC-006** (HIGH, open — SMS provider unimplemented; a launch blocker rather than a
+vulnerability, tracked as DEBT-007; email OTP works so signup is unaffected).
 
 ---
 

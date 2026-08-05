@@ -58,11 +58,18 @@ const config = [
     // route renders, and importing lib/env.ts there would drag the whole Zod-parsed server
     // config (DATABASE_URL, secrets) into the edge bundle. NODE_ENV is a build-time
     // constant Next inlines, not configuration.
+    // Test files are exempt too: they read TEST_DATABASE_URL to decide whether a real
+    // database is available and skip the integration suites otherwise. That is a harness
+    // concern, not application configuration, and routing it through lib/env.ts would
+    // make the Zod schema demand a test-only variable in production.
     ignores: [
       'lib/env.ts',
       'proxy.ts',
       'vitest.setup.ts',
       'playwright.config.ts',
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      'e2e/**',
       '*.config.ts',
       '*.config.mts',
     ],

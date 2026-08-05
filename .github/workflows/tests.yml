@@ -48,6 +48,8 @@ jobs:
       SEED_ADMIN_PASSWORD: ci-admin-password
       NEXT_PUBLIC_OWNER_WA: '919876543210'
       NEXT_PUBLIC_TICKER_JITTER: 'true'
+      # Integration suites run against a real database rather than a mock.
+      TEST_DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
 
     steps:
       - uses: actions/checkout@v4
@@ -63,6 +65,11 @@ jobs:
 
       - name: Apply migrations
         run: pnpm exec prisma migrate deploy
+
+      - name: Create and migrate the test database
+        run: |
+          PGPASSWORD=ci psql -h localhost -U ci -d postgres -c 'CREATE DATABASE ci_test;'
+          DATABASE_URL="$TEST_DATABASE_URL" pnpm exec prisma migrate deploy
 
       - name: Seed (twice — must be idempotent, Phase 1 §1.6)
         run: |
