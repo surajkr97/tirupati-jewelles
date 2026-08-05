@@ -1,17 +1,104 @@
 /**
- * Created by Phase 1 (specs/01-cleanup-scaffold.md §1.7).
+ * Design tokens and base styles.
+ * Created by Phase 1, filled in by Phase 2 (specs/02-design-system.md §2.1).
+ * Token values from MASTER-SPEC §3.
  *
- * Phase 1 establishes only the page background and text colour so the shell is not
- * white-on-white. The full token set, type scale and spacing restrictions are Phase 2
- * (specs/02-design-system.md §2.1) — do not add component styling here before then.
+ * Tailwind v4 defines tokens in this `@theme` block rather than tailwind.config.ts — see
+ * DECISIONS.md D-006. Every name here becomes a utility automatically: `--color-taupe`
+ * gives `bg-taupe` / `text-taupe`, `--radius-card` gives `rounded-card`.
+ *
+ * DESIGN owns this file. No hardcoded hex, no arbitrary radius, no off-scale spacing
+ * anywhere else in the codebase.
  */
 @import 'tailwindcss';
 
 @theme {
-  /* MASTER-SPEC §3 — the two needed to render a page. Rest land in Phase 2. */
+  /* ── Colour ─────────────────────────────────────────────────────────────
+     Contrast verified by lib/design/contrast.test.ts, which fails the build
+     if any pair drops below its WCAG AA threshold. Two values differ from
+     the spec's first draft — both because they measured as failures:
+
+       muted     #8A817C → #756C66   3.57:1 → 4.81:1 on cream (§2.1 predicted this)
+       taupeDeep (new)   #9B694E     white on #B07D62 was 3.53:1, needs 4.5:1
+
+     `taupe` is unchanged and still the brand accent. `taupeDeep` exists only
+     where white text sits on top of it. See DECISIONS.md D-007. */
   --color-cream: #faf7f4;
   --color-ink: #1a1613;
-  --color-muted: #8a817c;
+  --color-taupe: #b07d62;
+  --color-taupe-deep: #9b694e;
+  --color-taupe-lt: #e8d5c9;
+  --color-line: #efe9e3;
+  --color-muted: #756c66;
+  --color-up: #0e9f6e;
+  --color-down: #e02d3c;
+
+  /* ── Radius ───────────────────────────────────────────────────────────── */
+  --radius-card: 24px;
+  --radius-pill: 999px;
+  --radius-sheet: 32px;
+  --radius-field: 16px;
+
+  /* ── Shadow ───────────────────────────────────────────────────────────────
+     Cards get shadow or nothing — never a border (MASTER-SPEC §3). */
+  --shadow-card: 0 1px 3px rgba(26, 22, 19, 0.06);
+  --shadow-lift: 0 4px 16px rgba(26, 22, 19, 0.1);
+
+  /* ── Spacing: 4 / 8 / 16 / 24 / 32 / 48 / 64 ONLY ─────────────────────────
+     Tailwind's default scale is disabled below so off-scale values are hard
+     to reach by accident. Sizes that are not "spacing" in the design sense —
+     control heights, hairlines, icon boxes — live in their own tokens. */
+  --spacing: initial;
+  --spacing-0: 0px;
+  --spacing-1: 4px;
+  --spacing-2: 8px;
+  --spacing-4: 16px;
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-12: 48px;
+  --spacing-16: 64px;
+  --spacing-px: 1px;
+  --spacing-full: 100%;
+
+  /* Control heights. 44px is the minimum tap target (MASTER-SPEC §3). */
+  --spacing-tap: 44px;
+  /* Single source of truth for the mobile bottom nav. BottomNav sets its height from
+     this and BottomNavSpacer reserves exactly the same amount, so the two cannot drift
+     apart and let the nav cover the footer. */
+  --spacing-bottom-nav: 64px;
+  --spacing-control: 52px;
+  --spacing-control-lg: 56px;
+  --spacing-header: 56px;
+  --spacing-header-lg: 72px;
+
+  /* ── Type ─────────────────────────────────────────────────────────────────
+     H1 32/36 mobile → 48/52 desktop. Body 16/26. Small 14/20.
+     Body copy never below 15px. */
+  --font-sans:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --text-small: 14px;
+  --text-small--line-height: 20px;
+  --text-body: 16px;
+  --text-body--line-height: 26px;
+  --text-lead: 18px;
+  --text-lead--line-height: 28px;
+  --text-h3: 20px;
+  --text-h3--line-height: 28px;
+  --text-h2: 24px;
+  --text-h2--line-height: 32px;
+  --text-h1: 32px;
+  --text-h1--line-height: 36px;
+  --text-display: 40px;
+  --text-display--line-height: 44px;
+  --text-h1-lg: 48px;
+  --text-h1-lg--line-height: 52px;
+
+  /* ── Motion — §2.4. Transform and opacity only. ───────────────────────── */
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --duration-fast: 150ms;
+  --duration-base: 200ms;
+  --duration-slow: 250ms;
 }
 
 :root {
@@ -21,5 +108,40 @@
 body {
   background-color: var(--color-cream);
   color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Focus must always be visible — Phase 9 §9.7 runs an axe pass over every route. */
+:focus-visible {
+  outline: 2px solid var(--color-ink);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Money and rate figures. Tabular numerals stop digits shifting width as they
+   change, which is what makes a cheap ticker look broken (Phase 4 §4.3). */
+.tabular {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum';
+}
+
+/**
+ * §2.4 — reduced motion must be genuinely calm, not partially animated.
+ * This also switches off the Phase 4 rate-ticker jitter, which is a per-second
+ * animation and the single most hostile thing on the site for a user who asked
+ * the OS to stop moving things.
+ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

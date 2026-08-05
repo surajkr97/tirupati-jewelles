@@ -2,10 +2,13 @@
  * Root layout.
  * Created by Phase 1 (specs/01-cleanup-scaffold.md §1.7).
  *
- * Phase 2 adds AppHeader, BottomNav and Footer around {children}.
+ * The storefront shell (header, bottom nav, footer) lives in `app/(app)/layout.tsx`, not
+ * here — /admin and the Phase 3 auth screens deliberately do not get it.
  */
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
+
+import { Toaster } from '@/components/ui';
 
 import './globals.css';
 
@@ -36,7 +39,10 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en-IN" className={inter.variable}>
-      <body className="min-h-dvh antialiased">{children}</body>
+      <body className="min-h-dvh antialiased">
+        {children}
+        <Toaster />
+      </body>
     </html>
   );
 }

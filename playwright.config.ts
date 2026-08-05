@@ -9,7 +9,18 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 3000;
-const BASE_URL = `http://127.0.0.1:${PORT}`;
+
+/**
+ * `localhost`, not `127.0.0.1`.
+ *
+ * Next 16's dev server enforces an allowed-origin check on dev resources and answers
+ * 403 for chunks requested from a host it does not recognise. Hitting 127.0.0.1 therefore
+ * serves the SSR HTML fine but blocks every JS chunk, so React never hydrates — which
+ * shows up as "static assertions pass, every interactive test fails", not as an obvious
+ * network error. Use the hostname Next expects instead of adding `allowedDevOrigins`,
+ * which would loosen a dev-server security check to work around a test-harness detail.
+ */
+const BASE_URL = `http://localhost:${PORT}`;
 
 export default defineConfig({
   testDir: './e2e',
@@ -47,10 +58,18 @@ export default defineConfig({
     },
   ],
 
+  /**
+   * Runs against the DEV server, not a production build.
+   *
+   * The /__design gallery is dev-only by design (§2.5) — under `pnpm start` it correctly
+   * 404s, so the component audit could not run at all here. The production-only behaviour
+   * that genuinely needs checking is that 404 itself, which
+   * `scripts/verify-production-guard.sh` asserts against a real production server.
+   */
   webServer: {
-    command: 'pnpm start',
+    command: 'pnpm dev',
     url: BASE_URL,
     reuseExistingServer: !process.env.CI,
-    timeout: 120_000,
+    timeout: 180_000,
   },
 });

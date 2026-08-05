@@ -101,7 +101,97 @@ session cookie must be the opaque-Redis design in §3.3 — not a JWT.
 
 ## Phase 2 — Design System
 
-Not started. Phase 1 is signed off, so Phase 2 is clear to begin.
+### Phase 2 — DESIGN
+
+Status: **PASS**
+
+Tokens measured before anything was built on them, because §2.1 flagged one as borderline
+and told us to check. Two failed:
+
+| Pair                     |  Ratio | Needs | Action                                                                  |
+| :----------------------- | -----: | ----: | :---------------------------------------------------------------------- |
+| `muted` #8A817C on cream | 3.57:1 | 4.5:1 | darkened to **#756C66** (4.81:1) — exactly the fallback §2.1 prescribed |
+| white on `taupe` #B07D62 | 3.53:1 | 4.5:1 | new **`taupeDeep` #9B694E** (4.64:1) for text-bearing surfaces only     |
+
+The second was not anticipated by the spec — MASTER-SPEC §3 specifies the accent button as
+`bg-taupe text-white`, and that combination is unreadable at AA. `taupeDeep` keeps the
+same hue and saturation (20.8°, 33.1%) at lower lightness, so the brand colour is unchanged
+everywhere it is seen as colour. Full reasoning in D-007.
+
+Audit: every screen reviewed at 375px first. No hardcoded hex, radius or off-scale spacing
+outside the token block — the two off-scale values in the codebase (20px/40px gutters,
+80px desktop section padding) are both named explicitly by MASTER-SPEC §3 and are confined
+to `Container` and `Section`. Empty `ImageFrame` renders a branded monogram tile.
+Reduced-motion is handled globally rather than per-component, so it cannot be partially
+applied.
+
+### Phase 2 — DEV
+
+Status: **PASS**
+
+All 34 checklist items complete.
+
+- **2.1 Tokens** — colours, radii, shadows, restricted spacing scale, type scale, motion
+  curves. Tailwind default spacing disabled so off-scale values are hard to reach by
+  accident. Inter via `next/font` with `display: swap`.
+- **2.2 Primitives** — Button (4 variants × 3 sizes, loading, disabled), Card, Input,
+  Select, SegmentedControl, Sheet, Badge, Skeleton, Toast, EmptyState, Spinner, ImageFrame.
+- **2.3 Shell** — AppHeader, BottomNav, Footer, Container, Section.
+- **2.4 Motion** — 150–250ms, `transform`/`opacity` only, `scale(0.98)` press states,
+  global `prefers-reduced-motion` override.
+- **2.5 Gallery** — `/__design`, blocked in production by `proxy.ts` _and_ `notFound()`.
+
+Deviations: **D-006** (tokens in CSS `@theme`, not `tailwind.config.ts` — Tailwind v4),
+**D-007** (`taupeDeep`), **D-008** (14px microcopy vs 15px prose).
+
+Three defects found and fixed during the phase, none of which a class-name review would
+have caught:
+
+1. **`/__design` did not exist as a route.** Next treats leading-underscore folders as
+   private, so `app/__design/` was silently excluded from the router. Fixed with the
+   documented `%5F` escape.
+2. **Sheet focus trap did not trap.** `vaul` suppresses auto-focus — correct for a bottom
+   sheet, since focusing an input raises the mobile keyboard — but that left focus on the
+   trigger, outside the dialog, so the first Tab escaped. Fixed by focusing the dialog
+   container (which carries `tabindex="-1"`) on open: the trap anchors without the
+   keyboard appearing.
+3. **BottomNav covered the footer.** The spacer used a hardcoded 64px while the nav
+   measured 71px. Both now derive from one `--spacing-bottom-nav` token, so they cannot
+   drift.
+
+`@DEV:` Phase 4's ticker must read `prefers-reduced-motion` — the global CSS override kills
+CSS animation but **not** a `setInterval`. §4.3 requires no jitter at all under
+reduced motion, which is a JS check, not a CSS one.
+
+### Phase 2 — TEST
+
+Status: **PASS**
+Coverage: 60 unit tests (3 files), 35 E2E across 375 / 768 / 1280.
+
+| Spec requirement                                             | Result                                                                       |
+| :----------------------------------------------------------- | :--------------------------------------------------------------------------- |
+| Render test per primitive, all variants                      | PASS — 33 tests                                                              |
+| Keyboard: tab order, focus rings, Esc closes Sheet           | PASS                                                                         |
+| Focus trap actually traps                                    | PASS — 12 consecutive Tabs, focus asserted inside on every one               |
+| Playwright 375/768/1280 on `/__design`: no horizontal scroll | PASS                                                                         |
+| Automated contrast check on token pairs                      | PASS — 18 assertions, incl. a guard that white-on-`taupe` still fails        |
+| Every tap target ≥ 44×44px, asserted programmatically        | PASS — computed geometry, not class names                                    |
+| `/__design` returns 404 with `NODE_ENV=production`           | PASS — `scripts/verify-production-guard.sh` against a real production server |
+
+A harness bug was found and fixed that had been silently invalidating results: Playwright
+targeted `127.0.0.1`, and **Next 16's dev server answers 403 for JS chunks from an
+unrecognised origin**. React never hydrated, so every static assertion passed and every
+interactive one failed. Switched to `localhost` rather than loosening `allowedDevOrigins`.
+
+The contrast suite also asserts `tokens.ts` matches `globals.css` by parsing the
+stylesheet, so the Node-side mirror of the CSS tokens cannot drift.
+
+**Not verified — acceptance criterion 5.** "Bottom nav clears the iOS home indicator on a
+real device or simulator." Headless Chromium has no notch, so
+`env(safe-area-inset-bottom)` resolves to `0px`; the test confirms the declaration is
+present and resolves, which is not the same as confirming it on hardware. **This needs one
+manual check on a real iPhone or the iOS Simulator before launch** — carried into
+`DEBT.md` as DEBT-006.
 
 ---
 

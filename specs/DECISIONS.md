@@ -105,3 +105,73 @@ charges, and instruct that this be flagged rather than presented as tax advice.
 **Status:** implemented as specified, with `gstPct` admin-configurable and the making-charge
 treatment isolated to a single point in `lib/pricing.ts`. Logged in `DEBT.md` as requiring
 the client's CA to confirm before launch. Nothing in this repo constitutes tax advice.
+
+---
+
+## D-006 — Design tokens live in a CSS `@theme` block, not `tailwind.config.ts`
+
+**Spec:** MASTER-SPEC §3 and Phase 2 §2.1 put colours, radii and the spacing scale in
+`tailwind.config.ts`. AGENTS.md gives DESIGN ownership of that file.
+**Actual:** they live in an `@theme` block in `app/globals.css`.
+
+**Reasoning:** Tailwind v4 — which the pre-rebuild repo already used — replaced the
+JavaScript config with CSS-first configuration. A `tailwind.config.ts` is still _loadable_
+via the `@config` directive, but it is the legacy path: v4 generates utilities directly
+from the CSS custom properties in `@theme`, and mixing the two means two places to look
+for one token.
+
+The spec's intent — one authoritative token list that DESIGN owns and nothing else
+hardcodes — is fully preserved. Only the file changed.
+
+**DESIGN now owns:** `app/globals.css` (the `@theme` block), `components/ui/`, and
+`lib/design/tokens.ts`.
+
+That last file is a deliberate, tested duplication: Vitest runs in Node and cannot read CSS
+custom properties, so the contrast assertions need the values in TypeScript.
+`lib/design/contrast.test.ts` parses `globals.css` and fails if the two disagree, so the
+mirror cannot silently drift.
+
+---
+
+## D-007 — `taupeDeep` added: white on `taupe` fails WCAG AA
+
+**Spec:** MASTER-SPEC §3 — "Accent = `bg-taupe text-white`", with `taupe` = `#B07D62`.
+**Actual:** the accent _button_ uses a new token `taupeDeep` = `#9B694E`. `taupe` itself
+is unchanged.
+
+**Reasoning:** measured, not assumed. §2.1 told us to verify `muted` on cream because it
+was "borderline"; measuring the whole palette while there turned up a second failure the
+spec did not anticipate:
+
+| Pair                         |      Ratio |     Needs | Verdict                                                             |
+| :--------------------------- | ---------: | --------: | :------------------------------------------------------------------ |
+| `muted` #8A817C on cream     |     3.57:1 |     4.5:1 | FAIL → darkened to **#756C66** (4.81:1), exactly as §2.1 prescribed |
+| **white on `taupe` #B07D62** | **3.53:1** | **4.5:1** | **FAIL → new `taupeDeep` #9B694E (4.64:1)**                         |
+
+Button labels are 16px semibold. WCAG's "large text" allowance (3:1) starts at 18.66px
+bold or 24px regular, so a button label does not qualify and needs the full 4.5:1.
+
+`#9B694E` is the _same hue and saturation_ as `#B07D62` (20.8°, 33.1%) with lightness
+dropped from 53.7% to 46%. The brand colour is unchanged everywhere it is seen as colour —
+active pills, badges, tints, icons, the accent border. Only text-bearing surfaces switch.
+
+Guarded by `lib/design/contrast.test.ts`, which asserts white-on-`taupe` **still fails** —
+so if someone "simplifies" the accent button back to `bg-taupe`, a test fails and explains
+why rather than the regression shipping silently.
+
+---
+
+## D-008 — 14px is microcopy; 15px is the floor for prose
+
+**Spec:** MASTER-SPEC §3 states both "Small 14/20" and "Never below 15px for body copy."
+
+Taken literally these contradict each other, so they were read as governing different
+things — the only interpretation under which both hold:
+
+- **14px (`text-small`)** — field labels, form hints, validation messages, badges,
+  captions, table metadata, nav labels. UI microcopy.
+- **15px and above** — running prose: paragraphs, descriptions, article text.
+
+`e2e/design-system.spec.ts` asserts both halves: a hard 14px floor for _any_ text anywhere,
+and a 15px floor for prose (a `<p>` of 40+ characters that is not a hint or an alert). The
+first test is what stops the interpretation being used as an excuse to shrink things.

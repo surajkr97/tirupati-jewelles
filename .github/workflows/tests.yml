@@ -84,6 +84,11 @@ jobs:
       - name: E2E tests
         run: pnpm test:e2e
 
+      # The E2E suite runs against `pnpm dev` so it can audit the dev-only /__design
+      # gallery, which means it structurally cannot verify the production guard.
+      - name: Production guard (/__design must 404 in prod)
+        run: ./scripts/verify-production-guard.sh
+
       - name: Upload Playwright report
         if: failure()
         uses: actions/upload-artifact@v4

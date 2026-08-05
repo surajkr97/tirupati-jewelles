@@ -54,7 +54,18 @@ const config = [
    */
   {
     files: ['**/*.ts', '**/*.tsx'],
-    ignores: ['lib/env.ts', 'vitest.setup.ts', '*.config.ts', '*.config.mts'],
+    // proxy.ts is exempt for one variable only. It runs in the edge runtime, before any
+    // route renders, and importing lib/env.ts there would drag the whole Zod-parsed server
+    // config (DATABASE_URL, secrets) into the edge bundle. NODE_ENV is a build-time
+    // constant Next inlines, not configuration.
+    ignores: [
+      'lib/env.ts',
+      'proxy.ts',
+      'vitest.setup.ts',
+      'playwright.config.ts',
+      '*.config.ts',
+      '*.config.mts',
+    ],
     rules: {
       'no-restricted-properties': [
         'error',
