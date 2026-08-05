@@ -286,3 +286,317 @@ proves the same thing.
 Tracked as **DEBT-011**. UI copy was rewritten so the account page promises only a second
 way to sign in — it no longer offers to surface past purchases, because that promise cannot
 currently be kept.
+
+---
+
+## D-012 — Rate changes call `revalidatePath` as well as `revalidateTag`
+
+**Spec:** Phase 4 §4.1 — `setRate` calls `revalidateTag('rates')`. MASTER-SPEC §6 — "Admin
+mutations call `revalidateTag()` — so a rate change or new product appears without waiting
+for the ISR window."
+**Actual:** `setRate` calls `revalidateTag(RATES_TAG, 'max')` **and** `revalidatePath()` for
+every entry in `RATE_SURFACES` (`/`, `/rates`).
+
+**Reasoning:** on Next 16, `revalidateTag` only invalidates cache entries that carry the
+tag, and a tag is attached in exactly two ways — `fetch(url, { next: { tags } })` or
+`cacheTag()` inside a `'use cache'` function. The rates pages do neither: they read Postgres
+through Prisma and are cached by `export const revalidate = 300`. So the tag matched nothing
+and the call was silently inert.
+
+Measured, not inferred. Against a production build (`pnpm build && pnpm start`), setting a
+rate through `POST /api/admin/rates`:
+
+| Surface      | Before the fix              | After                   |
+| :----------- | :-------------------------- | :---------------------- |
+| `/api/rates` | new value immediately       | new value immediately   |
+| `/`          | old value for the full 300s | new value, next request |
+| `/rates`     | old value for the full 300s | new value, next request |
+
+`/` eventually self-corrected because the ticker refetches over SWR every five minutes.
+`/rates` is server-rendered with no client fetch, so it had no way to catch up at all.
+
+The alternative — enabling `cacheComponents` and moving the rate reads into `'use cache'`
+functions with `cacheTag('rates')` — would make the tag genuinely load-bearing, but it
+changes the caching model for every route in the application and belongs in Phase 9 rather
+than in a phase about rate display. `revalidateTag` is kept because §4.1 asks for it and
+because Phase 6/7 will introduce properly tagged data; `RATE_SURFACES` is the list Phase 6
+extends with `/products/[slug]`.
+
+---
+
+## D-013 — `/rates` shows the true rate, with no jitter
+
+**Spec:** Phase 4 §4.6 lists the page's contents and does not mention the ticker animation.
+**Actual:** `/rates` renders static server-side cards on the true admin rate. The jitter is
+homepage-only.
+
+**Reasoning:** MASTER-SPEC §8 scopes the fluctuation to "the homepage widget", and `/rates`
+is the page a customer opens to check a number before walking into the shop. Adding a second
+animated surface would double the consumer-protection exposure DEBT-002 tracks while adding
+nothing the homepage does not already do. The disclaimer is still on every card, because the
+rate can change between the ISR window and the customer arriving.
+
+A consequence worth stating: `/rates` has no client-side refresh at all, which is why D-012
+matters more here than on the homepage.
+
+---
+
+## D-014 — Timestamps are formatted in `Asia/Kolkata`, always
+
+**Spec:** Phase 4 §4.4 — `Indicative rate · Updated 11:42 AM · Final price confirmed in store.`
+**Actual:** every timestamp goes through `lib/datetime.ts`, which passes an explicit
+`timeZone: 'Asia/Kolkata'`.
+
+**Reasoning:** two reasons, one correctness and one product.
+
+`toLocaleTimeString()` with no `timeZone` uses the _runtime's_ zone. The ticker is a client
+component, so it renders once on the server during SSR and again in the browser on
+hydration. Render's servers run UTC; the customer's phone runs IST. The same instant
+therefore produced `6:12 am` in the server HTML and `11:42 am` after hydration — a React
+hydration mismatch that discards the server-rendered tree.
+
+Independently, "Updated 11:42 AM" means _the time the shop set the rate_. A customer abroad
+should see the shop's clock, not their own, or the timestamp tells them nothing.
+
+`lib/datetime.test.ts` sets `process.env.TZ` to UTC, New York, Kolkata and Auckland and
+asserts the output is byte-identical in all four.
+
+One wrinkle recorded because it will otherwise be rediscovered: CLDR's `en-IN` separates the
+time from the meridiem with U+202F, a _narrow no-break space_, and emits `am`/`pm` in
+lowercase. Both are normalised in `formatShopTime` — an invisible character that compares
+unequal to a space breaks every `toBe('11:42 AM')` assertion while looking correct in a
+terminal.
+
+---
+
+## D-015 — `CalculatorShare` added to the data model, in Postgres not Redis
+
+**Spec:** MASTER-SPEC §5 lists the Prisma models; there is no share table. §7's Redis key
+map has no share key either.
+**Actual:** a new `CalculatorShare` model in Postgres, migration
+`20260805132228_calculator_share`.
+
+**Reasoning:** Phase 5 §5.5 requires a link that still resolves in 30 days and still shows
+the same price. Redis was the tempting home — §7 already uses TTLs — but a cache is the
+wrong place for a durable promise:
+
+- MASTER-SPEC §7 says "Redis being down must degrade to a slow site, never a broken one."
+  A share stored only in Redis inverts that: Redis down means every shared link 404s.
+- Redis evicts under memory pressure. A link a customer was sent could simply stop
+  existing, with no way to tell them why.
+
+The row carries the rate snapshot alongside the items, which is the same reasoning
+MASTER-SPEC §5 gives for `OrderItem.ratePerGram`: "A bill must render identically in five
+years regardless of today's rate."
+
+The slug is 12 characters of `crypto.randomBytes` from a 28-symbol alphabet (~57 bits) —
+the URL is the only thing guarding the link, so MASTER-SPEC's "Bill forgery" control
+applies to it as much as to a PDF key. The alphabet excludes vowels, `0/O` and `1/l/I`,
+because these links get read aloud and typed by hand.
+
+Expiry is enforced on read, and an expired share is indistinguishable from one that never
+existed — saying "this link expired" would confirm which slugs were once real.
+
+---
+
+## D-016 — Phase 5's SECURITY review was run even though the phase file does not list it
+
+**Spec:** `05-calculator.md` heads its agent list "DEV → TEST → DESIGN". AGENTS.md's build
+process says "1. DEV 2. TEST 3. SECURITY ... Phase is done when all three sign off".
+**Actual:** SECURITY reviewed the phase and signed off.
+
+**Reasoning:** the two documents disagree, and the phase file is the narrower statement.
+Independently of the process question, this phase introduces `POST /api/calculator/share`
+— **the only endpoint in the application that lets an unauthenticated caller create a
+database row.** Skipping a security review of that because a header line omitted it would
+be following the letter of a document over its evident intent.
+
+The review is in SECURITY-LOG.md. It found one MEDIUM (public write, unauthenticated,
+initially unbounded — rate limited before sign-off) and two INFO items now in DEBT.md.
+
+---
+
+## D-017 — `Enquiry` model added to the data model
+
+**Spec:** MASTER-SPEC §5 lists the Prisma models; there is no enquiry table. Phase 6 §6.3
+says "Log the enquiry (product, timestamp, session) for the admin dashboard".
+**Actual:** a new `Enquiry` model, migration `20260805144131_enquiry_log`.
+
+**Reasoning:** `AuditLog` was the obvious candidate and is the wrong shape. Its `actorId` is
+non-null and means "the admin who did this", whereas almost every enquiry is anonymous.
+Overloading it would fill the audit trail with rows that have no actor and make it unusable
+for the thing it exists for — reconstructing who changed a rate or sent a bill.
+
+The model is deliberately thin: product, timestamp, source, and a session fingerprint.
+§6.3 asks for exactly that, and an enquiry is a signal that a piece drew interest, not a
+record about a person. There is no name, number or message text — we do not have them at
+that point and should not begin collecting them here.
+
+**On the session fingerprint.** The stored value is an HMAC of the session id keyed on
+`SESSION_SECRET`, not the session id itself. The raw id is a credential: `session:{sid}` is
+the Redis key, so anyone holding it can set the cookie and become that user. Writing it into
+an analytics table would make a leak of that table a session-hijacking kit. The HMAC groups
+one visitor's enquiries — which is the whole question the dashboard answers — while being
+neither reversible nor replayable.
+
+---
+
+## D-018 — `NEXT_PUBLIC_SITE_URL` added to the environment
+
+**Spec:** MASTER-SPEC §9 lists the environment variables; this is not among them.
+**Actual:** added to `lib/env.ts`'s client schema, defaulting to `http://localhost:3000`.
+
+**Reasoning:** §6.3's WhatsApp message embeds an absolute link back to the product, and a
+server behind a proxy cannot reliably know its own public origin. The alternative was
+reading `window.location.origin` in an effect, which was tried and rejected: it ships server
+HTML with the wrong link and corrects it only after hydration, so the link is wrong for a
+visitor with JavaScript disabled and briefly wrong for everyone else. It also tripped
+`react-hooks/set-state-in-effect`, which was right to complain.
+
+Known at build time, the value is identical on both sides and the href is correct in the
+first byte of HTML.
+
+---
+
+## D-019 — The product price breakdown shows paise, not whole rupees
+
+**Spec:** §6.2 illustrates the block in whole rupees (`Metal value … ₹ 61,540`).
+**Actual:** every line shows two decimals.
+
+**Reasoning:** rounded components do not add up to a rounded total. On the seeded Temple
+Necklace Set the four rounded lines sum to ₹7,47,251 beside a stated total of ₹7,47,252 — a
+visible ₹1 gap, found by the E2E assertion that the breakdown reconciles.
+
+§6.2's entire justification for the block is that "showing the working builds trust", and
+working that does not add up destroys it faster than showing no working at all. It is also
+precisely the "₹1 discrepancy" MASTER-SPEC §4 exists to prevent. §6 DESIGN independently
+asks for the column to be "aligned on the decimal", which only means anything if a decimal
+is shown.
+
+The engine is unchanged — it was already exact. This is a formatting decision, and it
+matches what the Phase 5 calculator breakdown already did.
+
+---
+
+## D-020 — Price filtering and price sorting happen in the application, with a ceiling
+
+**Spec:** §6.1 asks for a price-band filter and price sort.
+**Actual:** purity and weight filter in SQL; price filters and sorts are applied in memory
+over at most `PRICE_SORT_CEILING` (500) candidates.
+
+**Reasoning:** there is no price column. A product's price is a function of today's rate,
+which is the whole point of §6.2 — nothing stored can go stale. That also means SQL has
+nothing to sort on.
+
+The alternative is a materialised `pricePaise` column refreshed by `setRate`, which is real
+work and a new consistency risk (a rate change that half-updates leaves wrong prices in the
+catalogue). For a jewellery shop with a catalogue in the low hundreds, pricing the candidate
+set in the application is simpler and always correct. The ceiling exists so the trade-off
+degrades loudly rather than quietly if the catalogue outgrows it — tracked as DEBT-019.
+
+---
+
+## D-021 — Demo products in the seed
+
+**Spec:** Phase 7 gives the admin product CRUD; no phase asks the seed for products.
+**Actual:** twelve placeholder products, upserted on slug.
+
+**Reasoning:** Phase 6's acceptance criteria are "catalog browsable and filterable" and
+"product prices computed live" — neither can be demonstrated or tested against an empty
+table, and Phase 7 is a phase away. The spread across purities, weights and price bands is
+what makes the §6.1 filters testable at all, and one product is deliberately un-hallmarked
+so §6.2's "Hallmark details available in store" fallback has something to exercise.
+
+The upsert updates nothing on a second run, so once the shop starts editing these, re-running
+the seed cannot undo their work.
+
+---
+
+## D-022 — `Settings` added to the data model, as a single row
+
+**Spec:** MASTER-SPEC §5 lists the Prisma models; there is no settings table. §7.9 asks for
+shop details, defaults, bill numbering and a ticker toggle.
+**Actual:** a `Settings` model whose id defaults to the constant `singleton`.
+
+**Reasoning:** the alternative was a key/value table, which turns every typed field into a
+string and every read into a parse. One row with real columns keeps `defaultGstPct` a
+`Decimal(5,2)` and `billSequence` an `Int`, which is what they are.
+
+The constant id is the trick that makes "one row" true without a check constraint: every
+read is `findUnique({ where: { id: 'singleton' } })` and every write is an upsert on it, so
+there is no way to end up with two and no question about which is live.
+
+`tickerJitter` is deliberately **nullable**, with three meanings rather than two: null
+follows `NEXT_PUBLIC_TICKER_JITTER`, true and false override it. §7.9 asks to "surface the
+env flag in the UI so the owner can disable it without a deploy", and a plain boolean would
+have silently replaced the deployment default the first time anyone opened the settings page.
+
+---
+
+## D-023 — Reordering is up/down buttons, not drag-and-drop
+
+**Spec:** §7.4 says "drag to reorder" for product images; §7.5 says "drag-to-reorder" for
+categories.
+**Actual:** up and down buttons that write the same `sortOrder`.
+
+**Reasoning:** on a phone the drag gesture and the scroll gesture are the same gesture. §7's
+own design intent is that the admin "will use this on a phone, standing in a shop, between
+customers" — and a list that hijacks vertical drags is actively hostile in that context.
+Buttons also work with a keyboard and a screen reader, and need no dependency.
+
+The persisted data is identical, so a drag affordance can be layered on later over the same
+action without a migration. Recorded rather than silently substituted because it is a
+visible departure from what the spec asked for.
+
+---
+
+## D-024 — Admin CRUD uses Server Actions, not route handlers
+
+**Spec:** §7 does not say which. MASTER-SPEC §6 describes `/api/*` route handlers.
+**Actual:** `/api/admin/rates` stays a route handler (Phase 4 built it); everything new in
+Phase 7 is a Server Action.
+
+**Reasoning:** the admin screens are forms, and a Server Action removes the client fetch
+wrapper, the manual JSON encoding and the response-shape duplication that each new screen
+would otherwise repeat. `lib/admin/actions.ts` wraps every one with the role re-check, the
+origin check, the audit write and error handling, so the audited path is the _easy_ path
+rather than a rule to remember.
+
+The explicit origin check stays even though Next validates a Server Action's own origin:
+relying on a framework's internal behaviour for a security control is how the control
+disappears in a minor upgrade.
+
+One sharp edge worth recording, because it cost time: a `'use server'` file may export
+**only async functions**. Exporting a `const SETTINGS_ID` from one broke the entire module
+graph, and the symptom was `/admin/audit` — a page that does not touch settings — returning 500.
+
+---
+
+## D-025 — `UPLOAD_PROVIDER_KEY` replaced by three Cloudinary variables
+
+**Spec:** MASTER-SPEC §9 lists `UPLOAD_PROVIDER_KEY=`.
+**Actual:** `CLOUDINARY_CLOUD_NAME`, `CLOUDINARY_API_KEY`, `CLOUDINARY_API_SECRET`, all optional.
+
+**Reasoning:** Cloudinary needs three values and one string cannot hold them. §7.8 offers
+"UploadThing or Cloudinary"; Cloudinary is the right pick because §7.8 also asks for
+WebP/AVIF conversion, three sizes, a `blurDataURL` and EXIF stripping — all of which
+Cloudinary does as signed upload parameters and delivery transformations, and none of which
+UploadThing does. Choosing UploadThing would have meant adding `sharp` and building a
+derivative pipeline to get back to the same place.
+
+Optional rather than required, so the application still boots without them: §7.6's
+paste-a-URL path works regardless, and a missing key disables the upload control instead of
+crashing at start. A shop that has not set up an image host should still be able to run the
+site.
+
+**No upload preset.** Presets are mandatory only for _unsigned_ uploads. Signing lets the
+folder, format allowlist, size cap and EXIF flag travel inside the signature, which puts
+them in reviewed, version-controlled code rather than a dashboard setting that can be
+changed without a deploy. A parameter outside the signature is one the client can rewrite.
+
+**One sharp edge, recorded because it cost a debugging round.** Cloudinary excludes four
+parameters from the signature — `file`, `cloud_name`, `api_key` and `resource_type` — and
+including one returns `Invalid Signature` with no indication which. Signing `resource_type`
+made _every_ upload fail 401, including a legitimate PNG. That the control case failed too
+is what showed it was our bug rather than the security controls working, and removing it
+changed the response to a permissions error, which separated the two problems.
