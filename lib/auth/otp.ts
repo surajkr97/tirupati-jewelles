@@ -30,8 +30,26 @@ export const OTP_MAX_ATTEMPTS = 6;
 export const OtpPurpose = {
   SIGNUP: 'SIGNUP',
   LOGIN: 'LOGIN',
-  CLAIM_ORDER: 'CLAIM_ORDER',
   PASSWORD_RESET: 'PASSWORD_RESET',
+
+  /**
+   * Attach a mobile number to an account so it can be used as a login identifier.
+   *
+   * Delivered to the account's **verified email**, so it proves control of the ACCOUNT.
+   * It does not prove control of the phone, and therefore must never trigger the order
+   * claim. See CLAIM_ORDER below and DECISIONS.md D-011.
+   */
+  ADD_PHONE: 'ADD_PHONE',
+
+  /**
+   * Proof of possession of a specific mobile number — the only thing that may unlock the
+   * order claim (MASTER-SPEC §5).
+   *
+   * Currently unreachable: it requires a code delivered TO that number, and SMS is not
+   * enabled. Kept so the claim path stays intact and correct for whichever possession
+   * proof arrives first — SMS, or the Phase 8 WhatsApp bill link. DEBT-011.
+   */
+  CLAIM_ORDER: 'CLAIM_ORDER',
 } as const;
 
 export type OtpPurpose = (typeof OtpPurpose)[keyof typeof OtpPurpose];

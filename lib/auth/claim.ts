@@ -10,9 +10,19 @@
  *  number. Never on an unverified phone field. This is the difference between a feature
  *  and an account-takeover vector."
  *
- *  If you are adding a profile-update endpoint, a admin "assign order" action, or any
+ *  If you are adding a profile-update endpoint, an admin "assign order" action, or any
  *  other way to write Order.userId — don't. Route it through here, behind a verified OTP,
  *  or you have built a way to read other people's purchase history.
+ *
+ *  ── CURRENTLY UNREACHABLE, ON PURPOSE ──
+ *  SMS is not enabled (D-011), so nothing can presently prove possession of a phone
+ *  number, and no caller invokes this. /api/auth/phone/verify authorises adding a number
+ *  via an EMAIL code — which proves account ownership, not phone ownership — and so
+ *  deliberately does NOT call this and leaves `phoneVerified` false.
+ *
+ *  The function is kept complete and tested so that whichever possession proof arrives
+ *  first (SMS OTP, or the Phase 8 WhatsApp bill link, which is delivered TO the number)
+ *  simply calls it. DEBT-011.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 import { db } from '@/lib/db';

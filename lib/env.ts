@@ -34,9 +34,26 @@ const serverSchema = z.object({
   SESSION_SECRET: secret('SESSION_SECRET'),
   OTP_PEPPER: secret('OTP_PEPPER'),
 
-  // Phase 3 wires these to a real provider; Phase 1 only needs them to exist.
-  SMS_PROVIDER_KEY: z.string().min(1),
-  SMTP_URL: z.string().min(1),
+  /**
+   * Email delivery via Resend (HTTPS), not SMTP.
+   *
+   * Render blocks outbound SMTP ports (25/465/587) on most plans, so a nodemailer
+   * transport would time out in production while working perfectly in development —
+   * the worst kind of failure. Resend is an HTTPS API and is unaffected.
+   *
+   * Optional in development: with no key, OTPs are logged to the console instead of sent
+   * (§3.2). `lib/notify` refuses to fall back to the console logger in production.
+   */
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default('Tirupati Jewelles <onboarding@resend.dev>'),
+
+  /**
+   * SMS is not in use. Every OTP goes to email (D-011).
+   *
+   * Optional so the stack boots without a provider. When SMS is added later, this becomes
+   * required and `SmsNotifier` is implemented against it.
+   */
+  SMS_PROVIDER_KEY: z.string().optional(),
 
   // Phase 7 (uploads + the SSRF-guarded image URL field).
   UPLOAD_PROVIDER_KEY: z.string().min(1),

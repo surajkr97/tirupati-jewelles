@@ -1,13 +1,16 @@
 /**
- * Notification delivery — SMS and email behind one interface.
- * Created by Phase 3 (specs/03-auth.md §3.2).
+ * Notification delivery.
+ * Created by Phase 3 (specs/03-auth.md §3.2), revised for email-only delivery (D-011).
  *
- * §3.2: "SMS via MSG91/Twilio behind an interface — lib/notify/sms.ts — so the provider can
- * be swapped", and "In development, log the OTP to console instead of sending. Gate on
- * NODE_ENV !== 'production' explicitly."
+ * ── Why Resend and not SMTP ──
+ * §3.2 says "Email via SMTP". Render — the deployment target — blocks outbound SMTP ports
+ * (25/465/587) on most plans, so a nodemailer transport works locally and then times out
+ * in production. Resend is an HTTPS API, so it is unaffected by that block.
  *
- * The dev gate is written as an explicit equality check rather than a truthy flag, because
- * "we accidentally shipped the console logger" is a total OTP bypass.
+ * ── Why there is no SMS ──
+ * Email is the only channel in use. `SmsNotifier` is kept as a throwing stub rather than
+ * deleted so the interface, the `Channel` enum and the call sites stay in place for when
+ * SMS is added — and so nothing silently "succeeds" at sending an SMS that never arrives.
  */
 import { Channel } from '@prisma/client';
 
@@ -15,7 +18,6 @@ import { env } from '@/lib/env';
 
 export interface SendResult {
   delivered: boolean;
-  /** Provider-side id, when the provider returns one. */
   reference?: string;
 }
 
@@ -23,11 +25,12 @@ export interface Notifier {
   send(to: string, message: string, subject?: string): Promise<SendResult>;
 }
 
+const isProduction = env.NODE_ENV === 'production';
+
 /**
  * Development transport — prints the code instead of sending it.
- *
- * Loud on purpose: an OTP appearing in production logs must be impossible to miss during
- * review, and this banner is what a reviewer greps for.
+ * §3.2 requires this to be gated on `NODE_ENV !== 'production'` explicitly, because
+ * shipping the console logger would be a total OTP bypass.
  */
 class ConsoleNotifier implements Notifier {
   constructor(private readonly channel: string) {}
@@ -51,50 +54,54 @@ class ConsoleNotifier implements Notifier {
   }
 }
 
-/**
- * SMS via an HTTP provider (MSG91 / Twilio).
- *
- * Phase 3 ships the interface and the dev transport; the production request body is
- * provider-specific and is wired up when the client supplies real credentials.
- * Tracked in DEBT.md as DEBT-007.
- */
-class SmsNotifier implements Notifier {
-  async send(to: string, message: string): Promise<SendResult> {
-    void to;
-    void message;
-    throw new Error(
-      'SMS provider not configured. Set SMS_PROVIDER_KEY and implement SmsNotifier.send ' +
-        '(specs/03-auth.md §3.2, DEBT-007).',
-    );
-  }
-}
-
-/** Email over SMTP. `nodemailer` is imported lazily so it stays out of the edge bundle. */
-class EmailNotifier implements Notifier {
+class ResendNotifier implements Notifier {
   async send(to: string, message: string, subject?: string): Promise<SendResult> {
-    const { createTransport } = await import('nodemailer');
-    const transport = createTransport(env.SMTP_URL);
+    if (!env.RESEND_API_KEY) {
+      throw new Error('RESEND_API_KEY is not set — cannot send email.');
+    }
 
-    const info = await transport.sendMail({
+    // Imported lazily so the SDK stays out of bundles that never send anything.
+    const { Resend } = await import('resend');
+    const resend = new Resend(env.RESEND_API_KEY);
+
+    const { data, error } = await resend.emails.send({
+      from: env.EMAIL_FROM,
       to,
-      from: 'Tirupati Jewelles <no-reply@tirupatijewelles.com>',
       subject: subject ?? 'Tirupati Jewelles',
       text: message,
     });
 
-    return { delivered: true, reference: info.messageId };
+    // The SDK reports failures in the response rather than throwing, so an unchecked
+    // call looks successful while delivering nothing.
+    if (error) throw new Error(`Resend refused the message: ${error.message}`);
+
+    return { delivered: true, reference: data?.id };
   }
 }
 
-const isProduction = env.NODE_ENV === 'production';
+/** Not in use. Throws rather than pretending to send. */
+class SmsNotifier implements Notifier {
+  async send(): Promise<SendResult> {
+    throw new Error(
+      'SMS delivery is not enabled — every OTP goes to email (specs/DECISIONS.md D-011). ' +
+        'If you are seeing this, something requested an SMS channel that should not exist.',
+    );
+  }
+}
 
-export const smsNotifier: Notifier = isProduction
-  ? new SmsNotifier()
-  : new ConsoleNotifier('sms');
+/**
+ * Email transport selection.
+ *
+ * In production a missing key is a hard failure at first use, not a silent downgrade to
+ * the console — logging OTPs to production stdout would hand every code to anyone with
+ * log access.
+ */
+export const emailNotifier: Notifier =
+  isProduction || env.RESEND_API_KEY
+    ? new ResendNotifier()
+    : new ConsoleNotifier('email');
 
-export const emailNotifier: Notifier = isProduction
-  ? new EmailNotifier()
-  : new ConsoleNotifier('email');
+export const smsNotifier: Notifier = new SmsNotifier();
 
 export function notifierFor(channel: Channel): Notifier {
   return channel === Channel.SMS ? smsNotifier : emailNotifier;
@@ -107,8 +114,9 @@ export async function sendOtp(
   code: string,
 ): Promise<SendResult> {
   const message =
-    `${code} is your Tirupati Jewelles verification code. ` +
-    `It expires in 5 minutes. Do not share it with anyone.`;
+    `${code} is your Tirupati Jewelles verification code.\n\n` +
+    `It expires in 5 minutes. Do not share it with anyone.\n\n` +
+    `If you did not request this, you can ignore this message.`;
 
-  return notifierFor(channel).send(to, message, 'Your verification code');
+  return notifierFor(channel).send(to, message, `${code} is your verification code`);
 }

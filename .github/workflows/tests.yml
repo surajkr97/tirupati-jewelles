@@ -40,8 +40,7 @@ jobs:
       REDIS_URL: redis://localhost:6379/0
       SESSION_SECRET: ci-session-secret-that-is-long-enough-32b
       OTP_PEPPER: ci-otp-pepper-that-is-long-enough-32-bytes
-      SMS_PROVIDER_KEY: ci-placeholder
-      SMTP_URL: smtp://ci:ci@localhost:1025
+      EMAIL_FROM: Tirupati Jewelles <ci@example.com>
       UPLOAD_PROVIDER_KEY: ci-placeholder
       ALLOWED_IMAGE_HOSTS: res.cloudinary.com,utfs.io
       SEED_ADMIN_EMAIL: admin@example.com

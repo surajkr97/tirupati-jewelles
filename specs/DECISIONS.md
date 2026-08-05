@@ -225,3 +225,64 @@ Rate limiting stays in Redis exactly as specified, because a counter is what Red
 on a Redis fault, unlike `cached()`, which always degrades gracefully. If the limiter
 cannot count, failing open hands an attacker unlimited OTP attempts by pressuring Redis.
 Only auth and billing routes are affected; browsing, rates and the calculator stay up.
+
+---
+
+## D-011 — Email-only OTP via Resend; SMS deferred; the order claim stays locked
+
+**Spec:** §3.2 — "Email via SMTP. SMS via MSG91/Twilio behind an interface." MASTER-SPEC §5
+makes verified phone possession the key to the order claim.
+**Actual:** every OTP goes to email, delivered by Resend. SMS is not enabled. Adding a
+phone number is authorised by an email code. **The order claim is unreachable.**
+
+### Resend instead of SMTP
+
+Render — the deployment target — blocks outbound SMTP ports (25/465/587) on most plans.
+A nodemailer transport therefore works perfectly in development and silently times out in
+production, which is the worst failure shape available: signup appears to work and no
+customer ever receives a code. Resend is an HTTPS API and is unaffected. `nodemailer` was
+removed.
+
+In production a missing `RESEND_API_KEY` is a hard failure at first use, never a silent
+downgrade to the console logger — printing OTPs to production stdout would hand every code
+to anyone with log access.
+
+### The part that matters: what an email code can and cannot prove
+
+|                                               | Proves                     | Does not prove                  |
+| :-------------------------------------------- | :------------------------- | :------------------------------ |
+| Code sent to the account's verified **email** | control of the **account** | control of the **phone number** |
+| Code sent **to the number** (SMS / WhatsApp)  | control of the **number**  | —                               |
+
+MASTER-SPEC §5 is unambiguous: _"The claim runs only after successful OTP verification of
+that exact number. Never on an unverified phone field. This is the difference between a
+feature and an account-takeover vector."_
+
+If adding a phone via an email code also claimed orders, **anyone could type a stranger's
+mobile number and read their entire purchase history.** So the flows are split:
+
+- `ADD_PHONE` — email-delivered. Sets `User.phone` so the number works as a login
+  identifier. Leaves `phoneVerified` **false**. Does **not** claim.
+- `CLAIM_ORDER` — requires a code delivered _to the number_. Currently unreachable.
+
+`claimOrdersForVerifiedPhone` is kept complete and fully tested, with no caller. Whichever
+possession proof arrives first simply calls it.
+
+### What this costs, stated plainly
+
+**The Phase 8 headline feature does not work yet.** A customer cannot see a bill that was
+sent to their phone, because nothing can prove the number is theirs. Two ways to restore
+it, in preference order:
+
+1. **The Phase 8 WhatsApp bill link.** The bill is already delivered _to that number_ at an
+   unguessable UUID URL. A claim token in that message is a possession proof — receiving it
+   requires holding the number. No SMS provider, no per-message cost, and it fits the
+   architecture already specified.
+2. **An SMS provider** (MSG91/Twilio). `SmsNotifier` is a throwing stub ready to implement.
+
+Option 1 is the recommendation: it is free, it is already most of the way built, and it
+proves the same thing.
+
+Tracked as **DEBT-011**. UI copy was rewritten so the account page promises only a second
+way to sign in — it no longer offers to surface past purchases, because that promise cannot
+currently be kept.

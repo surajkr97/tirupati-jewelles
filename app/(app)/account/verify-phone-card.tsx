@@ -1,9 +1,10 @@
 /**
- * Phone verification — the entry point to the Phase 8 order claim.
- * Created by Phase 3 (specs/03-auth.md §3.5, §3.7).
+ * Add a mobile number as a second login identifier.
+ * Created by Phase 3 (specs/03-auth.md §3.7), revised for email-only OTP (D-011).
  *
- * Verifying a number is what attaches previously-billed orders to this account. That is
- * worth saying out loud, because "verify your phone" on its own reads like a chore.
+ * Authorised by a code sent to the account's verified EMAIL. That is enough to attach a
+ * number the customer will sign in with, and deliberately not enough to attach past
+ * purchases — see the header of app/api/auth/phone/verify/route.ts.
  */
 'use client';
 
@@ -15,9 +16,11 @@ import { OtpInput } from '@/components/auth/otp-input';
 import { Button, Card, Input } from '@/components/ui';
 
 export function VerifyPhoneCard({ claimableHint }: { claimableHint: number }) {
+  void claimableHint; // no longer surfaced — see the copy note below
   const router = useRouter();
   const [phone, setPhone] = useState('');
   const [code, setCode] = useState('');
+  const [sentTo, setSentTo] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -32,12 +35,15 @@ export function VerifyPhoneCard({ claimableHint }: { claimableHint: number }) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ phone }),
       });
-      const body: { error?: string } = await response.json();
+      const body: { error?: string; message?: string } = await response.json();
 
       if (!response.ok) {
         setError(body.error ?? 'Could not send the code.');
         return;
       }
+      // The code goes to email, not SMS. Saying so avoids the customer sitting there
+      // watching their phone for a message that is never coming.
+      setSentTo(body.message ?? 'We sent you a code.');
       setSent(true);
     } catch {
       setError('Network problem. Please try again.');
@@ -62,9 +68,7 @@ export function VerifyPhoneCard({ claimableHint }: { claimableHint: number }) {
         return;
       }
 
-      // The server counts what actually attached — "We found 3 past purchases linked to
-      // this number." (§3.5)
-      setSuccess(body.message ?? 'Your number is verified.');
+      setSuccess(body.message ?? 'Your number has been saved.');
       router.refresh();
     } catch {
       setError('Network problem. Please try again.');
@@ -76,7 +80,7 @@ export function VerifyPhoneCard({ claimableHint }: { claimableHint: number }) {
   if (success) {
     return (
       <Card className="flex flex-col gap-2 border-0">
-        <p className="text-h3 font-semibold text-up">Verified</p>
+        <p className="text-h3 font-semibold text-up">Number saved</p>
         <p className="text-body text-muted">{success}</p>
       </Card>
     );
@@ -84,12 +88,15 @@ export function VerifyPhoneCard({ claimableHint }: { claimableHint: number }) {
 
   return (
     <Card className="flex flex-col gap-4">
+      {/* Copy deliberately promises only what this flow delivers: a second way to sign
+          in. It does NOT promise that past purchases will appear — that needs proof the
+          customer holds the number, which email OTP does not provide (D-011). Claiming a
+          benefit we cannot deliver is worse than not mentioning it. */}
       <div className="flex flex-col gap-1">
-        <h2 className="text-h3 font-semibold text-ink">Verify your mobile number</h2>
+        <h2 className="text-h3 font-semibold text-ink">Add your mobile number</h2>
         <p className="text-body text-muted">
-          {claimableHint > 0
-            ? `Bought from us before? We have ${claimableHint} purchase${claimableHint === 1 ? '' : 's'} waiting to be linked to this number.`
-            : 'Bought from us before? Verify your number to see those purchases in your order history.'}
+          Sign in with your number instead of your email. We&rsquo;ll send a code to your
+          email address to confirm it&rsquo;s you.
         </p>
       </div>
 
@@ -119,8 +126,7 @@ export function VerifyPhoneCard({ claimableHint }: { claimableHint: number }) {
       ) : (
         <>
           <p className="text-body text-muted">
-            Enter the code sent to <span className="font-semibold text-ink">{phone}</span>
-            .
+            {sentTo ?? 'Enter the code we sent you.'}
           </p>
           <OtpInput
             value={code}
@@ -137,7 +143,7 @@ export function VerifyPhoneCard({ claimableHint }: { claimableHint: number }) {
             disabled={code.length < 6}
             onClick={() => void verify(code)}
           >
-            Verify number
+            Save number
           </Button>
           <ResendTimer onResend={requestCode} disabled={busy} />
         </>
