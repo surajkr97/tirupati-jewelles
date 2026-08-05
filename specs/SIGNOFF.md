@@ -286,7 +286,54 @@ vulnerability, tracked as DEBT-007; email OTP works so signup is unaffected).
 
 ## Phase 4 — Rates Engine & Ticker
 
-Not started. Blocked on Phase 3 sign-off.
+### Phase 4 — DEV
+Status: **IN PROGRESS** — core committed at `9814458`, three checklist items open.
+
+**Done and verified** (lint clean, zero TS errors, 179 unit tests, 36 E2E):
+
+- **4.1 Rate service** — `lib/rates.ts`. Cache-aside on `rates:current` (TTL 300s),
+  insert-only `setRate` with AuditLog, `getRateHistory`, and the unit conversion helpers
+  that live only here. `lib/money.ts` does Indian lakh/crore grouping.
+- **4.2 API** — `GET /api/rates` (public, `s-maxage=300`) and
+  `POST /api/admin/rates` (ADMIN, 404 for everyone else, display-unit input, >20% sanity
+  guard).
+- **4.3 / 4.4 Ticker** — `components/rates/rate-ticker.tsx` + hand-rolled `Sparkline`.
+  Seeded from the ISR'd page, SWR refetch at 5 min, pauses on `visibilitychange`, cleans
+  up on unmount, jitter disabled under `prefers-reduced-motion`, `aria-live="polite"`,
+  arrows alongside colour.
+- **4.5 Homepage** — `revalidate = 300`, ticker above the fold at 375px (asserted in E2E).
+
+### OPEN — start here
+
+1. **`GET /api/rates/history`** (§4.2) — `?metal=&purity=&days=`. Not built. The ticker's
+   sparkline reads history server-side, so it works; the public endpoint does not exist.
+2. **`/rates` page** (§4.6) — three cards, 30-day history table, prominent "rates last
+   updated", the same disclaimer as the ticker card. Not built. Note `BottomNav` already
+   links to `/rates`, so that link currently 404s.
+3. **Two E2E cases** (§4 TEST) — `NEXT_PUBLIC_TICKER_JITTER=false` holds the value
+   constant across 10s, and reduced-motion produces no jitter. The clamp and timer logic
+   are covered by unit tests; the browser-level assertions are not.
+
+Also deferred by design: the homepage hero and category tiles render branded `ImageFrame`
+placeholders until Phase 7 gives the admin `MediaSlot` control. That is correct, not a gap.
+
+### Phase 4 — TEST
+Status: **PARTIAL** — unit coverage complete, two E2E cases outstanding (above).
+
+| Spec requirement | Result |
+| :--- | :--- |
+| Conversion round-trips without drift | PASS — incl. 1,000 iterations with zero accumulated error |
+| Jitter clamp over 10,000 ticks | PASS — plus 500 consecutive same-direction steps, and a case proving it clamps against the truth rather than the previous displayed value |
+| Sanity guard rejects a 10× rate without `confirmed` | PASS — and asserts nothing was written |
+| `setRate` → cache invalidated → new value returned | PASS |
+| `/api/rates` served from cache on second call | NOT DONE — needs a DB query spy |
+| Redis down → `/api/rates` still correct from Postgres | Covered indirectly by the Phase 1 `cached()` suite; not asserted on this route |
+| E2E: jitter off / reduced motion | NOT DONE |
+
+### Phase 4 — SECURITY
+Status: **NOT RUN.** `POST /api/admin/rates` returns 404 for non-admins and writes an
+AuditLog with actor and IP, but the review itself has not been performed. Phase 4 is
+**not signed off** and Phase 5 is therefore blocked.
 
 ---
 
