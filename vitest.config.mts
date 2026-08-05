@@ -8,7 +8,22 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   resolve: {
-    alias: { '@': fileURLToPath(new URL('./', import.meta.url)) },
+    alias: {
+      '@': fileURLToPath(new URL('./', import.meta.url)),
+      /**
+       * `server-only` throws on import outside a Server Component. That guard is doing
+       * its job — Vitest has no React Server Component graph, so it resolves the client
+       * build and the module refuses to load.
+       *
+       * Aliased to an empty local module — the same substitution Next makes for server
+       * bundles. The guard still protects application code at build time; it is only
+       * neutralised for the test runner. (The package's own `empty.js` cannot be used:
+       * its `exports` map does not expose it.)
+       */
+      'server-only': fileURLToPath(
+        new URL('./test/stubs/server-only.ts', import.meta.url),
+      ),
+    },
   },
   test: {
     environment: 'node',
