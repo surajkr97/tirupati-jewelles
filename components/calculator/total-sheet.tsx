@@ -65,10 +65,9 @@ export function TotalSheet({
           </dl>
 
           {/*
-            §5.2: "Note in code that GST treatment of making charges has been contested and
-            the client should confirm with their CA. Flag it in DEBT.md — do not present
-            the split as tax advice." So this says what was calculated, and does not
-            present it as a tax position. DEBT-001.
+            The treatment is settled (DEBT-001 closed), so the copy no longer hedges about
+            it. The "estimate, not a tax invoice" line stays, and is now the only claim this
+            makes: a calculator result is not a bill, whatever the arithmetic behind it.
           */}
           <p className="text-small text-muted">
             GST is calculated on the metal value plus making charges. This is an estimate,

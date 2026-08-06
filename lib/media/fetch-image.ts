@@ -52,7 +52,22 @@ export type UrlCheckFailure =
   | 'not_an_image';
 
 export type UrlCheckResult =
-  | { ok: true; url: string; format: ImageFormat; bytes: number }
+  | {
+      ok: true;
+      url: string;
+      format: ImageFormat;
+      bytes: number;
+      /**
+       * The verified body.
+       *
+       * Added by Phase 8 (§8.3: "Logo from a MediaSlot") — the bill PDF has to embed the
+       * logo's actual bytes, and those bytes were already downloaded here to be sniffed.
+       * Handing back what was verified is the only way the embedded image is provably the
+       * one that passed the check; re-fetching it would re-open the DNS-rebinding gap this
+       * whole module exists to close.
+       */
+      data: Buffer;
+    }
   | { ok: false; reason: UrlCheckFailure; detail: string };
 
 /**
@@ -311,7 +326,8 @@ export async function checkImageUrl(raw: string): Promise<UrlCheckResult> {
       };
     }
 
-    const format = sniffFormat(new Uint8Array(Buffer.concat(chunks).subarray(0, 32)));
+    const data = Buffer.concat(chunks);
+    const format = sniffFormat(new Uint8Array(data.subarray(0, 32)));
 
     if (!format) {
       return {
@@ -321,7 +337,7 @@ export async function checkImageUrl(raw: string): Promise<UrlCheckResult> {
       };
     }
 
-    return { ok: true, url: url.toString(), format, bytes: total };
+    return { ok: true, url: url.toString(), format, bytes: total, data };
   }
 
   return {

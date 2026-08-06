@@ -116,12 +116,12 @@ export function SettingsForm({ initial, envJitter }: SettingsFormProps) {
             onChange={(e) => set('defaultMakingPct', e.target.value)}
           />
         </div>
-        {/* DEBT-001: the GST treatment of making charges is not settled. The field is here
-            because §7.9 asks for it; the note is here because nothing in this repo is tax
-            advice. */}
+        {/* The treatment is confirmed (DEBT-001 closed), so this states it rather than
+            asking the owner to go and check. It stays visible because it is the one thing
+            on this screen that changes what a customer is charged. */}
         <p className="text-small text-muted">
-          GST is applied to the metal value plus making charges. Confirm this treatment
-          with your accountant before relying on it.
+          GST is applied to the metal value plus making charges, as confirmed with your
+          accountant. Changing this rate affects every new bill.
         </p>
       </Card>
 

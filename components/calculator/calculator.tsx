@@ -19,31 +19,20 @@
  */
 'use client';
 
-import { Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 
-import { ItemCard } from '@/components/calculator/item-card';
+import { ItemList } from '@/components/calculator/item-list';
+import { DEBOUNCE_MS, useDebounced } from '@/components/calculator/use-debounced';
 import { TotalBar } from '@/components/calculator/total-bar';
 import { StickyBar } from '@/components/shell/sticky-bar';
 import { TotalSheet } from '@/components/calculator/total-sheet';
 import { Button, Skeleton, toast } from '@/components/ui';
-import { calculatorReducer, initialState, MAX_ITEMS } from '@/lib/calculator/reducer';
+import { priceItems } from '@/lib/calculator/price-items';
+import { calculatorReducer, initialState } from '@/lib/calculator/reducer';
 import { clearItems, loadItems, saveItems } from '@/lib/calculator/storage';
-import {
-  toLineInput,
-  type CalculatorItem,
-  type FieldErrors,
-} from '@/lib/calculator/types';
+import type { CalculatorItem } from '@/lib/calculator/types';
 import { ratesByPurityFromApi } from '@/lib/rates.keys';
-import {
-  calculateTotal,
-  type LineResult,
-  type RatesByPurity,
-  type TotalResult,
-} from '@/lib/pricing';
-
-/** §5.3: "Debounce recalculation by 150ms while typing." */
-const DEBOUNCE_MS = 150;
+import type { RatesByPurity } from '@/lib/pricing';
 
 function newId(): string {
   // `randomUUID` needs a secure context; the fallback keeps the calculator working on a
@@ -193,8 +182,6 @@ export function Calculator({ initialItems, frozenRates }: CalculatorProps) {
     dispatch({ type: 'CLEAR_ALL', id: newId() });
   }, []);
 
-  const atLimit = state.items.length >= MAX_ITEMS;
-
   return (
     <>
       {ratesError && (
@@ -207,44 +194,15 @@ export function Calculator({ initialItems, frozenRates }: CalculatorProps) {
         </p>
       )}
 
-      <ul className="flex flex-col gap-4">
-        {state.items.map((item, index) => (
-          <li key={item.id}>
-            <ItemCard
-              item={item}
-              index={index}
-              result={results.get(item.id) ?? null}
-              errors={errors.get(item.id) ?? {}}
-              canRemove={state.items.length > 1}
-              onChange={(patch) => dispatch({ type: 'UPDATE_ITEM', id: item.id, patch })}
-              onRemove={() =>
-                dispatch({ type: 'REMOVE_ITEM', id: item.id, replacementId: newId() })
-              }
-              onDuplicate={() =>
-                dispatch({ type: 'DUPLICATE_ITEM', id: item.id, newId: newId() })
-              }
-            />
-          </li>
-        ))}
-      </ul>
-
-      {/* §5.4: "Prominent + Add another item button below the last card, full width,
-          dashed outline." */}
-      <button
-        type="button"
-        onClick={() => dispatch({ type: 'ADD_ITEM', id: newId() })}
-        disabled={atLimit}
-        className="flex h-control-lg w-full items-center justify-center gap-2 rounded-card border-2 border-dashed border-line text-body font-semibold text-taupe-deep transition-colors duration-fast ease-standard hover:border-taupe hover:bg-taupe-lt/20 disabled:opacity-40"
-      >
-        <Plus className="size-5" aria-hidden="true" />
-        Add another item
-      </button>
-
-      {atLimit && (
-        <p className="text-center text-small text-muted">
-          You can price {MAX_ITEMS} items at once.
-        </p>
-      )}
+      <ItemList
+        items={state.items}
+        results={results}
+        errors={errors}
+        onAdd={() => dispatch({ type: 'ADD_ITEM', id: newId() })}
+        onChange={(id, patch) => dispatch({ type: 'UPDATE_ITEM', id, patch })}
+        onRemove={(id) => dispatch({ type: 'REMOVE_ITEM', id, replacementId: newId() })}
+        onDuplicate={(id) => dispatch({ type: 'DUPLICATE_ITEM', id, newId: newId() })}
+      />
 
       <div className="flex justify-center">
         <Button variant="ghost" size="sm" onClick={clearAll}>
@@ -284,58 +242,4 @@ export function Calculator({ initialItems, frozenRates }: CalculatorProps) {
       )}
     </>
   );
-}
-
-/**
- * Price every item that currently converts, and collect field errors for those that do not.
- *
- * A row with a typo in it does not stop the others from totalling. Someone pricing eight
- * pieces should not lose the running total because they are mid-way through typing the
- * ninth.
- */
-function priceItems(
-  items: CalculatorItem[],
-  rates: RatesByPurity | null,
-): {
-  total: TotalResult | null;
-  results: Map<string, LineResult>;
-  errors: Map<string, FieldErrors>;
-} {
-  const errors = new Map<string, FieldErrors>();
-  const results = new Map<string, LineResult>();
-
-  if (!rates) return { total: null, results, errors };
-
-  const priceable: { id: string; input: ReturnType<typeof toLineInput> }[] = [];
-
-  for (const item of items) {
-    const converted = toLineInput(item);
-    if (converted.ok) {
-      priceable.push({ id: item.id, input: converted });
-    } else {
-      errors.set(item.id, converted.errors);
-    }
-  }
-
-  const inputs = priceable.flatMap((p) => (p.input.ok ? [p.input.input] : []));
-  const total = calculateTotal(inputs, rates);
-
-  priceable.forEach((p, index) => {
-    const line = total.lines[index];
-    if (line) results.set(p.id, line);
-  });
-
-  return { total, results, errors };
-}
-
-/** Hold a value still for `delay` ms after it stops changing. */
-function useDebounced<T>(value: T, delay: number): T {
-  const [debounced, setDebounced] = useState(value);
-
-  useEffect(() => {
-    const timer = setTimeout(() => setDebounced(value), delay);
-    return () => clearTimeout(timer);
-  }, [value, delay]);
-
-  return debounced;
 }

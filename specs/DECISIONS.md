@@ -600,3 +600,189 @@ including one returns `Invalid Signature` with no indication which. Signing `res
 made _every_ upload fail 401, including a legitimate PNG. That the control case failed too
 is what showed it was our bug rather than the security controls working, and removing it
 changed the response to a permissions error, which separated the two problems.
+
+---
+
+## D-026 — Bill PDFs are stored in Postgres, not an object store
+
+**Spec:** §8.3 — "Key: `bills/{uuidv4}.pdf` ... Private bucket; served via a signed URL,
+7-day expiry, or through an ownership-checked route."
+**Actual:** a `BillPdf` table holding the rendered bytes, served by `/bills/{key}`.
+
+**Reasoning:** there is no private bucket in this stack, and inventing one would have meant
+either building against credentials that do not exist or adding a storage provider the
+project has not chosen. Cloudinary is configured, but it is an image account: `raw` +
+`authenticated` uploads on the free tier are plausible and unverified, and Phase 7 already
+established that shipping code which has never run is worse than an honest gap.
+
+Postgres is not a compromise here so much as the right shape:
+
+- The bytes commit with the order they belong to, so an order carrying a `billPdfKey` that
+  resolves to nothing cannot exist.
+- §8.5's retention requirement (DEBT-026) applies to the invoice and the document alike, and
+  keeping them in one place means one backup and one restore, not two systems that can
+  diverge.
+- A rendered invoice is ~6KB. At twenty bills a day that is under 50MB a year, which is not
+  a database problem. It becomes one only if the shop starts embedding photographs.
+
+**What would change the answer:** an object store being configured for anything else. The
+storage functions are four small exports in `lib/bills/storage.ts`, and the route reads
+through them, so moving the bytes is a change to one file. Logged as DEBT-028.
+
+**The key still follows §8.3's shape.** `bills/` is the route prefix, `.pdf` the
+`Content-Disposition` filename, and the UUIDv4 is what is stored — the decorations live
+where they mean something rather than inside a database identifier.
+
+---
+
+## D-027 — The invoice is set in Helvetica and writes `Rs.`, not `₹`
+
+**Spec:** §8.3 — "Typography and colours from the design tokens."
+**Actual:** colours, scale and spacing are tokens. The font family is Helvetica, a PDF base
+font, and amounts print as `Rs. 8,03,239.39`.
+
+**Reasoning, and it was measured rather than assumed.** The fourteen PDF base fonts are
+encoded in WinAnsi, which has no U+20B9. Rendering `₹` through `@react-pdf/renderer` does
+not fail — it emits byte `0xB9`, which WinAnsi maps to `onesuperior` — so a bill would have
+printed `¹ 7,47,252.00` and nothing would have complained. Found by inflating the content
+stream of a probe render and reading the glyph codes.
+
+Embedding Inter to get one glyph would mean committing a font binary, resolving its path at
+runtime through Next's output tracing, and shipping two subsets (the Latin subset does not
+contain U+20B9 either; it is in latin-ext). `Rs.` is what most Indian tax invoices print,
+and it is unambiguous on a legal document in a way a glyph that might not render is not.
+
+`lib/money.ts` therefore has two formatters over one grouping function — `formatINR` for the
+screen and `formatRupeesAscii` for the page — so the two symbols cannot drift apart in their
+digit grouping.
+
+**The consequence worth knowing about:** any character outside WinAnsi has the same problem,
+including every Indic script. `lib/bills/pdf-text.ts` strips them deliberately rather than
+letting the encoder guess, and a name written in Devanagari currently prints as the
+placeholder. That is a font gap, not a text gap — DEBT-027.
+
+---
+
+## D-028 — `/bills/{key}` accepts a signature **or** session ownership, not the key alone
+
+**Spec:** §8.3 offers a choice — "served via a signed URL, 7-day expiry, **or** through an
+ownership-checked route". DEBT-021 requires the ownership check.
+**Actual:** both, and a bare key is refused.
+
+**Reasoning:** the two access paths are genuinely different and neither control covers both.
+
+The WhatsApp recipient **has no account** — that is the whole feature; §8's flow ends with
+"Customer later verifies that phone → order attaches". An ownership-checked route cannot
+serve them at all, so that link has to be a capability. But MASTER-SPEC's IDOR control is
+unconditional — "Every fetch of an order/bill filters by `userId` from the session, never by
+an ID from the URL alone" — and DEBT-021 was raised in Phase 6 to make sure Phase 8 honoured
+it.
+
+So the route accepts a valid unexpired HMAC signature, **or** a session that owns the order,
+**or** an admin session. A correct key with no signature and no session is a 404, which is
+exactly what DEBT-021 asked for: the unguessable URL is not the authorisation.
+
+**Why a signature at all, when a UUIDv4 is already unguessable.** §8.3 requires the link to
+expire, and a key cannot expire without deleting the bill — which §8.5's retention rule
+forbids. The deadline rides in the signature, so the link dies while the invoice lives.
+
+The HMAC is keyed on a value derived from `SESSION_SECRET` with a versioned domain label, so
+it cannot collide with Phase 6's enquiry HMAC (SEC-013) on the same secret. Every failure
+returns the identical 404 — "no such bill", "bad signature" and "not yours" are
+indistinguishable from outside, or the route becomes an oracle for which invoices exist.
+
+---
+
+## D-029 — A twelfth media slot, `BILL_LOGO`
+
+**Spec:** §7.6's table defines eleven slots. §8.3 says "Logo from a MediaSlot."
+**Actual:** `BILL_LOGO` added to `MEDIA_SLOTS`.
+
+**Reasoning:** §8.3 assumes a logo slot exists and §7.6's table does not have one, because
+nothing on the storefront rendered a logo. The alternative — a twelfth URL field on
+`Settings` — would have put an admin-supplied URL outside §7.7's SSRF guard, which is the
+highest-risk input in the application. Adding the slot means the invoice logo goes through
+exactly the same validated path as every other image the shop can change.
+
+Two Phase-8-specific behaviours hang off it:
+
+- The bytes are cached in Redis for six hours and the slot's save action busts that cache,
+  because a bill render must not depend on a third-party CDN answering. Every failure —
+  unreachable, wrong format, cache miss during an outage — falls back to a typographic
+  wordmark rather than failing the bill.
+- PDF embeds JPEG and PNG only. A WebP logo passes §7.7's check, is a perfectly good image,
+  and is skipped with a logged reason rather than crashing the renderer. The slot's
+  recommendation says so.
+
+---
+
+## D-030 — The WhatsApp bill message carries a claim link, not `/account/orders`
+
+**Spec:** §8.4's template ends `View your purchase history: {siteUrl}/account/orders`.
+**Actual:** `See all your purchases: {siteUrl}/claim/{token}` when a token can be minted;
+the original line when it cannot.
+
+**Reasoning:** the plain link only does something for a customer who already has an account
+with that number verified — which is precisely the customer this message is _not_ for. §8's
+own flow diagram ends "Customer later verifies that phone → order attaches to their account
+automatically", and until Phase 9 nothing in the application could perform that verification
+(DEBT-011). The line was a promise the product could not keep.
+
+The token is minted with the bill and delivered **to the number**, which is what an SMS OTP
+would have proven, over a channel the shop already uses and pays nothing for. It is minted
+only when the number is not already verified, so a customer who is set up gets the original
+line and no dead-end link.
+
+**What this changes about the message's sensitivity.** It already carried a capability — the
+signed PDF link — so the message was never safe to forward. It now carries a second one with
+a wider blast radius: the PDF is one invoice, the token is every unclaimed purchase on that
+number. Single use, seven days, rate limited per number and per IP, and audited. SEC-026.
+
+---
+
+## D-031 — The claim token is derived, not random
+
+**Spec:** the Phase 8 SECURITY review asked for a token that is "unguessable and not
+derivable from the invoice number".
+**Actual:** `HMAC(key, orderId.phone.expiry)`, base64url, where the key is derived from
+`SESSION_SECRET` under a versioned label. Stored hashed and peppered, like `OtpCode`.
+
+**Reasoning:** the token has to be **reproducible**, and a random one cannot be. §8.4 has the
+admin send the message from the bill detail page, which may be days after the bill was raised
+and may happen twice if they resend — but the token is stored hashed, so a random value can
+only be shown once. The alternatives were both bad: mint a fresh token per page view and
+accumulate live credentials, or re-mint and silently kill the link already sitting in the
+customer's WhatsApp.
+
+Deriving it makes the link stable across views and resends, which is the behaviour the
+feature needs. It satisfies the constraint as written — nothing about `orderNo` is an input,
+and the key never leaves the server.
+
+**The cost, stated plainly:** an environment leak lets an attacker who _also_ knows an order
+id and its phone number mint a token, where a random one would have been worthless. That is a
+real reduction. It is accepted because `SESSION_SECRET` leaking is already game over for
+every session in the system, the attacker needs two further values to use it, and single use,
+the TTL and the rate limits all still apply. `activeClaimToken` re-derives and compares
+against the stored hash, so rotating the secret invalidates every outstanding token rather
+than handing out links that will not work.
+
+---
+
+## D-032 — Possession beats an unverified assertion, but never a proven one
+
+**Spec:** MASTER-SPEC §5 — "The claim runs only after successful OTP verification of that
+exact number."
+**Actual:** as specified, plus an explicit rule for the collision that first became reachable
+in Phase 9.
+
+`User.phone` is unique, so two accounts cannot hold one number, and until DEBT-011 was closed
+nothing ever set `phoneVerified` — so the collision could not arise. With a real caller it
+can, and a raw `P2002` would have surfaced as "something went wrong" at the final step of the
+flagship flow. The rule:
+
+- **An unverified incumbent is detached.** Somebody typed the number into an abandoned signup
+  and nobody ever checked it. The claimant has proven possession; the incumbent has not.
+- **A verified incumbent stands, and the claim is refused** with a message pointing at the
+  shop. Two people cannot both have proven the same number. The realistic cause is a recycled
+  SIM, and silently moving a stranger's purchase history to whoever holds the number today is
+  exactly the account takeover §5 warns about — it needs a human, not a policy.

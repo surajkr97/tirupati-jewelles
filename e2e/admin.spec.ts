@@ -223,9 +223,13 @@ test.describe('the admin panel', () => {
 
     await expect(page.getByTestId('slot-HERO_BANNER')).toBeVisible();
     await expect(page.getByTestId('slot-FOOTER_BG')).toBeVisible();
+    // Phase 8 §8.3: "Logo from a MediaSlot." §7.6's table had no logo because nothing on
+    // the storefront rendered one; the invoice does. D-029.
+    await expect(page.getByTestId('slot-BILL_LOGO')).toBeVisible();
+
     // §7.6's table: HERO_BANNER + OFFER_STRIP + 6 category tiles + FEATURE_BANNER +
-    // ABOUT_IMAGE + FOOTER_BG = 11.
-    await expect(page.locator('[data-testid^="slot-"]')).toHaveCount(11);
+    // ABOUT_IMAGE + FOOTER_BG = 11, plus Phase 8's BILL_LOGO = 12.
+    await expect(page.locator('[data-testid^="slot-"]')).toHaveCount(12);
   });
 
   test('a media URL from a disallowed host is refused — §7.7', async ({ page }) => {

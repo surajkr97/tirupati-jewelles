@@ -36,6 +36,8 @@ const MEDIA_SLOTS = [
   'FEATURE_BANNER',
   'ABOUT_IMAGE',
   'FOOTER_BG',
+  /** Phase 8 §8.3 — the logo printed at the top of every bill PDF. */
+  'BILL_LOGO',
 ] as const;
 
 /**

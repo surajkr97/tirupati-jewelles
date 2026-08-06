@@ -55,6 +55,50 @@ enum Channel {
   EMAIL
 }
 
+/// Proof that someone holds a phone number, delivered TO that number.
+/// Created by Phase 9 (DEBT-011), designed in the Phase 8 SECURITY review.
+///
+/// ═══════════════════════════════════════════════════════════════════════════
+///  THIS IS THE POSSESSION PROOF THE ORDER CLAIM HAS BEEN WAITING FOR.
+///
+///  MASTER-SPEC §5: "The claim runs only after successful OTP verification of that exact
+///  number. Never on an unverified phone field. This is the difference between a feature and
+///  an account-takeover vector."
+///
+///  Email OTP proves control of an ACCOUNT, not of a NUMBER (D-011), so
+///  `claimOrdersForVerifiedPhone` had no caller and Phase 8's flagship feature could not
+///  complete. A token minted with the bill and sent inside the §8.4 WhatsApp message is
+///  delivered to the number itself — the same thing an SMS OTP proves, over a channel the
+///  shop already uses and pays nothing for.
+///
+///  Stored HASHED, exactly like `OtpCode`. A database leak must not hand out claim
+///  capabilities, and the raw token exists only in the message that carried it.
+/// ═══════════════════════════════════════════════════════════════════════════
+model ClaimToken {
+  id String @id @default(uuid())
+
+  /// SHA-256 of the raw token, peppered with OTP_PEPPER. Never the token itself.
+  tokenHash String @unique
+
+  /// E.164. The number being proven — NOT the account, which does not exist yet.
+  phone String
+
+  /// The bill it was issued with. Audit only; claiming attaches every unclaimed order for
+  /// the number, not just this one.
+  orderId String?
+
+  /// Single use. Set by a conditional UPDATE, never by a read-then-write.
+  consumedAt DateTime?
+  /// Which account consumed it, for the audit trail.
+  consumedBy String?
+
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([phone])
+  @@index([expiresAt])
+}
+
 // ─────────────────────────────────────────────────────────────────────── rates
 
 model MetalRate {
@@ -154,8 +198,35 @@ model Order {
   createdByUserId String
   createdAt       DateTime    @default(now())
 
+  // ── Phase 8 (specs/08-billing-whatsapp.md) ────────────────────────────────
+
+  /// §8.1: "optional note". Free text from the admin; escaped everywhere it renders.
+  note String?
+
+  /// §8.3: the rate reference block — "Rates applied on <date>: Gold 22K ₹X/10g …".
+  ///
+  /// Every purity's rate at bill time, paise per gram as strings, not only the ones on the
+  /// bill. `OrderItem.ratePerGram` already snapshots what was *applied*; this snapshots
+  /// what was *quoted*, which is what makes the invoice defensible months later.
+  ratesSnapshot Json?
+  ratesAt       DateTime?
+
+  /// §8.2: "a repeated key returns the existing order rather than creating a duplicate."
+  /// Unique, so the guarantee is the database's rather than a read-then-write race.
+  idempotencyKey String? @unique
+
+  /// §8.5: "void (soft — never hard delete an invoice)". A voided invoice still exists,
+  /// still has its number, and is excluded from every total (§8.7).
+  voidedAt       DateTime?
+  voidReason     String?
+  voidedByUserId String?
+
+  billPdf BillPdf?
+
   @@index([customerPhone])
   @@index([userId])
+  /// §8.5's list is ordered newest-first and filtered by date range.
+  @@index([createdAt])
 }
 
 model OrderItem {
@@ -172,6 +243,50 @@ model OrderItem {
   stoneCharge BigInt  @default(0)
   gstPct      Decimal @db.Decimal(5, 2)
   lineTotal   BigInt
+
+  /// §8.3: "Hallmark / HUID / BIS numbers per item where present."
+  ///
+  /// Snapshotted like the rate, for the same reason: a product's hallmark number can be
+  /// corrected in the catalogue, and reprinting a 2026 invoice must not silently restate
+  /// which physical piece was sold.
+  hallmarkNo String?
+  bisCertNo  String?
+}
+
+/// Per-year invoice sequence (Phase 8 §8.2).
+///
+/// §8.2: "sequence from a DB counter inside the transaction. **Do not derive it from
+/// `COUNT(*)`** — concurrent bills will collide."
+///
+/// One row per year, because the number resets: `JW-2026-0001` then `JW-2027-0001`. The
+/// increment is a single `INSERT … ON CONFLICT DO UPDATE … RETURNING`, which takes a row
+/// lock for the rest of the transaction — so fifty concurrent bills serialise on this row
+/// and each gets its own number. See lib/bills/numbering.ts.
+model BillSequence {
+  year Int @id
+  /// The NEXT number to hand out. Read-modify-write happens in one statement.
+  next Int @default(1)
+}
+
+/// The rendered invoice (Phase 8 §8.3).
+///
+/// Bytes live in Postgres rather than an object store — see DECISIONS.md D-026. The short
+/// version: there is no private bucket configured, Cloudinary is image-scoped, and a bill
+/// that has never been stored anywhere provable is worse than one stored in the database
+/// that already holds the order it belongs to.
+model BillPdf {
+  /// §8.3: "Key: `bills/{uuidv4}.pdf` — never sequential, never guessable."
+  key       String   @id
+  orderId   String   @unique
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  bytes     Bytes
+  byteSize  Int
+  createdAt DateTime @default(now())
+  /// §8.3: signed URLs expire. Kept on the row so the link's lifetime is a property of the
+  /// bill rather than of whoever last minted a URL for it.
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }
 
 // ─────────────────────────────────────────────────────────────────────── audit

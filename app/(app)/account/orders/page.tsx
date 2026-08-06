@@ -50,6 +50,7 @@ export default async function OrdersPage() {
       createdAt: true,
       grandTotal: true,
       billPdfKey: true,
+      voidedAt: true,
       _count: { select: { items: true } },
     },
   });
@@ -60,6 +61,37 @@ export default async function OrdersPage() {
         <h1 className="text-h1 font-semibold tracking-tight text-ink md:text-h1-lg">
           Your orders
         </h1>
+
+        {/*
+          §8.6: "Prominent prompt for users without a verified phone: 'Bought from us
+          before? Verify your phone to see your purchases.'"
+
+          Shown to anyone whose number is unverified, whether or not they already have
+          orders — a customer can have one online purchase showing and three in-shop ones
+          waiting against a number nobody has proved they hold. The empty state below says
+          the same thing to a first-time visitor.
+
+          What it does NOT promise is that verifying today will attach them: with email-only
+          OTP (D-011) nothing yet proves possession of a number, so the claim does not run.
+          DEBT-011 tracks it, and the copy stops short of the claim rather than making one
+          the system cannot keep.
+        */}
+        {!user.phoneVerified && (
+          <Card className="flex flex-col gap-2 bg-taupe-lt/30">
+            <p className="text-h3 font-semibold text-ink">Bought from us before?</p>
+            <p className="text-body text-muted">
+              Purchases made in the shop are held against your mobile number. Add and
+              confirm your number to see them here.
+            </p>
+            <div>
+              <Link href="/account">
+                <Button variant="accent" size="md">
+                  Add your mobile number
+                </Button>
+              </Link>
+            </div>
+          </Card>
+        )}
 
         {orders.length === 0 ? (
           /*
@@ -86,38 +118,41 @@ export default async function OrdersPage() {
           <ul className="flex flex-col gap-4">
             {orders.map((order) => (
               <li key={order.id}>
-                <Card className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                  <div className="flex flex-col gap-1">
-                    <p className="text-body font-semibold text-ink tabular">
-                      {order.orderNo}
-                    </p>
-                    <p className="text-small text-muted">
-                      <time dateTime={order.createdAt.toISOString()}>
-                        {formatShopDate(order.createdAt)}
-                      </time>{' '}
-                      · {order._count.items} {order._count.items === 1 ? 'item' : 'items'}
-                    </p>
-                  </div>
+                {/*
+                  The whole row is the link, and it goes to the ownership-checked detail
+                  page (§8.6) rather than straight at the PDF. `/bills/{key}` still serves
+                  this customer — their session is one of the three proofs it accepts — but
+                  an unguessable URL is not an authorisation (DEBT-021), and the route that
+                  filters by the session's `userId` is the one that belongs in a list.
+                */}
+                <Link href={`/account/orders/${order.id}`} className="block">
+                  <Card className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+                    <div className="flex flex-col gap-1">
+                      <p className="text-body font-semibold text-ink tabular">
+                        {order.orderNo}
+                      </p>
+                      <p className="text-small text-muted">
+                        <time dateTime={order.createdAt.toISOString()}>
+                          {formatShopDate(order.createdAt)}
+                        </time>{' '}
+                        · {order._count.items}{' '}
+                        {order._count.items === 1 ? 'item' : 'items'}
+                        {order.voidedAt && ' · cancelled'}
+                      </p>
+                    </div>
 
-                  <div className="flex items-center gap-4">
-                    <p className="text-h3 font-semibold text-ink tabular">
-                      {formatINR(order.grandTotal)}
-                    </p>
-                    {/*
-                      Phase 8 owns bill delivery. The key is rendered as a link only when
-                      one exists; the route that serves it will re-check ownership itself,
-                      because a URL that is unguessable is not the same as a URL that is
-                      authorised.
-                    */}
-                    {order.billPdfKey && (
-                      <Link href={`/bills/${order.billPdfKey}`}>
-                        <Button variant="outline" size="sm">
-                          Bill
-                        </Button>
-                      </Link>
-                    )}
-                  </div>
-                </Card>
+                    <div className="flex items-center gap-4">
+                      <p className="text-h3 font-semibold text-ink tabular">
+                        {formatINR(order.grandTotal)}
+                      </p>
+                      {order.billPdfKey && (
+                        <span className="inline-flex h-tap items-center rounded-pill px-4 text-small font-semibold text-taupe-deep ring-1 ring-line ring-inset">
+                          Invoice
+                        </span>
+                      )}
+                    </div>
+                  </Card>
+                </Link>
               </li>
             ))}
           </ul>

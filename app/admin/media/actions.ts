@@ -16,6 +16,7 @@ import { revalidatePath, revalidateTag } from 'next/cache';
 import { z } from 'zod';
 
 import { adminAction, type ActionResult } from '@/lib/admin/actions';
+import { BILL_LOGO_SLOT, invalidateBillLogo } from '@/lib/bills/logo';
 import { db } from '@/lib/db';
 import { checkImageUrl, FAILURE_MESSAGE } from '@/lib/media/fetch-image';
 import { isKnownSlot } from '@/lib/media/slots';
@@ -136,6 +137,14 @@ export async function saveMediaSlot(input: unknown): Promise<SaveSlotResult> {
     // (D-012), so both are called.
     revalidateTag(MEDIA_TAG, 'max');
     for (const path of MEDIA_SURFACES) revalidatePath(path);
+
+    /**
+     * The invoice logo is not an ISR surface — it is bytes cached in Redis for six hours
+     * (Phase 8 §8.3), so `revalidatePath` cannot reach it. Without this, an owner who
+     * uploads a new logo keeps printing the old one for the rest of the afternoon and has
+     * no way to tell why.
+     */
+    if (saved.slotKey === BILL_LOGO_SLOT) await invalidateBillLogo();
 
     return { ok: true, data: { imageUrl: saved.imageUrl } };
   });

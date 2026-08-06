@@ -38,6 +38,26 @@ const TEST_ENV: Record<string, string> = {
 // The DB URL must be the test one even if .env already set a development value.
 process.env.DATABASE_URL = TEST_ENV.DATABASE_URL;
 
+/**
+ * Redis, likewise — and this one bit.
+ *
+ * `.env` sets `REDIS_URL` for development, and the `??=` below would have kept it, so the
+ * suite and the dev server shared one Redis database. The integration tests write
+ * `rates:current` from the TEST database, and the running dev app then served those figures:
+ * `/api/rates` reported gold 18K at ₹0 on a development machine whose Postgres had a
+ * perfectly good rate in it. It surfaced as an E2E assertion failing on a total, three
+ * layers away from the cause.
+ *
+ * Database 1, not a separate server: same container, no extra setup, and `FLUSHDB` in a test
+ * can never reach development data.
+ */
+process.env.REDIS_URL = (
+  process.env.TEST_REDIS_URL ??
+  process.env.REDIS_URL ??
+  ''
+).replace(/\/\d+$/, '/1');
+if (!process.env.REDIS_URL) process.env.REDIS_URL = 'redis://127.0.0.1:6379/1';
+
 for (const [key, value] of Object.entries(TEST_ENV)) {
   process.env[key] ??= value;
 }

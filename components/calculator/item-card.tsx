@@ -32,6 +32,15 @@ export interface ItemCardProps {
   onChange: (patch: Partial<Omit<CalculatorItem, 'id'>>) => void;
   onRemove: () => void;
   onDuplicate: () => void;
+  /**
+   * Extra fields, rendered above the breakdown.
+   *
+   * Added by Phase 8 (§8.1) so the bill builder can put hallmark and BIS numbers on a card
+   * without forking it. Undefined on the customer calculator, which renders exactly what
+   * Phase 5 shipped — the alternative, a `mode` prop, would grow a branch inside a
+   * component both screens depend on.
+   */
+  extra?: React.ReactNode;
 }
 
 export function ItemCard({
@@ -43,6 +52,7 @@ export function ItemCard({
   onChange,
   onRemove,
   onDuplicate,
+  extra,
 }: ItemCardProps) {
   const [showStones, setShowStones] = useState(item.stoneCharge.trim() !== '');
   const [showBreakdown, setShowBreakdown] = useState(false);
@@ -157,6 +167,8 @@ export function ItemCard({
           + Add stone or other charges
         </button>
       )}
+
+      {extra}
 
       {/* §5.4: "Per-item breakdown, collapsed by default." */}
       <div className="border-t border-line pt-4">

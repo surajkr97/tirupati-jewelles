@@ -14,6 +14,7 @@ import Link from 'next/link';
 
 import { Section } from '@/components/shell';
 import { Badge, Card } from '@/components/ui';
+import { getSalesTotals, NOT_VOIDED, shopStartOfDay } from '@/lib/bills/totals';
 import { formatShopDate } from '@/lib/datetime';
 import { db } from '@/lib/db';
 import { formatINR } from '@/lib/money';
@@ -26,6 +27,7 @@ export const metadata: Metadata = { title: 'Dashboard' };
 /** §7.2: "rates not updated in 48h". */
 const STALE_RATE_MS = 48 * 60 * 60 * 1000;
 
+/** Local midnight, for bucketing the 30-day chart. `shopStartOfDay` handles the boundaries. */
 function startOfDay(date: Date): Date {
   const copy = new Date(date);
   copy.setHours(0, 0, 0, 0);
@@ -34,8 +36,7 @@ function startOfDay(date: Date): Date {
 
 export default async function AdminDashboardPage() {
   const now = new Date();
-  const today = startOfDay(now);
-  const weekAgo = new Date(today.getTime() - 6 * 24 * 60 * 60 * 1000);
+  const today = shopStartOfDay(now);
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const thirtyDaysAgo = new Date(today.getTime() - 29 * 24 * 60 * 60 * 1000);
 
@@ -44,13 +45,15 @@ export default async function AdminDashboardPage() {
    *
    * §7 TEST: "Dashboard totals match a direct SQL aggregation" — which is easiest to
    * guarantee by the dashboard *being* the SQL aggregation rather than summing rows in JS.
+   *
+   * Phase 8 §8.7 moved the sold totals into `lib/bills/totals.ts`: they are cached in Redis
+   * for 60s, invalidated on every new bill and every void, and — the part that matters —
+   * they exclude voided orders. Every query on this page now carries `NOT_VOIDED`, because
+   * one that does not makes the shop's month look bigger than its year.
    */
   const [
     rates,
-    todayAgg,
-    weekAgg,
-    monthAgg,
-    allTimeAgg,
+    totals,
     billsThisMonth,
     enquiriesThisMonth,
     recentOrders,
@@ -58,25 +61,13 @@ export default async function AdminDashboardPage() {
     dailyRaw,
   ] = await Promise.all([
     getCurrentRates(),
-    db.order.aggregate({
-      _sum: { grandTotal: true },
-      _count: true,
-      where: { createdAt: { gte: today } },
+    getSalesTotals(),
+    db.order.count({
+      where: { ...NOT_VOIDED, sentViaWa: true, sentAt: { gte: monthStart } },
     }),
-    db.order.aggregate({
-      _sum: { grandTotal: true },
-      _count: true,
-      where: { createdAt: { gte: weekAgo } },
-    }),
-    db.order.aggregate({
-      _sum: { grandTotal: true },
-      _count: true,
-      where: { createdAt: { gte: monthStart } },
-    }),
-    db.order.aggregate({ _sum: { grandTotal: true }, _count: true }),
-    db.order.count({ where: { sentViaWa: true, sentAt: { gte: monthStart } } }),
     db.enquiry.count({ where: { createdAt: { gte: monthStart } } }),
     db.order.findMany({
+      where: NOT_VOIDED,
       orderBy: { createdAt: 'desc' },
       take: 10,
       select: {
@@ -89,18 +80,27 @@ export default async function AdminDashboardPage() {
       },
     }),
     db.product.count({ where: { isActive: true, images: { none: {} } } }),
+    /**
+     * `::bigint` is load-bearing, not tidiness.
+     *
+     * Postgres widens `SUM()` over a bigint column to `numeric`, which Prisma hands back as
+     * a Decimal — and every money helper in this codebase takes a `bigint` (MASTER-SPEC §4).
+     * Without the cast, `formatINR` threw `Cannot mix BigInt and other types` and the whole
+     * dashboard 500'd.
+     *
+     * It was latent from Phase 7 and could not fire until this shop had a sale: the chart is
+     * only rendered when `peak` is non-zero, and the development database had no orders in
+     * it until Phase 8 started raising bills. Found by the Phase 8 E2E run, three routes away
+     * from anything it was testing.
+     */
     db.$queryRaw<{ day: Date; total: bigint | null }[]>`
-      SELECT date_trunc('day', "createdAt") AS day, SUM("grandTotal") AS total
+      SELECT date_trunc('day', "createdAt") AS day, SUM("grandTotal")::bigint AS total
       FROM "Order"
-      WHERE "createdAt" >= ${thirtyDaysAgo}
+      WHERE "createdAt" >= ${thirtyDaysAgo} AND "voidedAt" IS NULL
       GROUP BY 1
       ORDER BY 1 ASC
     `,
   ]);
-
-  const allTimeCount = allTimeAgg._count;
-  const averageOrder =
-    allTimeCount > 0 ? (allTimeAgg._sum.grandTotal ?? 0n) / BigInt(allTimeCount) : 0n;
 
   /** §7.2: "rates not updated in 48h". */
   const staleRates = RATE_FACES.filter((face) => {
@@ -181,28 +181,34 @@ export default async function AdminDashboardPage() {
           </Card>
         )}
 
+        {/* §8.7: "Total sold — today / week / month / all time, from `SUM(grandTotal)`.
+            Exclude voided orders." */}
         <div className="grid grid-cols-2 gap-4">
           <Stat
             label="Sold today"
-            value={formatINR(todayAgg._sum.grandTotal ?? 0n)}
-            sub={`${todayAgg._count} orders`}
+            value={formatINR(totals.today.total)}
+            sub={`${totals.today.count} orders`}
           />
           <Stat
             label="This week"
-            value={formatINR(weekAgg._sum.grandTotal ?? 0n)}
-            sub={`${weekAgg._count} orders`}
+            value={formatINR(totals.week.total)}
+            sub={`${totals.week.count} orders`}
           />
           <Stat
             label="This month"
-            value={formatINR(monthAgg._sum.grandTotal ?? 0n)}
-            sub={`${monthAgg._count} orders`}
+            value={formatINR(totals.month.total)}
+            sub={`${totals.month.count} orders`}
           />
           <Stat
             label="All time"
-            value={formatINR(allTimeAgg._sum.grandTotal ?? 0n)}
-            sub={`${allTimeCount} orders`}
+            value={formatINR(totals.allTime.total)}
+            sub={`${totals.allTime.count} orders`}
           />
-          <Stat label="Average order" value={formatINR(averageOrder)} sub="all time" />
+          <Stat
+            label="Average order"
+            value={formatINR(totals.averageOrder)}
+            sub="all time"
+          />
           <Stat
             label="Bills sent"
             value={String(billsThisMonth)}

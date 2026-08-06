@@ -46,7 +46,22 @@ const schema = z.object({
     .string()
     .regex(/^\d{1,3}(\.\d{1,2})?$/, 'Making charge must be a percentage.')
     .refine((v) => Number(v) <= 100, 'Making charge must be 0–100.'),
-  billPrefix: z.string().min(1).max(8),
+  /**
+   * §7.9's invoice prefix, charset-restricted by Phase 8 SECURITY (SEC-021).
+   *
+   * It was `z.string().min(1).max(8)` — length only — and it flows into `Order.orderNo`,
+   * which flows into the invoice PDF's `Content-Disposition` header. A prefix containing a
+   * newline made every affected bill's download throw at the header layer: the runtime
+   * rejects CR/LF in a header value, so it is not response splitting, but the bad prefix is
+   * already baked into every `orderNo` raised while it was set and those PDFs then 500
+   * forever. Admin-only and self-inflicted, and permanent, which is why it is fixed rather
+   * than logged.
+   */
+  billPrefix: z
+    .string()
+    .min(1)
+    .max(8)
+    .regex(/^[A-Za-z0-9-]+$/, 'Use letters, numbers and hyphens only.'),
   billSequence: z.coerce.number().int().min(1).max(9_999_999),
   /** null = follow the env flag; true/false override it (§7.9). */
   tickerJitter: z.enum(['default', 'on', 'off']),

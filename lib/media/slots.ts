@@ -73,6 +73,26 @@ export const MEDIA_SLOTS: SlotDefinition[] = [
     ratio: '4/1',
     supportsText: false,
   },
+  /**
+   * Added by Phase 8 (specs/08-billing-whatsapp.md §8.3: "Logo from a MediaSlot").
+   *
+   * §7.6's table has eleven slots and no logo, because nothing on the storefront rendered
+   * one. The invoice does, and §8.3 says where it comes from — so the slot is created here
+   * rather than the logo being hardcoded or pasted into Settings as a twelfth URL field
+   * with none of §7.7's SSRF checking behind it.
+   *
+   * PNG or JPEG only, and the reason is a hard constraint rather than a preference: PDF
+   * embeds those two and nothing else. WebP and AVIF are accepted by the slot's validator
+   * and silently ignored by the invoice, so the recommendation says so.
+   */
+  {
+    key: 'BILL_LOGO',
+    label: 'Invoice logo',
+    where: 'The top of every bill PDF',
+    recommended: '600×200 (PNG or JPEG)',
+    ratio: '3/1',
+    supportsText: false,
+  },
 ];
 
 export const SLOT_BY_KEY = new Map(MEDIA_SLOTS.map((slot) => [slot.key, slot]));

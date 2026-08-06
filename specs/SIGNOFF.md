@@ -947,12 +947,537 @@ and verified. **Phase 8 is unblocked.**
 
 ---
 
-## Phase 8 — Billing → PDF → WhatsApp
+## Phase 8 — Billing → PDF → WhatsApp → Auto-Order
 
-Not started. **Unblocked** — Phase 7 is signed off (§7.8 carried as DEBT-022).
+### Phase 8 — DEV
+
+Status: **PASS** — all seven §8 sections built and verified.
+
+Verified: `pnpm build` compiles with zero TypeScript errors, `pnpm lint` and
+`pnpm format:check` clean, **690 unit/integration tests** still passing (no regressions from
+the Phase 5 component extraction), and `pnpm verify:bill` — a new script, 44 checks — passing
+against a real Postgres and a real PDF render.
+
+- **8.1 Bill builder** — `/admin/bills/new`. Customer name, `+91`-prefixed phone, note, "Load
+  from product", per-item HUID/BIS, live grand total in the shared `StickyBar`, and Generate
+  disabled until the phone is a real Indian mobile.
+- **8.2 Order creation** — `POST /api/admin/bills`. Every line recomputed server-side, rates
+  read from the database, `ratePerGram`/`makingPct`/`gstPct` snapshotted per item,
+  `JW-{YYYY}-{seq}` from a DB counter inside the transaction, auto-link only on a
+  `phoneVerified` account, `AuditLog`, and `Idempotency-Key`.
+- **8.3 PDF** — `@react-pdf/renderer`, A4, logo from a MediaSlot, `TAX INVOICE` header, the
+  rate reference block, a ten-column item table, CGST/SGST, grand total in figures and words,
+  hallmark/BIS per item, and the terms footer. Stored under a UUIDv4 key, served signed with
+  a 7-day expiry, `X-Robots-Tag: noindex`, URL cached in Redis 24h.
+- **8.4 WhatsApp** — `WhatsAppSender` interface, `DeepLinkSender` (live) and `CloudApiSender`
+  (declared stub), swapped by `WHATSAPP_SENDER`. §8.4's message verbatim, encoded through
+  Phase 6's one `encodeURIComponent` call. `Mark as sent` is a separate action, never
+  optimistic. Resend from the detail page.
+- **8.5 Bills list** — `/admin/bills` with search, sent/claimed/void filters, a date range,
+  paging, the detail page, soft void with a reason, re-render, and a CSV export.
+- **8.6 Customer side** — `/account/orders` links to a new ownership-checked
+  `/account/orders/[id]`, and prompts an unverified customer to add their number.
+- **8.7 Dashboard totals** — `SUM(grandTotal)` per period, voided orders excluded everywhere,
+  cached in Redis for 60s and invalidated on every bill and every void.
+
+Deviations recorded: **D-026** (PDF bytes in Postgres), **D-027** (Helvetica and `Rs.`),
+**D-028** (`/bills/{key}` takes a signature _or_ session ownership), **D-029** (`BILL_LOGO`
+media slot). Dependency added: `@react-pdf/renderer` 4.5.1, noted in the phase file.
+
+**DEBT-021 is closed** — the obligation Phase 6 SECURITY left for this phase. **DEBT-017 is
+closed** — the CGST/SGST split. **DEBT-024 is partly closed**: `billPrefix` and the shop
+identity block are now read from Settings; the GST and making defaults still are not, and
+should not be until DEBT-001 settles the taxable base.
+
+#### The two structural decisions worth reading
+
+**1. The invoice number and the PDF are deliberately in different transactions.** §8.2 wants
+the sequence incremented inside the transaction that writes the order — a number handed out
+by a transaction that then rolls back is a permanent gap in a legally numbered series. But
+rendering takes about a second, and holding the `BillSequence` row lock for that long would
+serialise the shop's till behind a PDF library. So the transaction is `nextSequence` → order
+→ items → audit, and the render happens after the commit. The failure modes are not
+symmetric: a render that fails leaves an order with no `billPdfKey`, which the detail page
+re-renders on request; a transaction that fails would leave a hole nothing can repair.
+
+The increment itself is one statement — `INSERT … ON CONFLICT DO UPDATE … RETURNING` — because
+`SELECT` then `UPDATE` is two, and another transaction reads the same value in between.
+Measured: fifty genuinely concurrent creations produced fifty unique, gapless numbers.
+
+**2. `/bills/{key}` accepts a signature or session ownership, and never the bare key.** The
+two access paths pull in opposite directions and each needs its own control — the WhatsApp
+recipient has no account, and MASTER-SPEC's IDOR rule is unconditional. Full reasoning in
+D-028. Verified live rather than argued: bare key → 404, signed URL → 200 `application/pdf`,
+tampered signature → 404, expiry extended by an hour → 404, admin session → 200, and
+`/account/orders/[id]` for an order the session does not own → 404.
+
+#### Four defects found by rendering and running, not by reading
+
+**1. The `₹` sign does not exist in a PDF base font, and nothing errors.** WinAnsi has no
+U+20B9; `@react-pdf/renderer` emits byte `0xB9`, which is `onesuperior`. Every invoice would
+have printed `¹ 7,47,252.00` and no exception would have been raised. Found by inflating a
+probe render's content stream and reading the glyph codes. Fixed by `formatRupeesAscii`
+(D-027), and `verify:bill` now asserts no `₹` reaches the page.
+
+**2. A customer name with an emoji printed as `=O`.** Same root cause, wider blast radius:
+the customer name is the field a disputed invoice turns on. `lib/bills/pdf-text.ts` now
+normalises to NFC, transliterates what has a plain equivalent, drops what the font cannot
+draw, and substitutes an honest placeholder if a name reduces to nothing. This also answers
+§8 SECURITY's "customer name and note fields escaped in the PDF" — in a PDF the escaping that
+matters is that the string cannot smuggle an unrenderable byte past the encoder. The real
+limitation it exposes is DEBT-027: an Indic-script name needs an embedded font.
+
+**3. A 20-item bill printed its last row underneath the footer, and its columns touched.**
+Both only visible in a rendered page: the page's bottom padding was 28pt short of the fixed
+footer's real height, and flex columns with no gutter ran a long description into the purity
+cell — `…description to test wrapping22K (916)`. Also disabled hyphenation, which had broken
+a name as "deliberate-ly"; the library's dictionary is English prose and a product name is a
+proper noun.
+
+**4. The verification script passed on its first run and failed on its second.** It left a
+`phoneVerified` user on the fixture number, so "userId is null when nobody has verified that
+number" then failed on data the previous run had created. Fixed by resetting the fixtures
+before it starts and cleaning up on success — a check whose result depends on whether it has
+been run before is not a check.
+
+#### Phase 5's components were extracted, not forked
+
+§8.1: "Do not fork them. Two diverging pricing UIs is a future defect factory." So
+`priceItems` and the debounce hook moved out of `calculator.tsx` into shared modules, the
+card stack became `components/calculator/item-list.tsx`, and both screens import it. The
+bill's extra per-item fields arrive through a `renderExtra` render prop rather than a `mode`
+flag, so the customer calculator renders exactly what Phase 5 shipped. `/calculator` was
+re-checked live after the refactor.
+
+One primitive was touched: `Input` gained a `prefix` adornment, the mirror of its existing
+`suffix`, for §8.1's "`+91` prefix affordance". `@DESIGN:` that file is yours — the
+alternative was reproducing the field's styling inside an admin component, which is how
+design drift starts. Please confirm or replace it.
+
+#### What is NOT done, and why
+
+**DEBT-011 — the claim still cannot complete, and this is a launch blocker.** Everything on
+Phase 8's side is built: `customerPhone` is normalised to E.164 before the write (the exact
+thing Phase 3 left a note demanding), a bill auto-links only to a `phoneVerified` account,
+and an unverified customer is prompted on `/account/orders`. Verified: an unverified matching
+phone does **not** link, a verified one does. But with email-only OTP (D-011) nothing proves
+possession of a number, so `claimOrdersForVerifiedPhone` still has no caller and acceptance
+criterion 4 completes only when it does.
+
+The fix DEBT-011 already recommends is now cheap — a single-use claim token in the §8.4
+message, which is delivered _to that number_ — but it is a new authentication surface and
+§7 established that those get a SECURITY design review before they get built. Phase 8 did not
+invent it. `@SECURITY:` this is the one thing standing between the flagship feature and
+working end to end.
+
+`@TEST:` `pnpm verify:bill` covers the §8 TEST cases that need real concurrency or a real
+render, and cleans up after itself. It is DEV's own check, not a substitute for yours — in
+particular it does not touch the HTTP boundary, the E2E flow, or the customer-A-versus-B
+IDOR case with two real accounts.
+
+`@DEV:` Phase 9 must not add a hard delete for orders or `BillPdf` rows (DEBT-026 — six-year
+GST retention), and `RATE_SURFACES` still governs any new page that renders a rate.
+
+### Phase 8 — TEST
+
+Status: **PASS for what is built.** One acceptance criterion is proven at the data layer but
+not through the product — see the last section.
+
+Coverage: **822 unit/integration tests across 29 files** (up from 690), **343 E2E** across
+375 / 768 / 1280. Phase 8 added 132 unit/integration and 7 E2E.
+
+Integration suites run against a real Postgres and a real Redis. Everything §8 asks for is a
+database behaviour — a row lock under fifty concurrent writers, a unique constraint settling
+an idempotency race, a transaction boundary — and a mock would prove only that the mock does
+what it was told.
+
+| Spec requirement                                                         | Result                                                                            |
+| :----------------------------------------------------------------------- | :-------------------------------------------------------------------------------- |
+| Tampered client total → stored order has the server-computed total       | PASS — and the payload is REJECTED, not ignored; nothing is written               |
+| Rate snapshot: create → change rates → reopen → figures unchanged        | PASS — plus a control proving a NEW bill does pick the new rate up                |
+| 50 concurrent bill creations → 50 unique sequential numbers, no gaps     | PASS — real concurrency, and mutation-checked against the `COUNT(*)` §8.2 forbids |
+| Idempotency key: same key twice → one order                              | PASS — including the race where five simultaneous requests all miss the read      |
+| Bill for a phone with no account → claim on verification → order appears | PASS at the data layer — **the product cannot reach it yet.** See below           |
+| Bill for a phone with an unverified account → does not auto-link         | PASS                                                                              |
+| PDF renders with 1 item and 20 items without layout breaking             | PASS — asserted on parsed page geometry, not on "bytes came back"                 |
+| Amount-in-words: ₹1, ₹100, ₹1,00,000, ₹1,00,00,000, and a paise value    | PASS — including §8.3's own example string verbatim                               |
+| GST split sums exactly to the total GST                                  | PASS — every value 0–999 paise, both parities, plus a real bill                   |
+| WhatsApp URL decodes to the intended message; name with `&` and emoji    | PASS — a round trip through Phase 6's encoder, asserted in a browser too          |
+| Dashboard totals match direct SQL                                        | PASS — expected figures come from an independently written `$queryRaw`            |
+| E2E 375px: 3-item bill → PDF → WhatsApp href → mark sent → admin list    | PASS                                                                              |
+| Only ADMIN can create bills; sequential PDF guessing returns 404         | PASS — 30 route assertions, every denial also asserting nothing was written       |
+| Customer A cannot fetch customer B's bill by ID or by PDF key            | PASS — and every refusal returns a byte-identical body                            |
+
+#### Three defects found, all by tests rather than by review
+
+**1. A malformed weight returned 500, not 400.** `POST /api/admin/bills` with
+`weightGrams: "abc"` threw out of the Zod schema entirely. Root cause in one sentence: Zod
+runs every refinement on a value including the ones after a failure, so the second check —
+"a billed item must weigh something" — was handed `"abc"` anyway and `gramsToMilligrams`
+threw straight through `safeParse`. Fixed by making that refinement defer when the value does
+not parse. The regression test was confirmed to fail against the old code.
+
+**2. The sticky bar covered "Add another item" on the bill builder at 375px.** The admin
+layout never received Phase 6's `has-[[data-sticky-bar]]` padding, because until Phase 8 no
+admin screen had a sticky bar. The button was visible, enabled and unclickable — Playwright
+found it by timing out on a click that looks fine in a screenshot. This is the third time
+this bug has appeared in this codebase and the second time a layout, not a page, was the
+right place to fix it.
+
+**3. The admin dashboard 500'd once the shop had a sale.** `SUM("grandTotal")` over a bigint
+column returns `numeric`, which Prisma hands back as a Decimal, and `formatINR` throws
+`Cannot mix BigInt and other types`. Latent since Phase 7 and unreachable until Phase 8
+created the first order: the 30-day chart only renders when there is something to chart, so
+an empty development database hid it completely. Fixed with `::bigint` in the query. The E2E
+now asserts the dashboard renders **with a sale in it** and that "sold today" is non-zero —
+an assertion against an empty shop exercises the empty-state branch and nothing else, which
+is exactly how this survived a phase.
+
+#### Two harness bugs, both of which had been producing false results
+
+**The PDF geometry test could not fail.** The first version parsed `x y Tm` and called that
+the text position. `@react-pdf/renderer` emits the same `Tm` for every run and positions
+content with `q`/`cm` transformations around it, so every run reported the same coordinate —
+and the footer-overlap assertion passed identically against the padding value that caused
+the original defect. Found by mutation, not by reading it. Replaced with a content-stream
+walk that keeps the CTM stack, and then with a stronger formulation: measure the rendered
+footer's real extent and assert the page's reserved padding clears it. That flips exactly at
+the boundary that matters, on any fixture, and fails on the 56pt that produced the bug.
+
+**The test suite and the development server shared one Redis database.** `vitest.setup.ts`
+forced `DATABASE_URL` to the test database but let `.env`'s `REDIS_URL` stand — so
+integration tests wrote `rates:current` from the TEST database and the running dev app served
+those figures. `/api/rates` reported gold 18K at ₹0 on a machine whose Postgres held a
+perfectly good rate. It surfaced as an E2E total assertion failing, three layers from the
+cause. The suite now runs on Redis database 1.
+
+#### The new tests were mutation-checked rather than trusted
+
+Each of these was applied to the implementation and the named test confirmed to fail:
+
+| Mutation                                                    | Caught by                      |
+| :---------------------------------------------------------- | :----------------------------- |
+| `nextSequence` → `SELECT COUNT(*) + 2` (what §8.2 forbids)  | the 50-concurrent-bills test   |
+| `NOT_VOIDED` dropped from one aggregate                     | two dashboard tests            |
+| `grandTotal` stored as the subtotal                         | three `createBill` tests       |
+| The builder showing the subtotal instead of the grand total | the 375px E2E                  |
+| `PAGE_BOTTOM_PADDING` 84 → 56                               | the footer-clearance test      |
+| The weight refinement reverted                              | the malformed-input route test |
+| `SUM("grandTotal")` without `::bigint`                      | the E2E dashboard assertion    |
+
+#### Not proven, and it is the flagship
+
+**Acceptance criterion 4 — "Unclaimed orders attach on verified phone signup" — passes at the
+data layer and cannot be reached through the product.** The full sequence is tested and
+green: a walk-in is billed to a number nobody owns, the order is unclaimed, an account is
+created afterwards by email, `claimOrdersForVerifiedPhone` attaches the purchase with its
+figures and its invoice intact, and the next bill to that number auto-links. Scoping is
+tested too — verifying one number claims only its own bills, and an order already claimed
+cannot be taken by a second account.
+
+What no test can supply is the step in the middle. With email-only OTP (D-011) nothing proves
+possession of a phone number, so that function still has no caller in the running
+application. This is DEBT-011, it is a launch blocker rather than a defect in Phase 8's work,
+and Phase 8 correctly declined to invent a new authentication surface without a SECURITY
+design review.
+
+`@SECURITY:` the claim token in the §8.4 WhatsApp message is the smallest thing that closes
+it. It needs your review before it is built.
+
+`@DESIGN:` `components/ui/input.tsx` gained a `prefix` adornment for §8.1's `+91`. It is the
+mirror of the existing `suffix` and uses only tokens, but that file is yours.
+
+**Not covered:** Lighthouse on the bill screens (DEBT-020's sibling — the admin panel is
+`noindex` and behind auth, so the score is not a launch gate), and the PDF's appearance on a
+real printer. The invoice was reviewed as a rendered page at A4, which is how the three
+layout defects above were found in the first place.
+
+### Phase 8 — SECURITY
+
+Status: **PASS** — zero CRITICAL, zero HIGH. One MEDIUM found and fixed before sign-off.
+
+Full review in `SECURITY-LOG.md`. All eight §8 SECURITY checklist items pass, each checked
+against running code rather than by reading the diff.
+
+Phase 8 introduces two things this application has not had before, and the review concentrated
+on them: a **capability URL a stranger is meant to be able to use**, and a **document
+generator that renders admin-supplied text into a file the customer keeps**.
+
+**The order-hijack control was verified structurally, not from memory.** `Order.userId` has
+exactly two writers — `createBill`, which links only on `phoneVerified = true`, and
+`claimOrdersForVerifiedPhone`, whose `WHERE` includes `userId: null` so it cannot take an
+order someone else already holds. `phoneVerified: true` has exactly **one** writer, the claim
+path. Then probed against the database: an account that took the number the way
+`/api/auth/phone/verify` takes it — writing `phone`, leaving `phoneVerified` false — claimed
+nothing, and a bill raised afterwards still did not link to it.
+
+**`/bills/{key}` refuses a correct key that carries nothing else**, which is what DEBT-021
+asked for, while still serving the WhatsApp recipient who has no account by design. Signature,
+or session ownership, or admin — and every refusal returns a byte-identical 404, so the route
+cannot be used to discover which invoices exist.
+
+Findings: **SEC-021** (MEDIUM, fixed — see below), **SEC-022** (INFO — the WhatsApp link is a
+bearer capability for 7 days, which is the design), **SEC-023** (INFO — backups now contain
+invoices; DEBT-031), **SEC-024** (INFO — the signed URL is cached in Redis), **SEC-025**
+(INFO — the logo fetch sits inside bill creation; bounded and fails soft).
+
+**SEC-021 is the one worth reading.** `billPrefix` was validated for length only, and it flows
+into `orderNo` and from there into the invoice's `Content-Disposition` header. Probed at the
+runtime: a quote is accepted and produces a malformed header; a newline **throws**, because
+`Headers.append` rejects CR/LF. So it is not response splitting — it is worse in one specific
+way. The prefix is baked into `orderNo` at creation, so every invoice raised while a bad
+prefix was set would 500 on download permanently, and those numbers cannot be corrected
+without editing an invoice series GST rules require be kept intact. Admin-only and
+self-inflicted, hence MEDIUM; fixed rather than logged because the damage is durable and the
+fix is two lines — a charset on the schema, and a filename sanitiser at the header so the
+route does not depend on the schema staying as it is.
+
+**One checklist item was answered differently from how it was asked.** §8 SECURITY wants the
+customer name and note "escaped in the PDF", which imports an HTML mental model that does not
+apply — `@react-pdf/renderer` hex-encodes every string into the content stream, so there is no
+markup to break out of. Answering "React escapes it" would be answering a different question.
+The real hazard in this renderer is silent and the opposite shape: a character the font cannot
+encode is not an error, it is a **wrong glyph**, and a customer's name is the field a disputed
+invoice turns on. `lib/bills/pdf-text.ts` is the control that item is really asking for. The
+WhatsApp message is genuinely a URL-encoding problem and is handled by Phase 6's single
+`encodeURIComponent`, round-trip asserted with `&` and an emoji.
+
+`pnpm audit`: no known vulnerabilities.
+
+`@DEV:` **DEBT-011 remains the outstanding item for this feature**, and it is a launch blocker
+rather than a vulnerability. The claim-token design — a single-use token in the §8.4 WhatsApp
+message, which is delivered _to the number being proven_ — is sound in principle and this
+review would approve it, but it is a new authentication surface and gets its own design review
+before it is built, the way §7's did. Specifically it will need: single use enforced in
+Postgres rather than Redis (the Phase 3 reasoning applies unchanged), a short TTL, a rate
+limit per number and per IP, and a token that is unguessable and not derivable from the
+invoice number.
+
+### Phase 8 — DESIGN
+
+Status: **PASS** — two defects found and fixed, two logged.
+
+Audited at 375px first, then 768 and 1280. Everything below is measured from the rendered
+page or the rendered PDF; nothing here is an opinion about a screenshot.
+
+| §8 DESIGN requirement                                     | Result                                                                                    |
+| :-------------------------------------------------------- | :---------------------------------------------------------------------------------------- |
+| The bill builder is usable standing in a shop, one-handed | PASS — no horizontal overflow at any width, and **no** sub-44px tap target on the builder |
+| PDF looks like a premium jeweller's invoice               | PASS — reviewed as a rendered page; three layout defects found and fixed that way         |
+| The send flow is unambiguous                              | PASS — three named states, and the middle one asks rather than assumes                    |
+
+**Measured, not eyeballed:**
+
+- Horizontal overflow on `/admin/bills/new` and `/admin/bills`: **0px** at 375, 768 and 1280.
+- Tap targets on the builder: every button, link, input and select computed — **none** below
+  44×44.
+- The sticky bar clears the last control by **64px** at 375px (144px above that).
+- Keyboards: weight and making are `inputMode="decimal"`, the phone is `tel`, HUID/BIS and the
+  note are `text` — correct, since a hallmark number is alphanumeric.
+- Prominence: the grand total renders at 24px against a largest-other-figure of 20px, so §5
+  DESIGN's "the total is the most prominent element" still holds on the bill screen.
+
+#### Two defects found and fixed
+
+**1. The `+91` prefix overlapped the number the admin typed.** The new `prefix` adornment on
+`Input` used `pl-14` — and Phase 2 §2.1 sets `--spacing: initial`, so `pl-14` **does not
+exist**. Tailwind emits nothing for an off-scale class rather than complaining, so the class
+sat in the list looking correct while `padding-left` computed to the 16px from `px-4`. The
+prefix's right edge was at 87px and the text began at 60px: a 27px overlap. It is legible
+enough to survive a glance at a screenshot, which is how it got as far as a DESIGN audit.
+Now `pl-16`, measured at a 21px clearance.
+
+**2. The sticky bar covered "Add another item" at 375px.** Found by TEST, fixed in the admin
+layout — see the TEST block. Worth repeating here because it is the third appearance of this
+bug in this codebase and the second time the answer was "the layout reserves the space, not
+the page".
+
+#### The systemic finding behind defect 1
+
+Off-scale spacing classes are **silent no-ops**, and that is not a Phase 8 problem. Probed
+directly:
+
+| Class            | Computed        |
+| :--------------- | :-------------- |
+| `gap-3`          | `normal` (none) |
+| `px-3` / `pl-5`  | `0px`           |
+| `pl-14`          | `0px`           |
+| `gap-2`, `gap-4` | 8px, 16px       |
+
+There were **45** such classes across the codebase. Phase 8 fixed the 10 in its own files and
+the one it had introduced into `components/ui/input.tsx`; the remaining 35 belong to Phases 6
+and 7 and are logged as **DEBT-032** rather than swept here — changing spacing on screens this
+phase did not touch would mean re-auditing sign-offs that are already closed.
+
+The real lesson is about the guard, not the classes. Phase 2 disabled the default scale so
+off-scale values would be "hard to reach by accident"; what it actually produced is a scale
+that fails **silently**. DESIGN's mandate is to reject arbitrary spacing in review, and review
+has now missed 45 of them. DEBT-032 asks for a lint rule.
+
+#### Logged, not fixed
+
+**DEBT-033 — a sticky bar makes the bottom nav visible but untappable.** Hit-tested with
+`elementFromPoint`: on `/admin/bills/new` the centre of a nav link resolves to the
+`[data-sticky-bar]` div, and **Phase 5's `/calculator` behaves identically**. The nav shows
+through the bar's translucent background, so it reads as available while being dead. Phase 8
+inherits this rather than causing it, and the fix changes a component four screens depend on —
+so it is DESIGN's call, not a Phase 8 edit.
+
+#### On the PDF
+
+Reviewed as a rendered A4 page at every stage, which is the only reason the phase found what
+it found: a rupee sign that printed as `¹`, a customer name that printed as `=O`, a table row
+under the footer, columns with no gutter, and a jewellery name hyphenated as "deliberate-ly".
+None of those raise an error and none are visible in the source.
+
+The finished invoice carries the shop's wordmark, `TAX INVOICE` in the brand's taupe, the rate
+reference block, a ten-column item table that fits without dropping below legible type, the
+CGST/SGST split, the grand total in a filled panel, and the amount in words in its own framed
+block. Colours and the type scale are design tokens throughout. The one deliberate departure
+is the family — Helvetica rather than Inter, recorded as D-027 with the reasoning.
+
+### Phase 8 — SIGNED OFF
+
+DEV **PASS** · TEST **PASS** · SECURITY **PASS** · DESIGN **PASS**.
+
+All seven §8 sections are built, and six of the seven acceptance criteria are met and proven.
+**Phase 9 is unblocked**, with one obligation travelling with it.
+
+**Acceptance criterion 4 is met at the data layer and cannot be reached through the product.**
+`@DEV:` `@SECURITY:` **DEBT-011 is a launch blocker.** A bill is normalised to E.164, links
+only to a `phoneVerified` account, and attaches correctly the moment possession is proven —
+all tested. Nothing in the running application can prove possession, because OTP delivery is
+email-only (D-011), so `claimOrdersForVerifiedPhone` still has no caller. SECURITY has
+described what the claim-token design must satisfy; it needs a design review before it is
+built, and it must be built before launch or the flagship feature does not work for the
+customer it exists for.
+
+Carried into Phase 9:
+
+- `@DEV:` **DEBT-001** — the CA question on GST now prints on real invoices. Getting it wrong
+  means reissuing them.
+- `@DEV:` **DEBT-026** — six-year invoice retention is enforced by convention. No hard delete
+  for orders or `BillPdf` rows.
+- `@DEV:` **DEBT-031** — backups now contain customer invoices. Treat them as personal data.
+- `@DESIGN:` **DEBT-032** (35 silent no-op spacing classes, and a lint rule) and **DEBT-033**
+  (the nav under a sticky bar).
+- `@TEST:` **DEBT-030** — assert that the test and development Redis databases cannot be the
+  same one.
 
 ---
 
 ## Phase 9 — Hardening & Launch
 
-Not started. Blocked on Phase 8 sign-off.
+In progress. Phase 8 is signed off, so this phase is unblocked. Two items were taken out of
+order because they gate everything else: the GST question that prints on real invoices, and
+the claim that Phase 8 shipped without.
+
+### DEBT-001 — CLOSED
+
+The client's CA has confirmed the treatment MASTER-SPEC §4 specifies: the sale is a composite
+supply whose principal supply is the jewellery, so making charges sit inside the taxable
+value. `GST_INCLUDES_MAKING_CHARGES` now records a settled position instead of an open
+question, and the hedging copy is gone from the calculator's breakdown sheet and the settings
+screen.
+
+Two consequences worth noting. It is **no longer a one-line change** — bills raised under this
+treatment are printed, sent and legally retained (DEBT-026), so revisiting it means reissuing
+them. And it unblocks DEBT-024: a configurable GST rate was pointless while the taxable base
+was unsettled.
+
+Closing it also surfaced something the hedge had been hiding. Every bill is split CGST/SGST
+unconditionally, which is right for an intra-state supply and wrong for one crossing a state
+border — that needs IGST at 3%, undivided. The shop sells over the counter in one state so it
+does not arise today, and the fix is not only arithmetic: the invoice would need the
+customer's place of supply, which nothing collects. **DEBT-034.**
+
+### DEBT-011 — CLOSED. Phase 8's acceptance criterion 4 now completes.
+
+The claim token designed in the Phase 8 SECURITY review is built. A single-use token is minted
+with the bill and carried in the §8.4 WhatsApp message — **delivered to the number being
+proven**, which is what an SMS OTP would have demonstrated, over a channel the shop already
+uses and pays nothing for.
+
+`claimOrdersForVerifiedPhone` has spent three phases complete, tested and unreachable. It now
+has exactly one caller: `POST /api/auth/claim`.
+
+Verified: `pnpm build` clean, `pnpm lint` and `pnpm format:check` clean, **859
+unit/integration tests** (up from 822) and **358 E2E** passing.
+
+- **The token** — `lib/auth/claim-token.ts`. Hashed and peppered at rest like `OtpCode`;
+  single use by conditional `UPDATE`; 7-day TTL matching the PDF link beside it; rate limited
+  per number and per IP, both consumed on every attempt.
+- **The message** — `/claim/{token}` replaces the plain `/account/orders` line when a token
+  can be minted, and only then (D-030). A customer whose number is already verified gets the
+  original line and no dead-end link.
+- **The screens** — `/claim/[token]` looks, `POST /api/auth/claim` acts. A GET must not spend
+  a single-use credential that a link preview or a forwarded message would touch.
+- **The collision rule** — an unverified holder of the number is detached; a verified one
+  stands and the claim is refused (D-032).
+
+Deviations recorded: **D-030** (the message line), **D-031** (derived, not random, and what
+that costs), **D-032** (the collision rule).
+
+#### Two defects, both found by tests
+
+**1. A success that announced itself as a failure.** The claim card called `router.refresh()`
+so the nav would pick up the rotated session — and the refresh re-ran the page's server
+component, which re-read the token the claim had just consumed. One second after a successful
+claim the customer saw "This link is no longer valid". The E2E asserted the success copy and
+found the failure copy, which is the only reason it was caught; a status-code test would have
+passed, because the API returned 200 the whole time.
+
+**2. The suite locked itself out, twice.** The claim limiter allows ten attempts per IP per
+hour and fails closed, so repeated runs of the E2E exhausted it and the flagship test began
+failing at the success message — reading exactly like a broken claim. The same shape appeared
+in the route suite, where `beforeEach` cleared two counters and missed
+`rl:claim:phone:unknown:{ip}`, the bucket an unrecognised token falls into. Both fixed by
+resetting by pattern rather than by memory. Phase 7 documented this failure mode for logins;
+it recurred because the fix was a list of keys rather than a rule.
+
+#### Mutation-checked, not trusted
+
+| Mutation                                                  | Caught by                         |
+| :-------------------------------------------------------- | :-------------------------------- |
+| Read-then-write consume instead of a conditional `UPDATE` | the concurrent double-submit test |
+| Minting a token even for an already-verified number       | the "does not mint" test          |
+| The message dropping the claim link                       | the flagship E2E                  |
+| The GET page consuming the token                          | the flagship E2E                  |
+
+#### The flagship, finally proven in a browser
+
+`e2e/claim.spec.ts` runs the whole journey: the shop bills a walk-in with no account, the
+order is unclaimed, the claim link is **read out of the `wa.me` href** rather than minted by
+the test, a signed-out stranger is bounced to login without spending the token, the customer
+creates an account afterwards and sees an empty history, opens the link, confirms, and the
+purchase appears with its invoice — and the shop's screen flips to Claimed. Re-opening the
+link claims nothing a second time.
+
+Reading the link out of the message rather than the database is deliberate: fetching a token
+from Postgres would prove the claim works and skip the question of whether the message
+carries it, which was the actual gap.
+
+**Not covered:** signup itself is still driven around rather than through — the email OTP is
+only observable in the server's console (DEBT-010), so the customer account is inserted
+directly and signed in through the real login endpoint. What is under test is what happens
+after a customer has an account.
+
+`@SECURITY:` the review is in `SECURITY-LOG.md` under "Phase 9 (early)". Findings: **SEC-026**
+(INFO, accepted — the bill message now carries two capabilities) and **SEC-027** (INFO — the
+derived token trades a property for stability; D-031 has the reasoning).
+
+### Phase 9 — SECURITY
+
+Not started. §9.1's whole-application pass is still owed.
+
+### Phase 9 — DEV
+
+Not started. §9.1–§9.7 remain.
+
+### Phase 9 — TEST
+
+Not started.
+
+### Phase 9 — DESIGN
+
+Not started.

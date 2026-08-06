@@ -206,6 +206,22 @@ For any questions, reply to this message.
 
 ---
 
+## Dependencies added
+
+AGENTS.md: "Do not add a dependency without noting it in the phase file's 'Dependencies
+added' section."
+
+| Package               | Version | Why                                                                                                                                                                                                                                                                   |
+| :-------------------- | :------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@react-pdf/renderer` | 4.5.1   | Named by §8.3. Renders the invoice server-side from React components, so the layout is reviewed as code and the design tokens are the same objects the storefront uses. Runtime dependency, ~2MB installed, server-only — nothing from it reaches the browser bundle. |
+
+**Considered and not added:** `@fontsource/inter`, to embed the site's typeface and with it
+the `₹` glyph. Installed, inspected and removed: the package ships only `woff`/`woff2`, and
+the glyph would have needed two subsets plus a committed binary and a runtime asset path.
+See D-027 and DEBT-027 for what that costs and what it would buy.
+
+---
+
 ## Acceptance criteria
 
 1. Multi-item bill, server-computed, rate-snapshotted.

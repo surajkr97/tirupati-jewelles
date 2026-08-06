@@ -37,7 +37,19 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   const admin = await requireAdminPage();
 
   return (
-    <div className="flex min-h-dvh flex-col bg-cream">
+    /**
+     * `has-[[data-sticky-bar]]:pb-*` reserves room for a page's fixed bottom bar — the same
+     * mechanism the storefront layout uses, and here for the same reason.
+     *
+     * Added by Phase 8. `/admin/bills/new` is the first admin screen with a `StickyBar`, and
+     * without this the bar covered "Add another item" at 375px: the button was visible,
+     * enabled and unclickable, because a fixed element sat over it. Playwright found it by
+     * timing out on a click that looked fine in a screenshot.
+     *
+     * The height is published by `StickyBar` from a real measurement — see that file for why
+     * a hardcoded value was wrong twice already.
+     */
+    <div className="flex min-h-dvh flex-col bg-cream has-data-sticky-bar:pb-[var(--sticky-bar-height,0px)]">
       <header className="sticky top-0 z-30 border-b border-line bg-cream/90 backdrop-blur-md">
         <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between gap-4 px-[20px] py-4 md:px-[40px]">
           <p className="text-h3 font-semibold text-ink">Shop admin</p>

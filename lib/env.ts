@@ -82,6 +82,16 @@ const serverSchema = z.object({
         .filter(Boolean),
     ),
 
+  /**
+   * Which WhatsApp send layer a bill uses (Phase 8 §8.4: "Swap via config").
+   *
+   * `deep-link` opens `wa.me` with the message prefilled and the admin taps send — free,
+   * no Meta Business verification, works today. `cloud-api` is declared and deliberately
+   * unimplemented (DEBT-004 puts auto-send post-launch); selecting it surfaces an error on
+   * the bill screen rather than silently doing nothing.
+   */
+  WHATSAPP_SENDER: z.enum(['deep-link', 'cloud-api']).default('deep-link'),
+
   // Seeds the first ADMIN. Phase 1 §1.6: "credentials from env, not hardcoded".
   SEED_ADMIN_EMAIL: z.string().email(),
   SEED_ADMIN_PASSWORD: z.string().min(8),

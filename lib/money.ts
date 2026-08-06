@@ -17,8 +17,39 @@
  *                   quoted in whole rupees, and `₹1,18,420.00` is noise. Bills turn it on.
  */
 export function formatINR(paise: bigint, showPaise = false): string {
-  const negative = paise < 0n;
-  const absolute = negative ? -paise : paise;
+  return `${sign(paise)}₹${formatAmountDigits(paise, showPaise)}`;
+}
+
+/**
+ * The same figure written `Rs. 1,18,420.00`, for the bill PDF.
+ * Added by Phase 8 (specs/08-billing-whatsapp.md §8.3).
+ *
+ * ── Why an invoice does not use `₹` ──
+ * The PDF is set in one of the fourteen standard PDF base fonts, which are encoded in
+ * WinAnsi. WinAnsi has no U+20B9. Verified rather than assumed: rendering `₹` through
+ * `@react-pdf/renderer` emits byte `0xB9`, which is `onesuperior` — so a bill would print
+ * `¹ 7,47,252.00`. Embedding a font carrying the glyph would mean committing a binary and
+ * a build-time asset path for one character; `Rs.` is what most Indian tax invoices print
+ * anyway. See DECISIONS.md D-027.
+ *
+ * Paise are shown by default here. A screen price rounds to rupees; an invoice does not.
+ */
+export function formatRupeesAscii(paise: bigint, showPaise = true): string {
+  return `${sign(paise)}Rs. ${formatAmountDigits(paise, showPaise)}`;
+}
+
+function sign(paise: bigint): string {
+  return paise < 0n ? '-' : '';
+}
+
+/**
+ * Grouped digits with no currency symbol — `1,18,420.00`.
+ *
+ * For a table whose column heading already carries the unit, which is how the invoice's
+ * item table fits ten columns across A4. Added by Phase 8 §8.3.
+ */
+export function formatAmountDigits(paise: bigint, showPaise = true): string {
+  const absolute = paise < 0n ? -paise : paise;
 
   const rupees = absolute / 100n;
   const remainder = absolute % 100n;
@@ -29,9 +60,7 @@ export function formatINR(paise: bigint, showPaise = false): string {
     maximumFractionDigits: 0,
   }).format(rupees);
 
-  const decimals = showPaise ? `.${remainder.toString().padStart(2, '0')}` : '';
-
-  return `${negative ? '-' : ''}₹${grouped}${decimals}`;
+  return showPaise ? `${grouped}.${remainder.toString().padStart(2, '0')}` : grouped;
 }
 
 /** Signed, for deltas: `▲ ₹142`. The caller supplies the arrow so colour and glyph agree. */

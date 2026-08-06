@@ -44,19 +44,25 @@ export type RatesByPurity = Record<PurityKey, bigint>;
 export const DEFAULT_GST_PCT = 3;
 
 /**
- * ⚠ GST TREATMENT — NOT TAX ADVICE (§5.2).
+ * GST TREATMENT — confirmed, not assumed (§5.2).
  *
  * Indian jewellery attracts 3% GST (1.5% CGST + 1.5% SGST intra-state, or 3% IGST
  * inter-state). This engine includes **making charges in the taxable value**, per
- * MASTER-SPEC §4's formula.
+ * MASTER-SPEC §4's formula: the sale is treated as a composite supply whose principal
+ * supply is the jewellery, so the making charge is part of the taxable value rather than a
+ * separately taxable service.
  *
- * That treatment has been contested. Whether making charges are part of the taxable value
- * of a composite supply, or a separately taxable service, changes the total. Getting it
- * wrong means reissuing invoices, not a code fix.
+ * That reading was contested through Phases 5–8 and is now **confirmed by the client's
+ * chartered accountant** (DEBT-001, closed). It is recorded as a named constant rather than
+ * left implicit in the arithmetic because it is a tax position, and the next person to read
+ * `calculateLine` should be able to see which one was taken without deriving it.
  *
- * The client must confirm with their CA before launch. Tracked as **DEBT-001**. Nothing in
- * this repository is tax advice, and the split shown on a Phase 8 bill must not be
- * presented as such.
+ * Changing it is not a one-line edit any more: bills raised under this treatment are
+ * printed, sent and legally retained (DEBT-026), so a change means reissuing them.
+ *
+ * Still outside this engine: the inter-state case. Every sale is treated as intra-state and
+ * split CGST/SGST. A shop selling across a state border needs IGST at 3% undivided — see
+ * `lib/bills/tax.ts`.
  */
 export const GST_INCLUDES_MAKING_CHARGES = true;
 

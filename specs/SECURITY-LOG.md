@@ -555,3 +555,221 @@ would read as a perfect result. It was exactly that control failing which expose
 
 DEBT-022 is closed. SEC-020 (the over-privileged Master Admin key) remains open as DEBT-025,
 a plan limitation rather than a defect.
+
+---
+
+# Phase 8 — Billing → PDF → WhatsApp → Auto-Order
+
+Status: **PASS** — zero CRITICAL, zero HIGH. One MEDIUM found and fixed before sign-off.
+
+Phase 8 adds two things this application has not had before: a **capability URL** that an
+unauthenticated stranger is meant to be able to use, and a **document generator** that renders
+admin-supplied text into a file the customer keeps. Most of the review went there.
+
+## The §8 checklist
+
+| Requirement                                                        | Result                                                                                                           |
+| :----------------------------------------------------------------- | :--------------------------------------------------------------------------------------------------------------- |
+| Bill PDF URL unguessable and unlisted; sequential guessing 404s    | PASS — UUIDv4 keys, and `1`, `2`, `1.pdf`, `0001` and a path traversal all 404 without touching the database     |
+| Customer A cannot fetch B's bill by ID or by PDF key               | PASS — proven live and in the route suite; holding B's key is not enough without B's HMAC                        |
+| Only ADMIN can create bills                                        | PASS — 404 for signed-out and for a signed-in CUSTOMER, byte-identical, and nothing written in either case       |
+| Claiming requires **verified** phone ownership                     | PASS — probed directly against the database; see below                                                           |
+| Customer name and note escaped in the PDF and the WhatsApp message | PASS — with a caveat about what "escaped" means in a PDF; see below                                              |
+| Rate limit bill creation (20/min)                                  | PASS — the 21st request in a minute is 429 and the 20 before it are the only rows written                        |
+| Every bill creation and send audited                               | PASS — `ORDER_CREATE`, `BILL_SEND`, `BILL_VOID`, `BILL_PDF_REGENERATE`, each with actor and IP                   |
+| PDF has no `X-Frame-Options: ALLOWALL` or public-read bucket ACL   | PASS — `DENY`, `private, no-store`, `noindex`; the bytes are in Postgres, so there is no bucket ACL to get wrong |
+
+## The controls that carry this phase
+
+**Order hijack — one writer, verified by grep, not by memory.** `Order.userId` is written in
+exactly two places: `createBill`, which sets it only when a user holds that phone **and**
+`phoneVerified = true`, and `claimOrdersForVerifiedPhone`, whose `WHERE` includes
+`userId: null` so it can never take an order somebody else already claimed. `phoneVerified:
+true` is written in exactly **one** place — the claim path. That is what makes §8's
+"attempt to claim by setting a phone field without OTP" fail by construction.
+
+Probed rather than argued. A bill was raised to an unowned number; an account then took that
+number the way `POST /api/auth/phone/verify` takes it (writing `phone`, leaving
+`phoneVerified` false):
+
+- the existing order stayed unclaimed,
+- `phoneVerified` stayed false,
+- and a bill raised **afterwards** still did not link.
+
+**Price tampering — four separate claims, each with a test.** The request schema has no field
+for a total or a rate and is `.strict()`, so sending either is a 400 rather than a silent
+drop. Rates are read from the database inside `createBill`. Every stored figure comes from
+`lib/pricing.ts`. And the reprint path refuses to print a bill whose stored total does not
+reproduce from its own snapshot.
+
+**Bill forgery — the key alone is not an authorisation.** `/bills/{key}` accepts a valid
+unexpired HMAC signature, **or** a session that owns the order, **or** an admin session. A
+correct key with neither is a 404. That closes DEBT-021 without breaking the WhatsApp
+recipient, who has no account by design. The HMAC is keyed on a value derived from
+`SESSION_SECRET` through a versioned domain label, so it cannot collide with the Phase 6
+enquiry HMAC on the same secret; the expiry is inside the MAC, so extending it invalidates
+the signature; and the comparison is `timingSafeEqual`.
+
+**Enumeration.** Every refusal from `/bills/{key}` returns an identical body: "no such bill",
+"bad signature" and "not yours" are indistinguishable from outside. Verified by comparing
+the response text of all three.
+
+**Injection.** Four `$queryRaw` sites exist in application code and all four are tagged
+templates with bound parameters. The two Phase 8 adds — the invoice sequence and the
+dashboard chart — interpolate only server-derived values (a year, a date). The accountant's
+CSV neutralises leading `=`, `+`, `-` and `@`, which is the injection that actually matters
+for a file that opens in Excel.
+
+## SEC-021 — MEDIUM, **fixed** — an unvalidated invoice prefix could permanently break PDF delivery
+
+`billPrefix` (§7.9) was validated for length only: `z.string().min(1).max(8)`. It flows into
+`Order.orderNo`, which flows into the invoice's `Content-Disposition` header.
+
+Probed at the runtime rather than reasoned about:
+
+| Prefix   | Result                                                                  |
+| :------- | :---------------------------------------------------------------------- |
+| `JW`     | accepted                                                                |
+| `A"X`    | accepted — malformed header, filename truncated at the quote by parsers |
+| `A\r\nX` | **throws** — `Headers.append` rejects CR/LF in a value                  |
+
+So it is **not** response splitting: the runtime refuses the header. What it is, is durable.
+The prefix is baked into `orderNo` at creation, so every invoice raised while a bad prefix
+was set would 500 on download **forever**, and the numbers cannot be changed afterwards
+without editing an invoice series that GST rules require be kept intact.
+
+Admin-only and self-inflicted, which is why it is MEDIUM rather than HIGH. Fixed rather than
+logged because the consequence is permanent and the fix is two lines, both applied:
+
+1. The settings schema restricts the prefix to `[A-Za-z0-9-]`.
+2. `/bills/{key}` sanitises the filename before it reaches the header, so the route does not
+   depend on that schema staying as it is.
+
+## Findings logged, not fixed
+
+**SEC-022 (INFO) — the WhatsApp link is a bearer capability for seven days.** That is the
+design (§8.3), not a defect: the recipient has no account, so possession of the link is the
+only proof available. It does mean anyone with access to the customer's WhatsApp can open
+the invoice until it expires. Mitigated by the 7-day window and by the link being useless
+after it. Worth stating plainly because it is the one place this application deliberately
+authorises on possession alone.
+
+**SEC-023 (INFO) — database backups now contain invoices.** D-026 puts the rendered PDF
+bytes in Postgres, so a backup that was previously catalogue data plus hashed credentials now
+also contains customer names, phone numbers and purchase histories in a directly readable
+document format. Nothing is wrong with the storage; what changes is the handling requirement
+for the dumps. Phase 9's deployment work should treat backups as containing personal data —
+encryption at rest and a retention limit — and it is logged as DEBT-031 so that is not
+discovered during an incident.
+
+**SEC-024 (INFO) — the signed URL is cached in Redis.** `bill:{key}` holds the absolute URL
+including its signature for 24h (§8.3 asks for exactly this). Redis is loopback-only and
+password-protected since SEC-001, so the exposure is the same as the session store's. Noted
+because the cache now holds capabilities rather than only derived data.
+
+**SEC-025 (INFO) — the invoice logo is fetched during bill creation.** It goes through Phase
+7 §7.7's pinned-IP guard unchanged, so the SSRF controls hold. The new consideration is
+availability, not confidentiality: a slow third-party CDN sits inside the shop's most
+important action. Bounded by a 5s timeout, a six-hour Redis cache of the bytes, and a
+fallback to a typographic wordmark on any failure — a bill never fails to generate because a
+logo would not load.
+
+## What "escaped in the PDF" actually means
+
+§8 SECURITY asks for the customer name and note to be "escaped in the PDF". The phrase
+imports an HTML mental model that does not apply: `@react-pdf/renderer` hex-encodes every
+string into the content stream, so there is no markup to break out of and no injection to
+escape. Saying "PASS — React escapes it" would be answering a different question.
+
+The real hazard in this renderer is the opposite one, and it is silent: a character the font
+cannot encode is not an error, it is a **wrong glyph**. A customer named "Priya & Sons 🙏"
+printed as "Priya & Sons =O" on a live render. On a tax invoice the customer's name is the
+field a dispute turns on, so `lib/bills/pdf-text.ts` now removes what cannot be drawn and
+transliterates what has a plain equivalent, with a visible placeholder when a name reduces to
+nothing. That is the control the checklist item is really asking for.
+
+The WhatsApp message is a different matter and does need encoding — it is user-influenced
+text in a URL parameter. It goes through Phase 6's single `encodeURIComponent` call,
+round-trip asserted with a name containing `&` and an emoji, in the unit suite and again in a
+real browser.
+
+## Dependencies
+
+`pnpm audit` — no known vulnerabilities. One runtime dependency added,
+`@react-pdf/renderer` 4.5.1, named by §8.3 and noted in the phase file. It runs server-side
+only and nothing from it reaches the browser bundle.
+
+---
+
+# Phase 9 (early) — the claim token, DEBT-011
+
+Status: **PASS** — zero CRITICAL, zero HIGH. The design this review specified in Phase 8 was
+built as specified, with one deliberate departure recorded below.
+
+## Against the five constraints set in the Phase 8 review
+
+| Constraint                                     | Where it lives                                                                        | Proven by                                        |
+| :--------------------------------------------- | :------------------------------------------------------------------------------------ | :----------------------------------------------- |
+| Single use, enforced in **Postgres** not Redis | `consumeClaimToken`'s conditional `UPDATE … WHERE consumedAt IS NULL AND expiresAt >` | five concurrent consumes; exactly one wins       |
+| Short TTL                                      | 7 days, matching the signed PDF link in the same message                              | asserted, and the window measured on a real row  |
+| Rate limited per number **and** per IP         | `CLAIM_LIMITS`, both consumed on every attempt                                        | a guessing run is cut off at five                |
+| Unguessable                                    | 256-bit HMAC, base64url                                                               | shape and length asserted                        |
+| Not derivable from the invoice number          | `orderNo` is not an input; the key never leaves the server                            | two bills to one number produce unrelated tokens |
+
+Stored hashed and peppered, exactly like `OtpCode` — asserted directly: the stored value is a
+SHA-256 digest and is not the token.
+
+## SEC-026 (INFO, accepted) — the bill message now carries two capabilities
+
+It already carried one: the signed PDF link. It now carries a second with a wider blast
+radius — the PDF is one invoice, the claim token is every unclaimed purchase on that number.
+
+Accepted, because the alternative is the feature not existing. The bounding controls are the
+ones above, plus two properties worth stating:
+
+- The token is bound to **one number**. Holding it lets you claim that number's purchases and
+  nothing else, and a test asserts a token minted for a different number leaves the other
+  order untouched.
+- Claiming requires a **session**. The token says who holds the number; the account says where
+  the purchases go. Possession of the message alone changes nothing until someone signs in,
+  which is also what makes the action attributable — `consumedBy` records who redeemed it and
+  an `ORDER_CLAIM` audit entry records the result.
+
+Anyone with access to the customer's WhatsApp already has the invoice. What they gain is the
+customer's other purchases to that number, for seven days, once, from an account they must
+create and sign into.
+
+## SEC-027 (INFO) — the derived token trades a property for stability
+
+D-031 records this in full. A random token would be worthless to an attacker holding the
+environment; this one can be minted by someone who holds `SESSION_SECRET` **and** knows an
+order id **and** its phone number. Accepted: that secret leaking already forges every session
+in the system, the extra values are not public, and single use, the TTL and the rate limits
+are unaffected. Flagged here rather than buried in a decision file because it is the one place
+this feature is weaker than the obvious implementation.
+
+## What was checked and found correct
+
+**The GET does not consume.** A single-use credential in a URL that a link preview, a browser
+prefetch or the customer forwarding the message to themselves would burn. `/claim/[token]`
+peeks; only `POST /api/auth/claim` redeems. Asserted five consecutive peeks leave
+`consumedAt` null, and mutation-checked by making the page consume — the E2E fails.
+
+**The consume and the claim are one transaction.** A token spent on a claim that then failed
+would be gone, and the customer's only copy is a WhatsApp message they cannot re-trigger.
+
+**No enumeration.** Invalid, expired and already-used all return the same message from both
+the page and the API. The one exception is deliberate and reveals nothing about the token: a
+visitor whose **own account** already has a verified number sees "you're all set" instead —
+a fact about them, not about the credential.
+
+**Every refusal leaves the data alone.** Each denial case in the route suite re-reads
+`Order.userId` and `User.phoneVerified` and asserts both unchanged. A route that answers 400
+and still claims is the failure a status-code assertion would not see.
+
+**The collision rule is explicit** (D-032): an unverified holder of the number is detached, a
+verified one is not and the claim is refused. Both asserted.
+
+**Origin, session and audit.** CSRF origin check, `requireUser`, `ORDER_CLAIM` audit entry,
+and `rotateSession` on success — the account has gone from unverified to holding a proven
+number and a purchase history, which is the privilege change §3.3 requires rotation for.
