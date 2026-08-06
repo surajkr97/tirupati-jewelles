@@ -258,3 +258,72 @@ describe('checkImageUrl — against real servers', () => {
       expect(['private_address', 'host_not_allowed']).toContain(result.reason);
   });
 });
+
+/**
+ * The pinning hook's call contract.
+ *
+ * ── Why this file needed a new describe block ──
+ * `checkImageUrl` failed on EVERY url with "Invalid IP address: undefined", so pasting an
+ * image URL into a media slot or onto a product, `confirmUpload` after a successful
+ * Cloudinary upload, and the invoice logo were all non-functional. Found by running the
+ * guard against a real Cloudinary URL, not by reading it.
+ *
+ * The 47 assertions above did not catch it because every one of them is a REJECTION — the
+ * local test server speaks http, and the scheme check returns before anything connects, so
+ * the line that performs a successful fetch was never executed.
+ *
+ * The pinning test that does exist calls the hook as `lookup('example.com', {}, cb)`. That
+ * is the one options shape `net.connect` never uses: it calls with `{ all: true }` and then
+ * reads `addresses[0].address`. So the test exercised the branch Node does not take and
+ * passed while the branch Node does take was broken.
+ */
+describe('pinnedLookup — the shape net.connect actually asks for', () => {
+  const ADDRESS = '93.184.216.34';
+
+  it('answers { all: true } with an array, the way net.connect reads it', async () => {
+    const { pinnedLookup } = await import('@/lib/media/fetch-image');
+
+    const answer = await new Promise<unknown>((resolve) => {
+      pinnedLookup(ADDRESS, 4)('example.com', { all: true }, (...args: unknown[]) =>
+        resolve(args[1]),
+      );
+    });
+
+    expect(Array.isArray(answer)).toBe(true);
+    // The exact read that produced `undefined` and killed every connection.
+    expect((answer as { address: string }[])[0]?.address).toBe(ADDRESS);
+    expect((answer as { family: number }[])[0]?.family).toBe(4);
+  });
+
+  it('still answers the three-argument form when asked that way', async () => {
+    const { pinnedLookup } = await import('@/lib/media/fetch-image');
+
+    const answer = await new Promise<unknown[]>((resolve) => {
+      pinnedLookup(ADDRESS, 4)('example.com', {}, (...args: unknown[]) => resolve(args));
+    });
+
+    expect(answer[1]).toBe(ADDRESS);
+    expect(answer[2]).toBe(4);
+  });
+
+  it('hands back only the pinned address, in either shape', async () => {
+    /**
+     * The security property, restated so the fix cannot drift into re-resolving. Whatever
+     * the caller asks for, it may learn exactly one address: the one already validated as
+     * public. This is what closes the DNS-rebinding gap the file's header describes.
+     */
+    const { pinnedLookup } = await import('@/lib/media/fetch-image');
+    const hook = pinnedLookup(ADDRESS, 6);
+
+    for (const options of [{ all: true }, {}, undefined]) {
+      const args = await new Promise<unknown[]>((resolve) => {
+        hook('anything.example', options, (...rest: unknown[]) => resolve(rest));
+      });
+
+      const flat = JSON.stringify(args);
+      expect(flat).toContain(ADDRESS);
+      // No second candidate, and never the hostname it was asked about.
+      expect(flat).not.toContain('anything.example');
+    }
+  });
+});

@@ -1701,9 +1701,436 @@ against the real topology before the per-IP limits mean anything.
 
 Not started.
 
-### Phase 9 — TEST
+### Phase 9 — TEST (§9.1)
 
-Not started.
+Status: **FAIL**
+Coverage: **1,041 unit/integration tests across 43 files** (up from 919), **326 E2E passing /
+32 skipped** — unchanged from the DEV baseline, so nothing regressed. **9 failures, all new,
+all deliberate.** Build, lint, `prettier --check` and `tsc --noEmit` clean.
+
+`FAIL` is the verdict on four findings, not on §9.1 as a whole. Six of the ten items pass
+outright and are now held by tests rather than by a probe someone ran once. Three of the four
+findings are the same defect wearing different clothes: **a control that was implemented
+correctly in one place and left un-implemented in a second place that needed it.**
+
+**Method.** Acceptance criteria were re-derived from `specs/09-hardening.md` §9.1 before any
+of DEV's five files were read, per the `@TEST:` note DEV left. Headers were additionally
+measured against a **production build served on `next start`** and the limiter driven over
+**real HTTP**, because §9.1 is a claim about responses and a config is not a response.
+
+| #   | §9.1 item                                    | Verdict     | Evidence                                                                                      |
+| :-- | :------------------------------------------- | :---------- | :-------------------------------------------------------------------------------------------- |
+| 1   | Headers in `next.config.ts`                  | **PASS**    | All six, on all six routes probed on `next start`, incl. a 404 and a proxy-made 429           |
+| 2   | Global per-IP rate limit in the proxy        | **FAIL**    | Counts correctly; **opt-out via a request header**. Findings 1–2                              |
+| 3   | Every API route Zod-validated + enumeration  | **PASS**    | Now proven past the auth boundary, and across the Server Action surface. See below            |
+| 4   | `pnpm audit` clean; Dependabot               | **PASS**    | "No known vulnerabilities found"; all four ecosystems asserted present                        |
+| 5   | Secrets rotated; none ever committed         | **PASS**    | `.env` untracked and ignored; `.env.example` placeholder-only, asserted per key               |
+| 6   | DB user least privilege — no DDL at runtime  | **PASS**    | Proven by refusal against the **restricted** connection, in the unit suite for the first time |
+| 7   | Redis password-protected, not publicly bound | **PASS**    | An unauthenticated client is refused `NOAUTH`; compose is loopback-only                       |
+| 8   | No stack traces in production                | **PASS**    | Six leak markers asserted absent, with a development positive control                         |
+| 9   | Structured logging, PII redacted             | **PARTIAL** | Redaction holds at the emitter. It also destroys invoice numbers. Finding 3                   |
+| 10  | OWASP Top 10 documented                      | **PASS**    | All ten categories present with a verdict                                                     |
+
+Item 3 is marked PASS on the strength of new coverage, not on DEV's route file — see
+"What DEV's five files do and do not cover" below.
+
+#### The four findings
+
+**1. The global rate limit is opt-out, and the opt-out is a request header.** `shouldSkip()`
+removes a request from the limiter entirely when it carries `next-router-prefetch`,
+`purpose: prefetch` or `x-purpose: prefetch`. None of the three is a capability — anyone can
+set them. Measured over real HTTP against `next start`:
+
+```
+150 requests to /login carrying `purpose: prefetch`   →  150 × 200   (tier is 60)
+ 5 requests from the same address WITHOUT the header  →    5 × 200   (budget untouched)
+```
+
+The second line is the proof: after 150 requests the address still had its full allowance, so
+those requests were never counted at all. §9.1 asks for a global per-IP limit; this one is
+disabled by anyone who reads the source, and this repository is the source.
+
+The exclusion is nonetheless **right** — `next/link` really does fire a prefetch per link, and
+counting them really would lock out a customer scrolling a catalogue. What is wrong is that it
+is an exemption rather than a tier. A generous prefetch ceiling serves both purposes; an
+uncounted path serves only one.
+
+`test/proxy-limit.test.ts:170` · expected a 429 within `tier.limit × 2` requests, got 120 × 200.
+
+**2. `/api/health` is uncounted, and it is the one endpoint that touches both dependencies.**
+Same shape, different reason. Measured: **700 requests from one address, 700 × 200** (default
+tier is 600). Each one runs a Postgres query and a Redis ping, so an unbounded path here is a
+connection-pool exhaustion primitive aimed at exactly the two services §9.5 is about. §9.4
+needs the monitor to receive a 200, which headroom gives it; it does not need the path exempt.
+
+`test/proxy-limit.test.ts:186` · expected a 429 within 1,200 requests, got 1,200 × 200.
+
+**3. The redactor destroys the invoice number.** The phone pattern is unanchored, so it matches
+a digit run that begins in the middle of another token:
+
+```
+"order JW-2026-00042 failed"       →  "order JW-[phone:…042] failed"
+"at 2026-08-07T01:36:27.000Z …"    →  "at [phone:…807]T01:36:27.000Z …"
+"HUID 123456 / BIS 987654321"      →  "HUID 123456 / BIS [phone:…321]"
+```
+
+The invoice number is the primary key of every support conversation this shop will have — a
+legally numbered, six-year-retained series (DEBT-026) — and it is unreadable in any log line
+that mentions one. Item 9 is _structured logging_ with PII redacted, and
+`lib/security/security.test.ts:42` argues this exact principle from the other side
+("over-redacting makes logs useless, which is its own way of failing the requirement"); these
+are the cases that test does not reach. The failure direction is toward safety, so this is a
+usability defect in a security control rather than a vulnerability.
+
+`test/logging.test.ts:232,238`.
+
+**4. SEC-032 was fixed in one of the two places that derive a client IP.**
+`lib/admin/actions.ts:54` holds a second, private `clientIp()` that still takes
+`forwarded.split(',')[0]` — the leftmost entry, which is whatever the caller sent. It is not
+used for rate limiting, so this is not a limiter bypass. It is the value stamped on **every
+`AuditLog` row**: §7 SECURITY requires "all admin mutations write an AuditLog with actor and
+IP", §7.3 shows it back as rate-change history, and §7.10 makes the log read-only precisely so
+it can be relied on afterwards. Measured — the audit row records `1.2.3.4` from
+`x-forwarded-for: 1.2.3.4, 203.0.113.9`, and records `not-an-ip-at-all` just as happily.
+
+**This is SEC-028 again, nine lines away from SEC-028.** That finding was `lib/admin/actions.ts`
+holding a second copy of the CSRF origin check that had drifted from `lib/http.ts`'s, and the
+fix was to make the decision exist once. Directly above that check sits a second copy of the
+client-IP decision, and SEC-032's fix reached `lib/http.ts` only. `lib/http.ts` already exports
+`clientIp()` for this. The one-line fix also makes `TRUSTED_PROXY_HOPS` mean what DEBT-009
+assumes it means — today, configuring it fixes half the application.
+
+`lib/admin/actions.audit-ip.test.ts:92,97,114`.
+
+#### What DEV's five files do and do not cover
+
+Treated as suspect and re-derived rather than accepted. The verdict is better than the warning
+implied — three are sound and one has a hole DEV documented but could not close from where it
+sat.
+
+- **`lib/admin/actions.csrf.test.ts`** — sound. Asserts the mutation **did not run** rather
+  than that the result was `ok: false`, with a positive control. This is the right shape.
+- **`lib/bills/query.test.ts`** — sound, and independently confirmed: reverting the SEC-033
+  fix fails **5** of its cases. It is doing exactly what it claims.
+- **`lib/security/security.test.ts`** — correct but scoped to pure functions. `redact()` and
+  `clientIpFromHeaders()` are right; the file cannot see that `lib/admin/actions.ts` never
+  calls the latter (finding 4), and its own "don't over-redact" principle is not extended to
+  the identifiers this application actually logs (finding 3). A perfect function that a call
+  site does not use is what SEC-031 was.
+- **`test/route-validation.test.ts`** — the one that was found asserting nothing, and **it
+  still cannot fail for the admin routes.** Confirmed, not assumed: with the SEC-033 fix
+  reverted, all **21** of its tests stay green. DEV's header says so honestly and DEV's answer
+  — test the parser where it lives — closed SEC-033. It did not restore the _anti-decay_
+  property, which is the entire reason §9.1 asks for a test instead of a checklist: a fourth
+  admin route added next month with no validation passes that file, and the parser file never
+  hears about it.
+
+`test/route-validation-authorised.test.ts` closes that. It supplies the missing session —
+`requireAdmin` mocked, because a guard correctly placed in front of validation cannot be
+tested through otherwise — and drives the admin routes with malformed input, asserting a
+sub-500 status **and that nothing was written**. Against the reverted SEC-033 parser it fails
+with `→ 500; malformed input reached something that threw`, which is the assertion the
+unauthenticated version could not make.
+
+**The trap that file was most likely to fall into is closed explicitly.** If the `requireAdmin`
+mock did not take effect, every route would answer 404 and every action would return
+`{ ok: false }`, and every assertion would pass for the wrong reason — the same failure being
+fixed. Two control tests run first and prove the door is open: a well-formed export request
+returns **200 and a CSV**, and a Server Action reaches its body.
+
+**It also covers a surface no route enumeration can see.** D-024 made every admin mutation a
+Server Action, so `app/**/route.ts` is not where the admin input surface lives — six
+`'use server'` modules holding **18 actions** are, and §9.1's item is worded for routes because
+it predates D-024. All 18 are now driven with five kinds of garbage each and must return
+`ok: false` without throwing and without writing. **All 18 pass**, which is a real result and
+not a formality. The module list is checked against disk, so a seventh fails the suite.
+
+#### What is newly proven rather than newly asserted
+
+- **The headers, on a real production server.** All six on `/`, `/rates`, `/collections`,
+  `/api/rates`, a 404 and the proxy-rewritten `/admin` — and on the **429 the proxy
+  manufactures itself**, which is the response most likely to escape a rule declared in
+  `next.config.ts`. `x-nextjs-cache: HIT` on the same responses, so D-033's ISR claim holds.
+  Live probes are gated behind `PROD_BASE_URL` so CI does not need a build.
+- **The limiter, over real HTTP:** 60 × 200 then 10 × 429 from one address on `/login`,
+  `retry-after: 59`, with no tier name, budget or `x-ratelimit-*` in the refusal.
+- **Least privilege, in the unit suite for the first time.** The SECURITY pass flagged that
+  `vitest.setup.ts` runs as the owner on a throwaway database, so 919 passing tests said
+  nothing about SEC-029. `test/hardening-infra.test.ts` opens a second client on the
+  **application's** `DATABASE_URL` and proves the refusals: `CREATE TABLE`, `DROP`, `ALTER`,
+  `TRUNCATE`, `CREATE INDEX`, `pg_authid`, and `DELETE` on `Order`, `OrderItem` and `BillPdf`
+  — the last three being DEBT-026's six-year retention, now enforced by a grant. Every
+  destructive probe runs inside a rolled-back transaction and the `DELETE`s carry `WHERE 1=0`;
+  Postgres checks the privilege before it matches rows, so nothing was ever at risk.
+- **Redis refuses an unauthenticated client.** Driven, not read: strip the credentials from the
+  configured URL and the server answers `NOAUTH`. The refusal arrives on the `error` event, not
+  as a rejected promise — asserting on the rejection alone would pass identically against a
+  Redis that was merely unreachable, which is a different fact.
+- **Both limiters, in both directions, in one file.** `global-limit.degradation.test.ts`
+  asserts the global limiter fails **open** and the auth limiter fails **closed**. If anyone
+  unifies them "for consistency", one of the two goes red.
+
+#### DEBT-030 is closed
+
+The obligation Phase 8 left for Phase 9 TEST. A test now fails if the suite's `REDIS_URL` and
+the development server's share a database index. Mutation-checked by removing the `/1` forcing
+from `vitest.setup.ts`, which is the regression DEBT-030 describes.
+
+#### Mutation-checked, not trusted
+
+Every new file was confirmed to fail against a broken implementation. A test that cannot fail
+is worse than no test, and this project has now found three that could not.
+
+| Mutation                                            | Caught by                                                   |
+| :-------------------------------------------------- | :---------------------------------------------------------- |
+| HSTS `max-age` 63072000 → 300                       | the HSTS test                                               |
+| `'unsafe-eval'` added to production `script-src`    | the CSP test                                                |
+| `Permissions-Policy` header deleted                 | the permissions test                                        |
+| `allowed: count <= tier.limit` → `true`             | 13 limiter and proxy tests                                  |
+| Redis key drops the IP (global, not per-IP)         | 7 tests                                                     |
+| Global limiter fails **closed**                     | 3 degradation tests                                         |
+| Fresh counter gets no TTL (permanent lockout)       | 2 tests                                                     |
+| `redactString` removed from `emit()`                | 8 logging tests                                             |
+| `serverError` returns the raw message in production | 4 tests                                                     |
+| **SEC-033 `validDate` fix reverted**                | **1 (mine) · 5 (DEV's parser test) · 0 (DEV's route test)** |
+| Privilege suite pointed at the owner role           | 10 tests                                                    |
+| `vitest.setup.ts` stops forcing Redis database 1    | the DEBT-030 test                                           |
+
+#### Two harness faults found and fixed rather than worked around
+
+- **The first run of the limiter suite failed 20 of 21 tests on `Stream isn't writeable`** —
+  SEC-008, the cold-start window, biting a new harness exactly as it bit Phase 4's cache test.
+  `ensureReady()` before the first command. Worth recording because the fix is now three
+  phases old and the trap still catches new code on contact.
+- **The fail-open suite had to be split into its own file.** Rebinding `lib/redis.ts` to a dead
+  port disconnects the client memoised on `globalThis`, which the live suite in the same file
+  then shares — a suite that quietly poisons the next one is how Phase 4 lost five runs.
+
+#### Not covered
+
+- **Nothing here re-tests §9.2–§9.7.** Not started by DEV; not in scope.
+- **DEBT-009's ops half stands.** `TRUSTED_PROXY_HOPS` is asserted against synthetic headers.
+  Whether the real deployment appends one hop cannot be established from inside the repository,
+  and finding 4 means the answer currently only reaches half the application.
+- **DEBT-020 (Lighthouse on a product page with real images) is still open** and belongs to
+  §9.2.
+- The live header layer is skipped unless `PROD_BASE_URL` is set. It was run for this report
+  against `next start` on a fresh port — after DEV's own note that a probe reaching a stale
+  server is indistinguishable from a broken feature, the server was started on 3100 and its
+  readiness confirmed before anything was measured.
+
+`@DEBUG:` four findings above, each with a failing test naming the case. Findings 1, 2 and 4
+are code fixes. Finding 3 needs the phone pattern anchored so a match cannot begin inside
+another token — `(?<![\w-])(?:\+?\d[\d\s().-]{7,}\d)(?![\w-])`. That candidate was trial-applied
+and reverted rather than proposed on paper: with it in place `lib/security/security.test.ts`
+and `test/logging.test.ts` run **37 passed, 0 failed** — DEV's redaction cases all stay green,
+including every phone spelling, and the two failing cases go green. It is a one-line change and
+the decision is DEBUG's, not mine.
+
+`@DEV:` **finding 4 is the third time this file has held a duplicated decision.** SEC-017
+missed a copy, SEC-028 fixed that copy and did not look nine lines up, and SEC-032 has now
+missed the same one. The pattern is not carelessness — it is that `lib/admin/actions.ts`
+re-implements what `lib/http.ts` exports. `clientIp()` is already there.
+
+`@SECURITY:` **A09 should not be re-rated to PASS yet.** The redaction is real and the wiring
+is now tested end to end, but finding 3 means the logs will be missing the identifier an
+incident is investigated by. A05 has no such caveat — the headers are proven on a live
+production server, including on responses the proxy generates itself.
+
+`@DESIGN:` §9.7's accessibility pass and DEBT-032/033 are untouched by this work.
+
+### Phase 9 — DEBUG (§9.1, TEST findings 1–4)
+
+Status: **PASS for the four findings.** **1,035 unit/integration tests pass, 0 failures** (up
+from 1,025 passing / 9 failing). Build, lint, `prettier --check` and `tsc --noEmit` clean.
+
+**E2E: 325 passed / 1 failed / 32 skipped.** The one failure is **not caused by this work** and
+is not a §9.1 item — proven, not asserted: it reproduces identically with every change here
+reverted to `04f19b4`. It is a real defect, diagnosed below and logged as **DEBT-038**.
+
+**No assertion was weakened to make a failure go away.** Of the four TEST files, three are
+byte-identical to the versions that failed and one gained a test (it did not lose one). Two
+assertions in `lib/security/security.test.ts` were rewritten; that is the opposite case and is
+declared in full below.
+
+Re-measured against a **fresh production build** on `next start`, because the limiter compiles
+into the build and the original findings were measured over real HTTP. A stale build would
+have proven nothing, which is the trap DEV recorded in this phase.
+
+#### Findings 1 and 2 — the limiter's opt-out
+
+**Root cause, one sentence:** the limiter conflated _"must not consume a human's browsing
+budget"_ with _"must not be counted at all"_, so two legitimate isolation needs were
+implemented as a caller-settable exemption.
+
+The exclusions were right and are kept; only the mechanism changed. `shouldSkip()` is gone.
+`isPrefetch()` now selects a **separate counter** at the same tier limit, and `/api/health`
+has its **own tier** (600/min) instead of an exemption. Every request through the proxy is
+counted.
+
+| Measured on the rebuilt server                          | Before    | After                    |
+| :------------------------------------------------------ | :-------- | :----------------------- |
+| 80 requests to `/login` carrying `purpose: prefetch`    | 150 × 200 | **60 × 200, 20 × 429**   |
+| the same address's ordinary `/login` budget afterwards  | untouched | **untouched** (10 × 200) |
+| 700 requests to `/api/health` from one address          | 700 × 200 | **600 × 200, 100 × 429** |
+| `/api/health` from an address already 429'd on `/login` | —         | **200** — isolated       |
+
+The last two rows are the point of the design. A monitor is not merely given headroom, it is
+given its **own bucket**: an address already refused on `/login` still receives **200** on
+`/api/health`, so co-located traffic cannot starve §9.4's uptime check into reporting a false
+outage. And a customer scrolling a catalogue still spends nothing from their click budget on
+prefetches — the concern that motivated the original exemption, preserved without the hole.
+
+Regression-checked on the same build: all six headers still present, `x-nextjs-cache: HIT`
+still served (D-033 intact), 50 ordinary requests still 200.
+
+#### Finding 3 — the redactor destroyed invoice numbers
+
+**Root cause:** the phone pattern had no boundary assertion, so it matched a digit run that
+began inside another token.
+
+`(?<![\w-])…(?![\w-])`. `JW-2026-00042`, ISO timestamps and BIS numbers survive; every phone
+spelling DEV's suite asserts is still redacted, including the parenthesised and hyphenated
+forms. Both redaction suites: 37 passed, 0 failed.
+
+#### Finding 4 — SEC-032 reached one of two copies
+
+**Root cause:** `lib/admin/actions.ts` re-implemented a decision `lib/http.ts` already exports,
+so the fix landed on one copy.
+
+The private `clientIp()` is deleted; the module imports the shared one. The audit log now
+records the trusted hop, and `TRUSTED_PROXY_HOPS` configures the whole application rather than
+half of it — which matters when DEBT-009's ops confirmation finally happens.
+
+**This file has now held a duplicated decision three times** (SEC-017 → SEC-028 → SEC-032). The
+comment above the import says so, because the next person to need a request-scoped value here
+will otherwise write a fourth local helper. Both remaining decisions are single-sourced.
+
+#### The one test change, declared
+
+`lib/security/security.test.ts`'s two `shouldSkip` tests asserted `=== true` for a prefetch
+header and for `/api/health` — that is, they asserted the request was removed from the limiter.
+That was a faithful description of the implementation and a defect against §9.1.
+
+Changing a test to make a failure disappear is the anti-pattern AGENTS.md names, so the
+distinction is stated rather than assumed: these assertions **encoded the bug**, so the property
+was replaced, not relaxed. The replacements (`isPrefetch` recognises all three headers; the
+health tier is separate and finite) fail against the old implementation. Net coverage is up, not
+down — `x-purpose` was untested before and is now asserted.
+
+#### One test was ADDED, and why the fix needed it
+
+The failing test pinned only half of what the fix has to do. `test/proxy-limit.test.ts` proves a
+prefetch-labelled flood is now refused — the defect closing — but nothing distinguished
+"counted" from "counted against the same key as the human". The obvious simplification (drop the
+separate bucket) would have passed the whole suite while silently reinstating the problem the
+original exemption was written to avoid: the site breaking while a customer scrolls.
+
+So `test/global-limit.test.ts` gains one test asserting the other half — exhausting the prefetch
+budget leaves the human's intact. It fails if the buckets are merged.
+
+#### Mutation-checked after the fix
+
+Each fix was reverted to its pre-fix state and the suite re-run. Reverting rather than
+hand-mutating is the stronger check: the "mutation" is the exact code that shipped.
+
+| Reverted                                                               | Caught by                                           |
+| :--------------------------------------------------------------------- | :-------------------------------------------------- |
+| `proxy.ts` + `global-limit.ts` to pre-fix — both exemptions restored   | **6** — 4 in `proxy-limit`, 2 in `security.test.ts` |
+| prefetch bucket merged into the human's key (fix kept otherwise)       | **1** — the new isolation test                      |
+| phone boundary assertions removed                                      | **2** — the invoice-number and timestamp tests      |
+| `lib/admin/actions.ts` to pre-fix — `clientIp` back to `split(',')[0]` | **3** — the audit-ip tests                          |
+
+#### The E2E failure, diagnosed rather than dismissed
+
+`e2e/admin.spec.ts:250` — "no admin screen scrolls sideways" — fails on `/admin` at 375px. It
+would have been easy to call a single red test in a 358-test suite a flake. It is not one.
+
+**It is not caused by this work.** Reverting all five changed files to `04f19b4` and re-running
+the same test reproduces the same failure. **It is data-dependent**, which is why it passed at
+the start of this session and fails now: measured, `scrollWidth` 377 against `clientWidth` 375,
+and the overflowing elements are the dashboard's `grid-cols-2` stat tiles — `₹24,66,407` needs
+135px in a 112px box, `₹1,13,64,479` needs 181px in 160px. Phase 7 DESIGN audited this screen
+against an empty shop where every tile read `₹0`; the E2E suite and `verify:bill` have since
+pushed "this week" past ₹1 crore.
+
+AGENTS.md's must-test list already names "total exceeding ₹1 crore" — for bills. The dashboard
+aggregate was never checked at that magnitude, and it is the screen the owner opens first.
+
+Not fixed here, per AGENTS.md's rule that an out-of-phase architectural fix is logged rather than
+hacked around: the remedy is a design choice between stacking the tiles, stepping down the type
+scale (bounded by "body text never below 15px") and abbreviating to `₹1.14 Cr`. DESIGN owns that.
+**DEBT-038.**
+
+`@SECURITY:` **A05 and A09 are now re-ratable.** A09's caveat is discharged — redaction holds at
+the emitter and no longer costs the invoice number, so an incident is investigable. A05's last
+open item was the limiter's opt-out, now closed and measured. Both re-ratings are yours; this
+block is written by the agent that made the changes, which is the same independence problem DEV
+flagged.
+
+`@DEV:` nothing outstanding from these four. **DEBT-009's ops half is still open** and is now
+the only thing standing between `TRUSTED_PROXY_HOPS` and meaning what it says — send a forged
+`x-forwarded-for` through the real deployment and log what arrives.
+
+`@DESIGN:` **DEBT-038** — the admin dashboard overflows at 375px once the shop's figures pass
+₹1 crore. Diagnosed to the element and proven pre-existing; the fix is a design decision, so it
+is yours. Worth noting the general lesson for §9.7's audit: **every screen signed off against an
+empty database has been audited at its narrowest content.** The catalogue, the bills list and
+the order history all render figures that grow.
+
+### Phase 9 — DEBUG (SEC-036, found while seeding preview imagery)
+
+Status: **FIXED.** Severity **HIGH** — a signed-off feature was non-functional, not merely
+degraded. **1,038 unit/integration tests pass** (up from 1,035; three added). Found by running
+`checkImageUrl` against a real Cloudinary URL, not by reading it.
+
+**Every way of getting an image into this application through the UI was broken.**
+`checkImageUrl` returned `unreachable — "Invalid IP address: undefined"` for **every** URL,
+including valid ones. That is five call sites: pasting a URL into a media slot, the slot's
+preview validator, pasting a URL onto a product, **`confirmUpload` after a successful Cloudinary
+upload**, and the invoice logo — which fails soft, so bills have been printing without a logo
+and nothing said so.
+
+It is very likely why this shop has 25 products and zero images: adding one may never have
+worked.
+
+**Root cause, one sentence.** `net.connect` invokes a custom `lookup` hook with `{ all: true }`
+and then reads `addresses[0].address`, but the hook answered with the three-argument
+`(err, address, family)` form, so that read was `undefined`.
+
+**Why 47 SSRF assertions missed it.** Every one of them is a _rejection_. The suite's "against
+real servers" block runs an **http** server, and the scheme check returns before anything
+connects — so `requestPinned`, the function that performs the fetch, was never executed
+successfully by any test. The one test that does exercise the hook calls it as
+`lookup('example.com', {}, cb)`: the single options shape `net.connect` never uses. It asserted
+the branch Node does not take, and passed, while the branch Node does take was broken.
+
+That is the same shape as the three "tests that assert nothing" this project has already found,
+and the fourth instance: _the assertion was true for a reason unrelated to the behaviour under
+test._
+
+**The fix** extracts `pinnedLookup(address, family)` and answers in whichever shape the caller
+asked for. The pinning property is unchanged — both shapes return only the one already-validated
+address, so the DNS-rebinding gap the module exists to close stays closed. Three regression tests
+assert the `{ all: true }` contract, the legacy shape, and that neither can leak a second
+address; the first fails against the old code.
+
+Verified after the fix: `checkImageUrl` on a live Cloudinary URL returns `ok: true` with sniffed
+image bytes, and `images.pexels.com` still returns `host_not_allowed` — the allowlist was not
+touched.
+
+`@SECURITY:` **this deserves a number and a review — logged here as SEC-036 pending yours.** Two
+things worth your attention beyond the fix: §7.7's guard has never had a successful-fetch test,
+so its _positive_ path is unproven except by the manual probe above; and the audit trail for
+Phase 7's sign-off should note that "SSRF suite — PASS, 47 assertions" measured refusals only.
+
+`@TEST:` **DEBT-022 is partly closed.** `scripts/upload-photos.mts` drives the §7.8 signed-upload
+path end to end against the live account using the real `createUploadGrant()` — 23 uploads, each
+verified with `isOurUpload()`. The hostile cases (`.php` renamed `.jpg`, 100 MB) remain
+`verify-upload.mts`'s job and are still not automated.
+
+`@TEST:` §9.1 is now green end to end. §9.2–§9.7 have no TEST coverage yet, and DEBT-020
+(Lighthouse on a product page with real images) is still owed.
 
 ### Phase 9 — DESIGN
 

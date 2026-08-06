@@ -32,7 +32,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
 import { clientIpFromHeaders } from '@/lib/http';
-import { consumeGlobalLimit, shouldSkip } from '@/lib/security/global-limit';
+import { consumeGlobalLimit, isPrefetch } from '@/lib/security/global-limit';
 
 /** Must match SESSION_COOKIE in lib/auth/session.ts — that module cannot be imported here. */
 const SESSION_COOKIE = 'tj_session';
@@ -46,23 +46,28 @@ export async function proxy(request: NextRequest) {
    * First, so a flood is refused before any routing or rendering work happens. It fails
    * OPEN — a Redis outage must not take the site down; see lib/security/global-limit.ts,
    * which explains why this is the opposite of the auth limiter's behaviour.
+   *
+   * EVERY request through this proxy is counted. There is no path and no header that opts
+   * out — prefetches and `/api/health` are isolated into their own buckets rather than
+   * excused, because an exemption a client can request is not a limit (Phase 9 TEST,
+   * findings 1 and 2).
    */
-  if (!shouldSkip(request, pathname)) {
-    const ip = clientIpFromHeaders(request.headers);
-    const limit = await consumeGlobalLimit(ip, pathname);
+  const ip = clientIpFromHeaders(request.headers);
+  const limit = await consumeGlobalLimit(ip, pathname, {
+    prefetch: isPrefetch(request),
+  });
 
-    if (!limit.allowed) {
-      return new NextResponse('Too many requests', {
-        status: 429,
-        headers: {
-          'Retry-After': String(limit.retryAfter),
-          'Cache-Control': 'no-store',
-          // Says nothing about which tier was hit or how much is left; a limiter that
-          // reports its own state is a limiter an attacker can tune against.
-          'Content-Type': 'text/plain; charset=utf-8',
-        },
-      });
-    }
+  if (!limit.allowed) {
+    return new NextResponse('Too many requests', {
+      status: 429,
+      headers: {
+        'Retry-After': String(limit.retryAfter),
+        'Cache-Control': 'no-store',
+        // Says nothing about which tier was hit or how much is left; a limiter that
+        // reports its own state is a limiter an attacker can tune against.
+        'Content-Type': 'text/plain; charset=utf-8',
+      },
+    });
   }
 
   /**

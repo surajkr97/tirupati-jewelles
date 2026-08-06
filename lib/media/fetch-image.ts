@@ -206,6 +206,47 @@ async function validateAndResolve(
  * `node:https` rather than a new dependency: it takes exactly the hook this needs, and
  * AGENTS.md asks that dependencies be justified in the phase file rather than assumed.
  */
+/**
+ * The pinning hook, extracted so its contract can be tested without a socket.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  IT MUST ANSWER IN WHICHEVER SHAPE THE CALLER ASKED FOR.
+ *
+ *  `net.connect` invokes a custom `lookup` with `{ all: true }` and then reads
+ *  `addresses[0].address`. Handing it the three-argument `(err, address, family)` form —
+ *  which is what this did — makes that read `undefined`, and the connection dies with
+ *  **"Invalid IP address: undefined"**.
+ *
+ *  The consequence was not subtle: `checkImageUrl` failed on EVERY url, so every way of
+ *  getting an image into this application was broken — pasting one into a media slot,
+ *  pasting one onto a product, `confirmUpload` after a successful Cloudinary upload, and
+ *  the invoice logo (which fails soft, so bills quietly printed without it).
+ *
+ *  It survived Phase 7's 47-assertion SSRF suite because every one of those assertions is a
+ *  REJECTION: the test server speaks http, and the scheme check returns long before
+ *  anything connects. Nothing ever exercised a successful fetch, so the one line that
+ *  performs it was never run. The pinning test that exists calls the hook with `{}` — the
+ *  one options shape `net.connect` never uses.
+ *
+ *  The pinning property is unchanged: both shapes return only the single address that has
+ *  already been validated, so the socket still cannot follow a rebound DNS answer.
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+export function pinnedLookup(address: string, family: 4 | 6) {
+  return (
+    _hostname: string,
+    options: unknown,
+    callback: (...args: unknown[]) => void,
+  ): void => {
+    if (options && typeof options === 'object' && (options as { all?: boolean }).all) {
+      callback(null, [{ address, family }]);
+      return;
+    }
+
+    callback(null, address, family);
+  };
+}
+
 function requestPinned(
   url: URL,
   address: string,
@@ -218,14 +259,7 @@ function requestPinned(
         method: 'GET',
         headers: { accept: 'image/*' },
         // Node passes this straight to `net.connect`. It is never asked to resolve again.
-        lookup: (_hostname, _options, callback) => {
-          // The 4-argument callback shape; `family` must be the number, not a boolean.
-          (callback as (e: Error | null, a: string, f: number) => void)(
-            null,
-            address,
-            family,
-          );
-        },
+        lookup: pinnedLookup(address, family) as never,
         timeout: FETCH_TIMEOUT_MS,
       },
       resolve,

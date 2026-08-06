@@ -49,8 +49,25 @@ const EMAIL = /\b([A-Za-z0-9._%+-])[A-Za-z0-9._%+-]*@([A-Za-z0-9.-]+\.[A-Za-z]{2
  * slightly less readable log line; a false negative puts a customer's number in a file
  * somebody else can read. `libphonenumber-js` is not used here on purpose — this must never
  * throw, and it must catch the malformed inputs that normalisation would reject.
+ *
+ * ── The boundary assertions are load-bearing (Phase 9 TEST, finding 3) ──
+ * Without them the pattern matched a digit run that BEGINS INSIDE another token, because
+ * nothing said a match had to start at one. Measured:
+ *
+ *     "order JW-2026-00042 failed"    ->  "order JW-[phone:…042] failed"
+ *     "at 2026-08-07T01:36:27.000Z"   ->  "at [phone:…807]T01:36:27.000Z"
+ *     "HUID 123456 / BIS 987654321"   ->  "HUID 123456 / BIS [phone:…321]"
+ *
+ * The invoice number is the primary key of every support conversation this shop will have —
+ * a legally numbered, six-year-retained series (DEBT-026) — so a log line mentioning one was
+ * unreadable in the one field that identifies it. Over-redaction is not the safe direction it
+ * looks like: item 9 asks for STRUCTURED LOGGING with PII redacted, and a log nobody can
+ * correlate fails the first half of that.
+ *
+ * `-` is in both lookarounds because a hyphen joins the token in `JW-2026-00042` and in an
+ * ISO date, while a hyphenated phone number (`98765-43210`) is still matched as a whole.
  */
-const PHONE = /(?:\+?\d[\d\s().-]{7,}\d)/g;
+const PHONE = /(?<![\w-])(?:\+?\d[\d\s().-]{7,}\d)(?![\w-])/g;
 
 /** Anything that looks like a bearer credential this codebase mints. */
 const LONG_TOKEN = /\b[A-Za-z0-9_-]{32,}\b/g;

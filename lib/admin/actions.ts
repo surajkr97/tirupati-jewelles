@@ -23,12 +23,30 @@
  */
 import 'server-only';
 
-import { headers } from 'next/headers';
-
 import { requireAdmin, UnauthorisedError, type PublicUser } from '@/lib/auth/guard';
 import { db } from '@/lib/db';
 import { env } from '@/lib/env';
-import { checkSameOrigin } from '@/lib/http';
+/**
+ * Both of these are imported rather than reimplemented, and that is the whole point.
+ *
+ * ── The third time this file held a duplicated decision (Phase 9 TEST, finding 4) ──
+ * SEC-017 tightened the origin check in `lib/http.ts` and missed the copy here. SEC-028
+ * found that, and fixed it by making the decision exist once — but did not look nine lines
+ * up, where a second copy of the CLIENT IP decision sat. SEC-032 then fixed
+ * `clientIpFromHeaders` to read `x-forwarded-for` from the right, and reached that copy and
+ * not this one.
+ *
+ * The local version took `split(',')[0]` — the leftmost entry, which is whatever the caller
+ * sent. It is not used for rate limiting, so it was not a limiter bypass; it is the value
+ * stamped on every `AuditLog` row. §7 SECURITY requires "all admin mutations write an
+ * AuditLog with actor and IP", §7.3 shows it back as rate-change history, and §7.10 makes
+ * the log read-only precisely so it can be relied on afterwards. It recorded `1.2.3.4` from
+ * a forged header, and `not-an-ip-at-all` just as happily.
+ *
+ * It also meant `TRUSTED_PROXY_HOPS` only configured half the application, which is not
+ * what DEBT-009 assumes when it is finally confirmed against the real topology.
+ */
+import { checkSameOrigin, clientIp } from '@/lib/http';
 import { log } from '@/lib/log';
 
 export type ActionResult<T = undefined> =
@@ -49,13 +67,6 @@ interface AdminContext {
   audit: (entry: AuditEntry) => Promise<void>;
 }
 
-/** Best-effort client IP. See lib/http.ts for the `x-forwarded-for` caveat (DEBT-009). */
-async function clientIp(): Promise<string> {
-  const h = await headers();
-  const forwarded = h.get('x-forwarded-for');
-  const first = forwarded?.split(',')[0]?.trim();
-  return first || h.get('x-real-ip') || '0.0.0.0';
-}
 
 /**
  * Same-origin check for a Server Action.

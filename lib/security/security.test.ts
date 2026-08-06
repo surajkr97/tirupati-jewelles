@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest';
 
 import { clientIpFromHeaders } from '@/lib/http';
 import { redact, redactString } from '@/lib/log';
-import { shouldSkip, tierFor } from '@/lib/security/global-limit';
+import { isPrefetch, tierFor } from '@/lib/security/global-limit';
 
 // ─────────────────────────────────────────── SEC-031, the redactor
 
@@ -190,24 +190,48 @@ describe('SEC-034 — the global limiter’s tiers', () => {
     expect(tierFor('/bills/x').limit).toBeLessThan(tierFor('/').limit);
   });
 
-  it('never counts a prefetch', () => {
+  /**
+   * ── These two tests were REWRITTEN, and the reason is on the record ──
+   *
+   * They previously asserted `shouldSkip(...) === true` for a prefetch header and for
+   * `/api/health` — that is, they asserted the request was removed from the limiter
+   * entirely. That was a faithful description of the implementation and a defect against
+   * §9.1 (Phase 9 TEST, findings 1 and 2): a client can set those headers, so the "global"
+   * limit was opt-out.
+   *
+   * Changing a test to make a failure disappear is the anti-pattern AGENTS.md names. This
+   * is the other case — the assertion itself encoded the bug — so the property is replaced
+   * rather than relaxed, and both replacements fail against the old `shouldSkip`.
+   */
+  it('recognises a prefetch, so it can be counted separately rather than skipped', () => {
     /**
      * `next/link` fires one prefetch per link in the viewport, so a catalogue page produces
-     * dozens of proxy-visible requests per navigation. Counting them would exhaust a limit
-     * tuned for humans, and the symptom would be the site breaking while someone scrolls.
+     * dozens of proxy-visible requests per navigation. Charging them to the human's budget
+     * would break the site while somebody scrolls — which is why they get their own bucket.
+     * Not counting them at all is what made the limit optional.
      */
     const req = (headers: Record<string, string>) =>
       new Request('https://shop.example/collections', { headers });
 
-    expect(shouldSkip(req({ 'next-router-prefetch': '1' }), '/collections')).toBe(true);
-    expect(shouldSkip(req({ purpose: 'prefetch' }), '/collections')).toBe(true);
-    expect(shouldSkip(req({}), '/collections')).toBe(false);
+    expect(isPrefetch(req({ 'next-router-prefetch': '1' }))).toBe(true);
+    expect(isPrefetch(req({ purpose: 'prefetch' }))).toBe(true);
+    expect(isPrefetch(req({ 'x-purpose': 'prefetch' }))).toBe(true);
+    expect(isPrefetch(req({}))).toBe(false);
   });
 
-  it('never counts the health check', () => {
-    // §9.4 puts uptime monitoring on it. A monitor that gets a 429 reports a false outage.
-    expect(
-      shouldSkip(new Request('https://shop.example/api/health'), '/api/health'),
-    ).toBe(true);
+  it('gives the health check its own budget rather than an exemption', () => {
+    /**
+     * §9.4 puts uptime monitoring on `/api/health`, and a monitor that gets a 429 reports a
+     * false outage — so it needs headroom, and its OWN bucket so unrelated traffic from the
+     * same address cannot starve it. It does not need to be uncounted: the endpoint runs a
+     * Postgres query and a Redis ping on every hit, so an unbounded one is a
+     * connection-pool exhaustion primitive.
+     */
+    const health = tierFor('/api/health');
+
+    expect(health.name).not.toBe(tierFor('/collections').name);
+    // Generous enough that no monitor can reach it, finite enough to bound a flood.
+    expect(health.limit).toBeGreaterThan(100);
+    expect(Number.isFinite(health.limit)).toBe(true);
   });
 });
