@@ -1419,3 +1419,181 @@ Three items that need the real infrastructure and must be confirmed before launc
 
 Backups are a fourth, already tracked: **DEBT-031** — they now contain customer invoices and
 must be encrypted at rest with a retention period that reconciles with DEBT-026's six years.
+
+---
+
+# Phase 9 §9.1 — DEV implementation
+
+Status: **all ten §9.1 items now pass.** Built against the constraints the SECURITY pass set
+above; every claim below was measured against a production build on `next start` or against a
+running Redis, not read off the source.
+
+## The four open items, closed
+
+### SEC-030 — the header set
+
+All six now present. Verified on a production build rather than in config:
+
+```
+Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline';
+  style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https://res.cloudinary.com
+  https://utfs.io; font-src 'self' data:; connect-src 'self' https://api.cloudinary.com;
+  object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';
+  upgrade-insecure-requests
+Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(),
+  interest-cohort=()
+X-Content-Type-Options: nosniff
+X-Frame-Options: DENY
+Referrer-Policy: strict-origin-when-cross-origin
+x-nextjs-cache: HIT          ← the point of D-033
+```
+
+No `unsafe-eval` in production. `unsafe-inline` on `script-src` is the documented concession
+(D-033) — and the `x-nextjs-cache: HIT` on that same response is the evidence for why: a nonce
+would have turned it into a full render.
+
+`connect-src` is the directive that would have broken a feature silently. Phase 7 §7.8's
+upload POSTs image bytes from the **browser** straight to Cloudinary, so omitting
+`https://api.cloudinary.com` would have blocked every upload with a console violation and no
+server-side error.
+
+### SEC-034 / DEBT-012 — the global limiter
+
+`lib/security/global-limit.ts` plus four lines in `proxy.ts`. Three tiers — auth 60/min, bill
+60/min, everything else 600/min — keyed per IP in Redis.
+
+**It fails open, and that is the whole design.** Measured both directions:
+
+```
+75 requests to /login from one address  →  60 × 200, 15 × 429
+a different address, same moment        →  200          (per-IP, not global)
+Redis stopped, 100 requests to /login   →  100 × 200    (fails OPEN)
+Redis stopped, /  /rates  /collections  →  200, 200, 200
+```
+
+That last pair is the requirement. A fail-closed global limiter would have turned a Redis
+outage into a site outage, contradicting §9.5 and Phase 1 TEST's verified degradation. The
+per-route auth limiters still fail **closed**, unchanged — the two behaviours are opposite on
+purpose and the module says so at the top, because the next person to read both files will
+otherwise "fix" the inconsistency.
+
+Prefetches are excluded (`next/link` fires one per link, so a catalogue page would exhaust a
+human-tuned limit while someone scrolls) and so is `/api/health`, because §9.4 monitors it and
+a 429 there reports a false outage.
+
+Sizing note recorded for whoever tunes these: much of this shop's audience reaches it over
+carrier-grade NAT, where one public address is thousands of people. A per-IP limit tuned for a
+single browser blocks a neighbourhood.
+
+### SEC-031 / DEBT-036 — redacted structured logging
+
+`lib/log.ts`. JSON in production, human-readable in development, redacting in **both** — a
+redactor only exercised in production is one nobody notices is broken.
+
+The measured case that raised the finding is now a test: a Prisma error carrying
+`email: "victim.person@example.com"` and `phone: "+919812345678"` comes back with neither,
+while still containing `prisma.user.findMany` — a redactor that destroys the diagnostic has
+traded one problem for another. Secret-_named_ keys (`password`, `token`, `cookie`, …) are
+dropped whole, because a password does not have to look like anything.
+
+The four call sites that could carry PII now route through it: `serverError`, the rate
+limiter's fail-closed line (its keys embed the identifier by construction), the enquiry
+handler and `adminAction`.
+
+`@DEV:` when §9.4 adds Sentry, give `redact()` to its `beforeSend` rather than writing a
+second idea of what a phone number looks like.
+
+### SEC-035 — Dependabot
+
+`.github/dependabot.yml`, weekly, covering npm, the Celery worker's pip requirements, its
+Docker base image, and the GitHub Actions themselves — a pinned action with a known
+vulnerability is a supply-chain hole in CI, which holds repository credentials. Next/React and
+Prisma are grouped, because they are version-locked here and separate PRs could not pass CI
+alone.
+
+## SEC-032 — the code half is done; the ops half is not
+
+`clientIpFromHeaders` now counts back from the **right** of `x-forwarded-for`, with
+`TRUSTED_PROXY_HOPS` making the trust boundary explicit configuration rather than a hidden
+assumption.
+
+The failure mode was designed out rather than hoped away: if the hop count does not match
+reality the selected entry is a load balancer's own address, every visitor collapses into one
+bucket, and the global limiter locks out the whole site — worse than the problem being fixed.
+So an address in a private, loopback, link-local or CGNAT range is never accepted as an
+identity; it falls back to the rightmost public entry, which is correct under any hop count.
+
+**DEBT-009 stays open.** The remaining half cannot be done from inside the repository: send a
+request with a forged `X-Forwarded-For` through the real deployment and log what arrives. Note
+that the local limiter test above _did_ honour a client-supplied header — correctly, because
+with no proxy in front the caller's header is the whole list. That is precisely the topology
+question DEBT-009 asks.
+
+## SEC-033 — fixed, and the test that would have caught it now exists
+
+`parseBillFilters` round-trips each date through `Date` and compares the formatted result, so
+`9999-99-99` and `2026-02-30` are both refused. `page` is bounded too.
+
+The quieter half of this bug is worth recording: `new Date('2026-02-30')` does not throw, it
+returns 2 March. An admin filtering "to 30 February" would have seen March's bills with no
+indication anything was wrong.
+
+## A test that could not fail, found by mutation
+
+`test/route-validation.test.ts` implements §9.1 item 3, and its first version was worthless
+for the case that motivated it.
+
+It drives `/admin/bills/export` with `from=9999-99-99` and passed — **and passed against the
+broken parser too.** Mutation-checked by reverting the SEC-033 fix: all 21 tests stayed green.
+`requireAdmin()` runs before validation (deliberately, SEC-016), so with no session the route
+answers 404 and the malformed input never reaches a parser. **A route whose authorisation sits
+in front of its validation cannot have its validation tested through the route.**
+
+So the parser is tested where it lives — `lib/bills/query.test.ts`, which had no predecessor,
+which is how the defect survived Phase 8. Six of its cases fail against the pre-fix parser.
+The limitation is written into the route test's header so the next person does not read a
+green row as evidence an admin route validates anything.
+
+This is the third time in this project a test has been found asserting nothing (Phase 4's
+reduced-motion emulation, Phase 8's PDF geometry, now this). The pattern is the same each
+time: the assertion was true for a reason unrelated to the behaviour under test.
+
+## Verification
+
+| Check                         | Result                                                                   |
+| :---------------------------- | :----------------------------------------------------------------------- |
+| `pnpm test`                   | **919 passed** (up from 863) across 35 files                             |
+| `pnpm exec playwright test`   | **326 passed, 32 skipped** — unchanged from baseline; no limiter lockout |
+| `pnpm build`                  | clean                                                                    |
+| `pnpm lint` / `format:check`  | clean                                                                    |
+| `tsc --noEmit`                | clean                                                                    |
+| Headers on a production build | all six present, `x-nextjs-cache: HIT` intact                            |
+| Limiter denies                | 60 allowed / 15 denied, per-IP                                           |
+| Limiter fails open            | 100 × 200 with Redis stopped; site browsable                             |
+
+**A measurement error worth recording**, because it nearly produced a false finding. The first
+header probe reported all three new headers missing. The cause was not the config: a
+`next start` from earlier in the session still held port 3210, so the new server had exited
+with `EADDRINUSE` and the probe hit **pre-change code**. Evaluating `next.config.ts` directly
+showed all six headers, which is what prompted checking the process list. A probe that hits the
+wrong server looks exactly like a feature that does not work.
+
+## The §9.1 checklist, restated
+
+| #   | Item                                      | Verdict                                          |
+| :-- | :---------------------------------------- | :----------------------------------------------- |
+| 1   | Headers in `next.config.ts`               | **PASS**                                         |
+| 2   | Global per-IP rate limiting in the proxy  | **PASS**                                         |
+| 3   | Every route validated, enforced by a test | **PASS**                                         |
+| 4   | `pnpm audit` clean; Dependabot enabled    | **PASS**                                         |
+| 5   | No secret ever committed                  | **PASS**                                         |
+| 6   | DB least privilege — no DDL at runtime    | **PASS**                                         |
+| 7   | Redis password-protected, not public      | **PASS** (dev; one ops confirmation outstanding) |
+| 8   | No stack traces in production             | **PASS**                                         |
+| 9   | Structured logging, PII redacted          | **PASS**                                         |
+| 10  | OWASP Top 10 documented                   | **PASS**                                         |
+
+A05 and A09 — the two OWASP categories that failed the review — are the two this work
+addressed. Both should be re-rated by the closing SECURITY pass rather than by the agent that
+wrote the code.

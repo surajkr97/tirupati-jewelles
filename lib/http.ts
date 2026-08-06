@@ -11,6 +11,7 @@ import { NextResponse } from 'next/server';
 import type { z } from 'zod';
 
 import { env } from '@/lib/env';
+import { log } from '@/lib/log';
 
 /** Route handlers must never be cached (MASTER-SPEC §6). */
 export const NO_STORE = { 'Cache-Control': 'no-store' } as const;
@@ -180,20 +181,97 @@ export async function requireSameOrigin(): Promise<NextResponse | null> {
 }
 
 /**
- * Best-effort client IP for rate limiting.
+ * Is this address one an infrastructure component would have, rather than a visitor?
  *
- * `x-forwarded-for` is client-controlled unless a trusted proxy overwrites it. Vercel and
- * most managed platforms do. Behind anything else, verify before trusting it — a spoofable
- * IP makes the per-IP limits decorative. Flagged for Phase 9 §9.1.
+ * Private (RFC 1918), loopback, link-local — including `169.254.169.254`, the cloud
+ * metadata address — and the CGNAT range carriers use between their own hops. IPv6
+ * loopback and unique-local too.
  */
-export async function clientIp(): Promise<string> {
-  const h = await headers();
-  const forwarded = h.get('x-forwarded-for');
-  if (forwarded) {
-    const first = forwarded.split(',')[0]?.trim();
-    if (first) return first;
+function isInfrastructureAddress(ip: string): boolean {
+  const v4 = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.\d{1,3}$/.exec(ip);
+  if (v4) {
+    const a = Number(v4[1]);
+    const b = Number(v4[2]);
+    if (a === 10 || a === 127 || a === 0) return true;
+    if (a === 192 && b === 168) return true;
+    if (a === 169 && b === 254) return true;
+    if (a === 172 && b >= 16 && b <= 31) return true;
+    // 100.64.0.0/10 — carrier-grade NAT, used between provider hops.
+    if (a === 100 && b >= 64 && b <= 127) return true;
+    return false;
   }
-  return h.get('x-real-ip') ?? '0.0.0.0';
+
+  const lower = ip.toLowerCase();
+  if (lower === '::1' || lower === '::') return true;
+  // fc00::/7 unique-local, fe80::/10 link-local.
+  return /^(f[cd]|fe[89ab])/.test(lower);
+}
+
+/**
+ * Derive the client IP from a set of request headers.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  SEC-032 / DEBT-009. Read from the RIGHT, never the left.
+ *
+ *  `x-forwarded-for` is a list that each proxy appends to, so the LEFTMOST entry is
+ *  whatever the original caller sent — attacker-controlled. Taking it, which this function
+ *  used to do, means anyone can present a fresh identity per request and every per-IP limit
+ *  in the application becomes decorative: OTP send and verify, login, the claim token,
+ *  calculator shares, enquiries, bill creation, and the global limit in `proxy.ts`.
+ *
+ *  Counting from the right instead means reading the entry written by a proxy we trust.
+ *
+ *  ── The failure mode this must not have ──
+ *  If the hop count is wrong, the entry selected is a load balancer's own address — so
+ *  every visitor collapses into one bucket and the global limiter locks out the whole site.
+ *  That is worse than the problem being fixed, so it is designed out rather than hoped
+ *  away: an address that belongs to infrastructure is never accepted as an identity, and we
+ *  fall back to the rightmost PUBLIC entry, which is correct under any hop count.
+ *
+ *  What remains is one ops confirmation that cannot be made from inside the repository:
+ *  send a forged header through the real deployment and log what arrives. DEBT-009 stays
+ *  open until that has been run.
+ * ═══════════════════════════════════════════════════════════════════════════
+ */
+export function clientIpFromHeaders(h: Headers): string {
+  const forwarded = h.get('x-forwarded-for');
+
+  if (forwarded) {
+    const parts = forwarded
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean);
+
+    if (parts.length > 0) {
+      const atHop = parts[Math.max(0, parts.length - env.TRUSTED_PROXY_HOPS)];
+      if (atHop && !isInfrastructureAddress(atHop)) return atHop;
+
+      // The hop count does not match reality. Take the rightmost address that could
+      // actually belong to a visitor rather than trusting a number in an env var.
+      for (let i = parts.length - 1; i >= 0; i -= 1) {
+        const candidate = parts[i];
+        if (candidate && !isInfrastructureAddress(candidate)) return candidate;
+      }
+
+      // Everything is private — a purely internal caller, or local development.
+      if (atHop) return atHop;
+    }
+  }
+
+  const real = h.get('x-real-ip');
+  if (real) return real;
+
+  /**
+   * No forwarding headers at all. Every such caller shares one bucket, which is the
+   * conservative direction: it over-limits rather than under-limits, and in practice this
+   * is development and the test suite.
+   */
+  return '0.0.0.0';
+}
+
+/** Best-effort client IP for rate limiting. See `clientIpFromHeaders`. */
+export async function clientIp(): Promise<string> {
+  return clientIpFromHeaders(await headers());
 }
 
 /**
@@ -210,9 +288,15 @@ export async function padTo(startedAt: number, targetMs = 300): Promise<void> {
   }
 }
 
-/** Never leak a stack trace in production (Phase 9 §9.1). */
+/**
+ * Never leak a stack trace in production (Phase 9 §9.1).
+ *
+ * The response side was already correct. The LOG side was not: Prisma serialises its whole
+ * argument object into a validation error, so this line printed customers' emails and phone
+ * numbers verbatim (SEC-031). It now goes through the redacting logger.
+ */
 export function serverError(err: unknown, context: string): NextResponse {
-  console.error(`[${context}]`, err);
+  log.error(`route failed: ${context}`, { route: context, err });
   return errorJson(
     env.NODE_ENV === 'production'
       ? 'Something went wrong. Please try again.'

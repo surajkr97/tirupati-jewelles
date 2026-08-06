@@ -29,6 +29,7 @@ import { requireAdmin, UnauthorisedError, type PublicUser } from '@/lib/auth/gua
 import { db } from '@/lib/db';
 import { env } from '@/lib/env';
 import { checkSameOrigin } from '@/lib/http';
+import { log } from '@/lib/log';
 
 export type ActionResult<T = undefined> =
   { ok: true; data: T } | { ok: false; error: string; field?: string };
@@ -121,7 +122,7 @@ export async function adminAction<T>(
   try {
     return await run({ admin, ip, audit });
   } catch (err) {
-    console.error('[admin action]', err);
+    log.error('admin action failed', { actorId: admin.id, err });
     return {
       ok: false,
       error:

@@ -50,6 +50,30 @@ function pick<T extends string>(
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * A date that exists, not merely one shaped like a date (SEC-033).
+ *
+ * The regex alone accepted `9999-99-99`, which `billsWhere` turned into `new Date(…)` →
+ * `Invalid Date` → a Prisma throw → **500 on `/admin/bills` and on the CSV export**. Probed
+ * against the real database during the Phase 9 §9.1 pass; the comment below this function
+ * claimed "a hand-edited URL cannot 500", and it could.
+ *
+ * Round-tripping through `Date` is what closes it: `2026-02-30` parses without complaint and
+ * comes back as 2 March, so comparing the formatted result against the input is the only
+ * cheap check that rejects a day that does not exist in that month.
+ */
+function validDate(value: string | undefined): string {
+  if (!value || !ISO_DATE.test(value)) return '';
+
+  // Parsed as UTC deliberately — this is a calendar check, not a moment in time. Using the
+  // shop's zone here would make 1 January reject or accept depending on the server's clock.
+  const parsed = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return '';
+
+  // `2026-02-30` → 2026-03-02. If it did not survive the round trip, it was never a date.
+  return parsed.toISOString().slice(0, 10) === value ? value : '';
+}
+
 /** Parse the query string. Anything unrecognised falls back rather than erroring. */
 export function parseBillFilters(
   params: Record<string, string | undefined>,
@@ -61,9 +85,11 @@ export function parseBillFilters(
     sent: pick(params.sent, SENT_FILTERS, 'all'),
     claim: pick(params.claim, CLAIM_FILTERS, 'all'),
     voided: pick(params.voided, VOID_FILTERS, 'active'),
-    from: ISO_DATE.test(params.from ?? '') ? params.from! : '',
-    to: ISO_DATE.test(params.to ?? '') ? params.to! : '',
-    page: Number.isInteger(page) && page > 0 ? page : 1,
+    from: validDate(params.from),
+    to: validDate(params.to),
+    // Bounded as well as positive: `skip` is an Int in Prisma, and an absurd page is a
+    // pointless sequential scan even where it does not overflow.
+    page: Number.isInteger(page) && page > 0 && page <= 100_000 ? page : 1,
   };
 }
 

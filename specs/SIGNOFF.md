@@ -1603,16 +1603,103 @@ gets built:
 `@TEST:` `lib/admin/actions.csrf.test.ts` is a security regression test written by SECURITY
 because the fix needed one; it is yours to own from here.
 
-### Phase 9 — DEV
+### Phase 9 — DEV (§9.1)
 
-Not started. §9.1's remaining build items — **headers, global limiter, enumeration test,
-Dependabot, redacted logging** — and §9.2–§9.7. Constraints above. The least-privilege database
-role is done (SEC-029).
+Status: **PASS for §9.1.** All ten items now pass. §9.2–§9.7 not started.
 
-`@DEV:` two deployment consequences of that fix. `MIGRATE_DATABASE_URL` must be set at **build**
+Verified: `pnpm build` clean, `pnpm lint` and `pnpm format:check` clean, `tsc --noEmit` clean,
+**919 unit/integration tests** (up from 863) and **326 E2E passing / 32 skipped** — the same
+E2E total as before, so the new limiter does not lock the suite out.
+
+Everything below was measured against a production build on `next start` or a running Redis,
+not read off the source.
+
+- **Headers** — all six present. `Content-Security-Policy`, `Strict-Transport-Security`
+  (`max-age=63072000; includeSubDomains; preload`), `Permissions-Policy` denying camera,
+  microphone, geolocation, payment, USB and interest-cohort, plus Phase 1's three. No
+  `unsafe-eval` in production.
+- **Global rate limiter** — `lib/security/global-limit.ts` + `proxy.ts`. Three tiers
+  (auth 60/min, bill 60/min, default 600/min), per IP, Redis-backed. Closes DEBT-012.
+- **Route validation** — `test/route-validation.test.ts` enumerates all 20 route files and
+  drives each with malformed input. Plus `lib/bills/query.test.ts`, which is where the real
+  coverage lives; see below.
+- **Redacted structured logging** — `lib/log.ts`. Closes SEC-031 / DEBT-036.
+- **Dependabot** — npm, pip, docker and github-actions. Closes SEC-035.
+- **SEC-032** — `clientIpFromHeaders` reads from the right of `x-forwarded-for`.
+- **SEC-033** — dates round-trip through `Date`; `page` bounded. Closes DEBT-037.
+
+#### The CSP kept ISR, which was the whole point of D-033
+
+The same response that carries the full CSP also carries `x-nextjs-cache: HIT`. Had the nonce
+recipe from Next's own guide been used, that HIT would have become a full server render on
+every request and §9.2's TTFB budget would have been unreachable — with nothing failing to
+signal it.
+
+`connect-src` was the directive that would have broken a feature silently: Phase 7 §7.8's
+upload POSTs image bytes from the **browser** to Cloudinary, so omitting that host blocks every
+upload with a console violation and no server-side error.
+
+#### The limiter fails open, and it was tested in both directions
+
+```
+75 requests to /login from one address  →  60 × 200, 15 × 429
+a different address, same moment        →  200        (per-IP, not global)
+Redis stopped, 100 requests to /login   →  100 × 200  (fails OPEN)
+Redis stopped, /  /rates  /collections  →  200, 200, 200
+```
+
+The last two lines are the requirement, not a nice-to-have: a fail-closed global limiter would
+have converted a Redis outage into a site outage. The per-route auth limiters still fail
+**closed**, unchanged. The two behaviours are opposite deliberately and both files say so.
+
+Prefetches and `/api/health` are excluded — `next/link` fires a prefetch per link, and §9.4
+monitors the health endpoint where a 429 would report a false outage.
+
+#### A test that could not fail, found by mutation
+
+`test/route-validation.test.ts` drives `/admin/bills/export` with the impossible date that
+caused SEC-033, and passed — **including against the broken parser.** Confirmed by reverting
+the fix: all 21 tests stayed green. `requireAdmin()` runs before validation (deliberately,
+SEC-016), so with no session the route answers 404 and the input never reaches a parser.
+
+**A route whose authorisation sits in front of its validation cannot have its validation tested
+through the route.** So the parser is tested where it lives, in a new
+`lib/bills/query.test.ts` — six of whose cases fail against the pre-fix code — and the
+limitation is written into the route test's header so a green row there is not misread as
+evidence that an admin route validates anything.
+
+Third time in this project a test has been found asserting nothing (Phase 4's reduced-motion
+emulation, Phase 8's PDF geometry, now this). Same shape every time: the assertion was true for
+a reason unrelated to the behaviour under test.
+
+#### A measurement error, recorded because it nearly became a false finding
+
+The first header probe reported all three new headers missing. The config was fine — a
+`next start` from earlier in the session still held the port, so the new server had exited with
+`EADDRINUSE` and the probe was hitting **pre-change code**. A probe that reaches the wrong
+server is indistinguishable from a feature that does not work.
+
+`@TEST:` **five new test files were written by DEV and are yours to own.**
+`lib/admin/actions.csrf.test.ts`, `test/route-validation.test.ts`,
+`lib/bills/query.test.ts`, `lib/security/security.test.ts`, and the additions above. They were
+written from the §9.1 spec and mutation-checked, but they were written by the agent that wrote
+the code — which is exactly the independence problem `AGENTS.md` warns about. Re-derive the
+acceptance criteria from `specs/09-hardening.md` rather than from these files.
+
+`@SECURITY:` A05 and A09 were the two OWASP categories that failed your review and are the two
+this work addressed. They should be re-rated by you, not by the agent that wrote the code.
+DEBT-009's ops half is still open and is the one thing here that cannot be closed from inside
+the repository.
+
+`@DEV:` deployment consequences carried forward. `MIGRATE_DATABASE_URL` must be set at **build**
 time as well as at migration time, because `pnpm build` runs `prisma generate` and generate
-resolves both URLs. And `scripts/db-roles.sql` must be run against the production database
-before `DATABASE_URL` is pointed at the restricted role.
+resolves both URLs. `scripts/db-roles.sql` must be run against the production database before
+`DATABASE_URL` is pointed at the restricted role. And `TRUSTED_PROXY_HOPS` must be confirmed
+against the real topology before the per-IP limits mean anything.
+
+### Phase 9 — DEV (§9.2–§9.7)
+
+Not started.
 
 ### Phase 9 — TEST
 

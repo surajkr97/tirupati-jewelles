@@ -21,6 +21,7 @@ import { getSessionId } from '@/lib/auth/session';
 import { consume } from '@/lib/auth/rate-limit';
 import { db } from '@/lib/db';
 import { env } from '@/lib/env';
+import { log } from '@/lib/log';
 import { NO_STORE, clientIp, requireSameOrigin } from '@/lib/http';
 
 export const dynamic = 'force-dynamic';
@@ -81,7 +82,7 @@ export async function POST(request: Request) {
   } catch (err) {
     // Logged for us, invisible to the customer — they are already on their way to
     // WhatsApp and there is nothing they could do about it.
-    console.error('[api/enquiry]', err);
+    log.error('enquiry write failed', { err });
     return noContent();
   }
 }

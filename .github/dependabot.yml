@@ -1,0 +1,89 @@
+# Dependency updates.
+# Created by Phase 9 (specs/09-hardening.md §9.1: "`pnpm audit` clean; enable Dependabot").
+# Closes SEC-035.
+#
+# `pnpm audit` was clean when §9.1 ran, but that is a fact about one day. This is the part
+# that keeps being true.
+version: 2
+
+updates:
+  - package-ecosystem: npm # covers pnpm — Dependabot reads pnpm-lock.yaml
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:00'
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 5
+    labels: [dependencies]
+    versioning-strategy: increase
+
+    groups:
+      # One PR for the framework rather than four that must land together. Next, React and
+      # the ESLint config are version-locked to each other in this project (Next 16 pins
+      # eslint-config-next 16), so splitting them produces PRs that cannot pass CI alone.
+      next:
+        patterns:
+          [
+            'next',
+            'react',
+            'react-dom',
+            '@types/react',
+            '@types/react-dom',
+            'eslint-config-next',
+          ]
+      prisma:
+        patterns: ['prisma', '@prisma/client']
+      # Test tooling churns often and cannot affect production. Batched to keep the noise
+      # away from the updates that matter.
+      dev-tooling:
+        dependency-type: development
+        patterns:
+          [
+            'vitest',
+            '@vitest/*',
+            '@playwright/*',
+            'playwright',
+            '@testing-library/*',
+            'eslint',
+            'prettier',
+            '@typescript-eslint/*',
+          ]
+
+    ignore:
+      # Pinned deliberately in package.json (D-005) — a major bump is a decision, not a PR
+      # to merge on a Monday morning.
+      - dependency-name: 'typescript'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'tailwindcss'
+        update-types: ['version-update:semver-major']
+
+  # The dormant Celery worker (Phase 1 §1.3). It is real infrastructure that Phase 9 §9.3
+  # activates, and an unwatched Python image is exactly where a stale CVE sits unnoticed.
+  - package-ecosystem: pip
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      time: '04:00'
+      timezone: Asia/Kolkata
+    open-pull-requests-limit: 3
+    labels: [dependencies, backend]
+
+  - package-ecosystem: docker
+    directory: /backend
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Kolkata
+    labels: [dependencies, docker]
+
+  # The workflows themselves. A pinned action with a known vulnerability is a supply-chain
+  # hole in CI, which has repository credentials.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      timezone: Asia/Kolkata
+    labels: [dependencies, ci]

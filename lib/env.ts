@@ -95,6 +95,19 @@ const serverSchema = z.object({
   // Seeds the first ADMIN. Phase 1 §1.6: "credentials from env, not hardcoded".
   SEED_ADMIN_EMAIL: z.string().email(),
   SEED_ADMIN_PASSWORD: z.string().min(8),
+
+  /**
+   * How many proxies in front of us append to `x-forwarded-for` (Phase 9 §9.1, SEC-032).
+   *
+   * `clientIp()` counts back from the RIGHT of that header, because the leftmost entry is
+   * whatever the caller sent and trusting it makes every per-IP rate limit decorative.
+   *
+   * 1 is correct both for a platform that replaces the header outright and for one that
+   * appends a single hop. Raise it only after confirming the real topology — DEBT-009 —
+   * and note that getting it wrong cannot collapse every visitor into one bucket:
+   * `clientIpFromHeaders` refuses to treat a private or link-local address as an identity.
+   */
+  TRUSTED_PROXY_HOPS: z.coerce.number().int().min(1).max(10).default(1),
 });
 
 /**

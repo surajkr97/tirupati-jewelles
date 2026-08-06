@@ -12,6 +12,7 @@
  * So this **fails closed** — a Redis fault denies the request. The blast radius is bounded
  * because only auth and billing routes use it; browsing, rates and the calculator stay up.
  */
+import { log } from '@/lib/log';
 import { ensureReady, redis } from '@/lib/redis';
 
 export interface RateLimitRule {
@@ -77,9 +78,13 @@ export async function consume(rule: RateLimitRule): Promise<RateLimitResult> {
       retryAfter: ttl,
     };
   } catch (err) {
-    console.error(
-      `[rate-limit] FAILING CLOSED for "${rule.key}": ${err instanceof Error ? err.message : String(err)}`,
-    );
+    /**
+     * The rule key embeds the identifier by construction — `otp:send:id:user@example.com`,
+     * `login:id:+919876543210` — so logging it raw put an email or a phone number into
+     * production stdout on every fail-closed event (SEC-031). Through the logger it is
+     * redacted; the key's SHAPE is what makes this line useful, not the identifier in it.
+     */
+    log.error('rate limiter failing closed', { key: rule.key, err });
     return { allowed: false, remaining: 0, retryAfter: rule.windowSeconds };
   }
 }

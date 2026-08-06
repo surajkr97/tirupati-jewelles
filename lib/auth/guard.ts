@@ -5,10 +5,14 @@
  * §3.6: "Admin routes additionally re-check role === 'ADMIN' INSIDE THE HANDLER. Middleware
  * alone is not a security boundary."
  *
- * `proxy.ts` runs at the edge and is a UX convenience — it redirects a signed-out visitor
- * to /login before a page renders. It is not the boundary. Route matchers have edge cases,
- * proxies can be bypassed by deployment topology, and a `matcher` regex is one typo away
- * from exempting a route. Every protected handler calls a guard from this file.
+ * `proxy.ts` is a UX convenience — it redirects a signed-out visitor to /login before a page
+ * renders. It is not the boundary. Route matchers have edge cases, proxies can be bypassed
+ * by deployment topology, a `matcher` regex is one typo away from exempting a route, and
+ * Server Actions arrive as POSTs to their own page's route — so moving one silently changes
+ * its proxy coverage. Every protected handler calls a guard from this file.
+ *
+ * (This comment used to say the proxy "runs at the edge". Next 16 runs it on the Node.js
+ * runtime; Phase 9 §9.1 corrected the reasoning without weakening the rule.)
  *
  * §3.6 also requires 404, not 403, for non-admins: a 403 confirms the route exists.
  */

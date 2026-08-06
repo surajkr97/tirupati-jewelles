@@ -1,0 +1,113 @@
+/**
+ * The bills-list filter parser — SEC-033.
+ * Phase 9 §9.1 (specs/09-hardening.md).
+ *
+ * ── Why this file exists separately from the route test ──
+ * `test/route-validation.test.ts` drives `/admin/bills/export` with `from=9999-99-99` and
+ * passes. It passes against the BROKEN parser too, because `requireAdmin()` answers 404
+ * before the query string is ever parsed — mutation-checked, and it is the reason this file
+ * was written. A route whose authorisation boundary is in front of its validation cannot
+ * have its validation tested through the route.
+ *
+ * So the parser is tested where it lives. `parseBillFilters` and `billsWhere` had no test at
+ * all before this, which is how the defect survived Phase 8.
+ *
+ * The defect: `/^\d{4}-\d{2}-\d{2}$/` accepts `9999-99-99`, which becomes `Invalid Date`,
+ * which Prisma throws on — so the bills list and the accountant's CSV export both 500 on a
+ * hand-edited URL, contradicting the parser's own comment.
+ */
+import { describe, expect, it } from 'vitest';
+
+import { billsWhere, parseBillFilters } from '@/lib/bills/query';
+
+/**
+ * The property that matters, stated once.
+ *
+ * Not "the filter equals this string" — what breaks Prisma is a `Date` that is `Invalid
+ * Date`, so that is what gets asserted. A parser change that produced a different but still
+ * valid date would be a bug this does not catch, and a separate assertion covers the values.
+ */
+function everyDateIsReal(params: Record<string, string | undefined>): boolean {
+  const where = billsWhere(parseBillFilters(params));
+  const range = where.createdAt as { gte?: Date; lt?: Date } | undefined;
+  if (!range) return true;
+
+  return [range.gte, range.lt]
+    .filter((d): d is Date => d instanceof Date)
+    .every((d) => !Number.isNaN(d.getTime()));
+}
+
+describe('parseBillFilters — dates', () => {
+  it.each([
+    ['a month that does not exist', '9999-99-99'],
+    ['month 13', '2026-13-01'],
+    ['day 45', '2026-01-45'],
+    ['all zeroes', '0000-00-00'],
+    ['30 February', '2026-02-30'],
+    ['31 April', '2026-04-31'],
+    ['29 February in a non-leap year', '2025-02-29'],
+  ])('rejects %s rather than producing an Invalid Date', (_name, value) => {
+    // Confirmed to FAIL against the pre-fix parser for every case except the impossible
+    // days, which JS rolls forward silently — see the separate assertion below.
+    expect(everyDateIsReal({ from: value })).toBe(true);
+    expect(everyDateIsReal({ to: value })).toBe(true);
+  });
+
+  it('does not silently roll an impossible day into the next month', () => {
+    /**
+     * The quieter half of the bug. `new Date('2026-02-30')` does not throw — it returns
+     * 2 March. So an admin filtering "to 30 February" would have got results from March and
+     * no indication anything was wrong. Rejecting is the honest answer: the filter is
+     * dropped and the screen shows the unfiltered range it says it is showing.
+     */
+    expect(parseBillFilters({ from: '2026-02-30' }).from).toBe('');
+    expect(parseBillFilters({ from: '2025-02-29' }).from).toBe('');
+  });
+
+  it('accepts real dates, including a genuine leap day', () => {
+    // The positive control. Without it, a parser that rejected everything would pass above.
+    expect(parseBillFilters({ from: '2026-08-06' }).from).toBe('2026-08-06');
+    expect(parseBillFilters({ to: '2026-12-31' }).to).toBe('2026-12-31');
+    expect(parseBillFilters({ from: '2024-02-29' }).from).toBe('2024-02-29');
+  });
+
+  it('builds a real range for a real pair', () => {
+    const where = billsWhere(parseBillFilters({ from: '2026-01-01', to: '2026-01-31' }));
+    const range = where.createdAt as { gte: Date; lt: Date };
+
+    expect(Number.isNaN(range.gte.getTime())).toBe(false);
+    expect(Number.isNaN(range.lt.getTime())).toBe(false);
+    // `to` is inclusive of the whole day — what "to 31 January" means to a person.
+    expect(range.lt.getTime()).toBeGreaterThan(
+      new Date('2026-01-31T00:00:00+05:30').getTime(),
+    );
+  });
+});
+
+describe('parseBillFilters — the other fields', () => {
+  it('falls back on unrecognised tokens rather than erroring', () => {
+    const filters = parseBillFilters({
+      sent: 'maybe',
+      claim: 'perhaps',
+      voided: 'sometimes',
+    });
+
+    expect(filters.sent).toBe('all');
+    expect(filters.claim).toBe('all');
+    expect(filters.voided).toBe('active');
+  });
+
+  it('bounds the page number', () => {
+    // `skip` is an Int in Prisma and an absurd page is a pointless sequential scan even
+    // where it does not overflow.
+    expect(parseBillFilters({ page: '99999999999' }).page).toBe(1);
+    expect(parseBillFilters({ page: '-1' }).page).toBe(1);
+    expect(parseBillFilters({ page: 'abc' }).page).toBe(1);
+    expect(parseBillFilters({ page: '0' }).page).toBe(1);
+    expect(parseBillFilters({ page: '7' }).page).toBe(7);
+  });
+
+  it('bounds the search term', () => {
+    expect(parseBillFilters({ q: 'x'.repeat(500) }).q).toHaveLength(80);
+  });
+});

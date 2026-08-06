@@ -17,19 +17,53 @@
  *  `requireAdminPage()` from lib/auth/guard.ts, called inside every protected handler
  *  and page.
  *
- *  Note this runs at the edge and cannot reach Redis or Prisma, so it can only see
- *  whether a session COOKIE exists — not whether that session is valid, nor what role it
- *  carries. That limitation is precisely why the handler must re-check.
+ *  It deliberately does NOT read the session from Redis. Next 16 runs this on the Node.js
+ *  runtime, so it could — the global rate limiter below does exactly that — but resolving
+ *  a session here would create a second authorisation path that looks authoritative and
+ *  is not. All it checks is whether a session COOKIE exists, which is a UX signal, not a
+ *  fact about the caller.
+ *
+ *  (An earlier version of this comment said the proxy "runs at the edge and cannot reach
+ *  Redis or Prisma". That was true of Next 14/15 middleware and is not true here — Phase 9
+ *  §9.1 corrected it. The rule survives the correction; only the reason changed.)
  * ══════════════════════════════════════════════════════════════════════════
  */
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+import { clientIpFromHeaders } from '@/lib/http';
+import { consumeGlobalLimit, shouldSkip } from '@/lib/security/global-limit';
+
 /** Must match SESSION_COOKIE in lib/auth/session.ts — that module cannot be imported here. */
 const SESSION_COOKIE = 'tj_session';
 
-export function proxy(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  /**
+   * §9.1: "Global rate limiting in proxy, per-IP, Redis-backed."
+   *
+   * First, so a flood is refused before any routing or rendering work happens. It fails
+   * OPEN — a Redis outage must not take the site down; see lib/security/global-limit.ts,
+   * which explains why this is the opposite of the auth limiter's behaviour.
+   */
+  if (!shouldSkip(request, pathname)) {
+    const ip = clientIpFromHeaders(request.headers);
+    const limit = await consumeGlobalLimit(ip, pathname);
+
+    if (!limit.allowed) {
+      return new NextResponse('Too many requests', {
+        status: 429,
+        headers: {
+          'Retry-After': String(limit.retryAfter),
+          'Cache-Control': 'no-store',
+          // Says nothing about which tier was hit or how much is left; a limiter that
+          // reports its own state is a limiter an attacker can tune against.
+          'Content-Type': 'text/plain; charset=utf-8',
+        },
+      });
+    }
+  }
 
   /**
    * §2.5: the component gallery is dev-only, "blocked in production middleware".
