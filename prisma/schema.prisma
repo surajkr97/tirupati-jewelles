@@ -9,9 +9,23 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// Two connections, deliberately (Phase 9 §9.1, SEC-029).
+//
+// `url` is what the running application uses: the `tirupati_app` role, which can read and
+// write rows and nothing else — no CREATE, no DROP, and no DELETE on "Order", "OrderItem"
+// or "BillPdf", so the six-year GST invoice retention DEBT-026 requires is enforced by the
+// database rather than by convention.
+//
+// `directUrl` is what `prisma migrate` uses: the owner role, which still has DDL. Changing
+// the shape of the database is a rare, deliberate act; serving requests is constant and
+// internet-facing. They should not share a set of privileges.
+//
+// Note that `prisma generate` resolves BOTH, so MIGRATE_DATABASE_URL must be present at
+// build time as well as at migration time — `pnpm build` runs generate first.
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("MIGRATE_DATABASE_URL")
 }
 
 // ─────────────────────────────────────────────────────────────── users & auth

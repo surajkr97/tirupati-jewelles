@@ -786,3 +786,72 @@ flagship flow. The rule:
   shop. Two people cannot both have proven the same number. The realistic cause is a recycled
   SIM, and silently moving a stranger's purchase history to whoever holds the number today is
   exactly the account takeover §5 warns about — it needs a human, not a policy.
+
+---
+
+## D-033 — The CSP allows `unsafe-inline` for scripts, because a nonce would disable ISR
+
+**Spec:** Phase 9 §9.1 — "CSP with no `unsafe-eval`. `unsafe-inline` for styles only if
+Tailwind forces it, and document why."
+**Actual:** no `unsafe-eval`, as required. `unsafe-inline` is permitted for **scripts as well
+as styles**, which is wider than §9.1 anticipated, and this is the documentation it asks for.
+
+Recorded by SECURITY during the §9.1 pass, before the header set is built, because the
+alternative is the recipe Next's own CSP guide shows first and it would be adopted by default.
+
+### Why not a nonce
+
+A nonce is the strictly better policy and this application cannot have one. From
+`node_modules/next/dist/docs/01-app/02-guides/content-security-policy.md`:
+
+> When you use nonces in your CSP, **all pages must be dynamically rendered**. … Static
+> optimization and Incremental Static Regeneration (ISR) are disabled.
+
+The storefront is built on ISR — `/` and `/rates` at 300s, `/collections`, `/products/[slug]`
+and `/policies/[slug]` at 600s, several prerendered through `generateStaticParams`. Measured on
+a production build, `/` and `/rates` both answer `x-nextjs-cache: HIT`. §9.2 sets LCP < 2.0s
+and TTFB < 400ms on throttled 4G and asks explicitly for that header to be verified. Adopting a
+nonce would satisfy §9.1 and make §9.2 unreachable, silently — nothing errors, the site simply
+stops being cached.
+
+There is a sharper failure underneath the performance one. A nonce baked into a **cached** page
+is a fixed string while the header sent with each request is fresh, so every request after the
+first serves HTML whose nonce does not match and the browser blocks every script: the page
+renders and never hydrates.
+
+### Why the inline scripts cannot be covered another way
+
+Measured against the built output rather than assumed. A prerendered page contains **four
+inline `<script>` tags** carrying the RSC flight payload, with no nonce and no `integrity`
+attribute; `script-src 'self'` alone blocks them.
+
+Next's experimental SRI does not help. In
+`next/dist/server/app-render/required-scripts.js` the SRI manifest is applied to external
+bootstrap and preinit scripts **by `src`**, while the inlined data stream is nonce-only —
+`integrity` is not a property an inline script can have.
+
+So for a statically rendered Next App Router page the choices are `unsafe-inline` or no
+hydration.
+
+### What the concession actually costs here
+
+`unsafe-inline` matters when an attacker can get markup into a page. This codebase has no
+`dangerouslySetInnerHTML` anywhere in `app/`, `components/` or `lib/`, no `eval`, no
+`new Function`, no user-supplied HTML rendered anywhere, React escaping throughout, and no
+CDN-loaded scripts. The CSP here is defence in depth against a future mistake, not a control
+holding a known gap shut — which is a materially different bargain from an application that
+renders user content.
+
+Everything else in the policy stays strict: no `unsafe-eval`, `object-src 'none'`,
+`base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'` (the modern form of the
+`X-Frame-Options: DENY` already present), and `img-src` limited to `self`, `data:`, `blob:` and
+the `ALLOWED_IMAGE_HOSTS` entries.
+
+### The escape hatch, if a strict `script-src` is wanted later
+
+`/admin/*`, `/account/*` and `/claim/*` are already `force-dynamic`, so a nonce costs nothing
+on exactly the surfaces where it is worth the most. A second, tighter policy scoped to those
+paths is available at any time. Two rules if it is taken: emit exactly **one** CSP header per
+response — two are enforced as an intersection and produce confusing breakage — and never set
+the CSP on the _request_ headers for a cacheable route, which is what bakes a nonce into cached
+HTML.

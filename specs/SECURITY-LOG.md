@@ -14,6 +14,24 @@ begins · MEDIUM/LOW is logged to `DEBT.md`.
 | SEC-005 | 3     | Rate limiter behaviour on a Redis fault. Everywhere else in the codebase Redis degrades gracefully; here that would mean unlimited OTP attempts for anyone who can pressure Redis.                                                                                                                                                                                    | INFO     | BY DESIGN — `lib/auth/rate-limit.ts` **fails closed**. Documented in D-010. Blast radius is auth and billing only.                                                                                                                                                                                                                                                      |
 | SEC-006 | 3     | SMS delivery unimplemented — `SmsNotifier.send` throws. Phone OTP cannot be delivered in production.                                                                                                                                                                                                                                                                  | HIGH     | OPEN — DEBT-007. Not a vulnerability; a launch blocker. Email OTP works, so signup is unaffected.                                                                                                                                                                                                                                                                       |
 
+SEC-007 through SEC-027 are recorded in their own phase sections below, where the reasoning
+sits next to the control it concerns. The table above was not backfilled past Phase 3; the
+Phase 9 findings are indexed here because §9.1's scope is the whole application rather than
+one diff.
+
+### Phase 9 §9.1 — whole-application pass
+
+| ID      | Finding                                                                                                                                                                     | Severity | Status                                                                                                                                                                                                               |
+| :------ | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | :------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| SEC-028 | The CSRF origin check exists twice and had drifted: SEC-017's downgraded-`http://` fix reached `lib/http.ts` only, so every admin Server Action (D-024) still accepted one. | MEDIUM   | **FIXED** in this review — one shared `checkSameOrigin()`; regression test mutation-checked.                                                                                                                         |
+| SEC-029 | **The runtime database role is a Postgres superuser** (`rolsuper`, `rolcreatedb`, `rolcreaterole`, `rolbypassrls`) and owns all 17 tables. §9.1 requires no DDL at runtime. | **HIGH** | **FIXED** — the app now runs as `tirupati_app`: DML only, no DDL, and no `DELETE` on the invoice tables. Proven by refusal, and 120 E2E green against it. DEBT-035 closed; DEBT-026 is now enforced by the database. |
+| SEC-030 | CSP, HSTS and `Permissions-Policy` absent on every response. Measured on six routes against a production build.                                                             | MEDIUM   | OPEN — §9.1 item 1, DEV. Design constraints recorded (nonce CSP would disable ISR).                                                                                                                                  |
+| SEC-031 | No log redaction, and PII demonstrably reaches log lines — a Prisma error serialises its arguments, so `serverError` prints a customer's email and phone verbatim.          | MEDIUM   | OPEN — DEBT-036. Same control as §9.4's Sentry PII scrubbing.                                                                                                                                                        |
+| SEC-032 | `clientIp()` takes the leftmost `x-forwarded-for` entry, which the client controls. Every per-IP limit in the application is keyed on it.                                   | MEDIUM   | OPEN — narrows DEBT-009. Code fix + one ops confirmation.                                                                                                                                                            |
+| SEC-033 | `parseBillFilters` accepts an impossible date (`9999-99-99` passes its regex) → `Invalid Date` → Prisma throws → 500 on `/admin/bills` and the CSV export. Probed live.     | LOW      | OPEN — DEBT-037. Admin-authenticated, discloses nothing.                                                                                                                                                             |
+| SEC-034 | No global per-IP rate limit.                                                                                                                                                | INFO     | OPEN — DEBT-012, §9.1 item 2. Must fail **open**, unlike the auth limiter.                                                                                                                                           |
+| SEC-035 | Dependabot not enabled. `pnpm audit` is clean today; nothing watches for tomorrow.                                                                                          | INFO     | OPEN — §9.1 item 4, DEV.                                                                                                                                                                                             |
+
 ---
 
 ## Phase 1 review — status
@@ -773,3 +791,631 @@ verified one is not and the claim is refused. Both asserted.
 **Origin, session and audit.** CSRF origin check, `requireUser`, `ORDER_CLAIM` audit entry,
 and `rotateSession` on success — the account has gone from unverified to holding a proven
 number and a purchase history, which is the privilege change §3.3 requires rotation for.
+
+---
+
+# Phase 9 §9.1 — the whole-application security pass
+
+Status: **FAIL for the phase checklist** — zero CRITICAL, **one HIGH open**, four MEDIUM.
+One MEDIUM found and fixed during the review.
+
+This is the first review in the project whose scope is the application rather than a diff, so
+its method is different: every claim below was measured against a **production build served on
+`next start`**, or probed against the running Postgres, rather than read off the source. Where
+a control was already reviewed in its own phase it was re-confirmed here, not re-argued.
+
+Six of the ten §9.1 items pass. The four that do not are all **build work for DEV**, and
+`SIGNOFF.md` already assigns §9.1's implementation to DEV — so this review's job is the
+verdict, the findings, and the design constraints below. The one item SECURITY owns outright,
+the OWASP Top 10 review, is at the end of this section.
+
+## The §9.1 checklist
+
+| #   | Item                                                  | Verdict        | Evidence                                                                                                                                                          |
+| :-- | :---------------------------------------------------- | :------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Headers in `next.config.ts`                           | **FAIL**       | 3 of 6 present. CSP, HSTS and `Permissions-Policy` absent on every response — measured on `/`, `/rates`, `/login`, `/admin`, `/api/rates`, `/api/health`. SEC-030 |
+| 2   | Global per-IP rate limiting in the proxy              | **FAIL**       | Not built. Per-route limiters exist and are good; there is no outer wall. SEC-034, DEBT-012                                                                       |
+| 3   | Every API route Zod-validated, enforced by a test     | **PARTIAL**    | 18 of 20 route files validate through Zod; the other 2 validate by hand and one of them has a defect because of it (SEC-033). No enumeration test yet             |
+| 4   | `pnpm audit` clean; Dependabot enabled                | **PARTIAL**    | `pnpm audit`: "No known vulnerabilities found". `.github/` has `workflows/` only — no `dependabot.yml`. SEC-035                                                   |
+| 5   | Secrets rotated before launch; none ever committed    | **PASS**       | `.env` untracked at every commit; `.env.example` is placeholders (11 × `CHANGE_ME`) plus non-secret defaults. History re-scanned — see below                      |
+| 6   | DB user has least privilege — no DDL at runtime       | **PASS**       | Was a **Postgres superuser**; now a DML-only role that cannot create tables or delete invoices. SEC-029, fixed                                                    |
+| 7   | Redis password-protected, not publicly bound          | **PASS** (dev) | `127.0.0.1:6379->6379/tcp` and `--requirepass`. Production is a managed instance and needs one ops confirmation — see "Carried to deployment"                     |
+| 8   | Error responses leak no stack traces in production    | **PASS**       | Verified by forcing real 500s, not by reading the code. Four surfaces, DB stopped mid-flight                                                                      |
+| 9   | Structured logging, phone numbers and emails redacted | **FAIL**       | No structured logging and no redaction. Not theoretical — measured a Prisma error echoing a customer's email and phone. SEC-031                                   |
+| 10  | Full OWASP Top 10 review documented here              | **PASS**       | Below                                                                                                                                                             |
+
+## SEC-029 — HIGH, **fixed**. The application connected to Postgres as a superuser
+
+The single most serious finding in the pass, and the only HIGH.
+
+```
+rolname   rolsuper rolcreaterole rolcreatedb rolbypassrls
+tirupati  t        t             t           t
+```
+
+It also owns all 17 tables in `public` and holds `CREATE` on both the database and the schema.
+§9.1 requires "DB user has least privilege — no DDL rights at runtime", and this is the
+opposite of that in every respect the flag list has.
+
+**Why it is HIGH rather than MEDIUM, given there is no known injection.** The finding is not
+"there is a way in"; it is that the blast radius of any future way in is unbounded. Today the
+application has exactly one hand-written SQL surface (`lib/catalog/search.ts`), it is
+parameterised through Prisma's tagged template, and Phase 6 reviewed it. But a superuser
+connection converts _any_ injection from a data-disclosure bug into `DROP TABLE`, into reading
+`pg_authid`'s password hashes, and — because `COPY … FROM PROGRAM` is superuser-only —
+into command execution on the database host. Least privilege is the control that makes the
+severity of the _next_ bug survivable, which is exactly why it is on the launch checklist.
+
+It also quietly undermines a control the project has already committed to. **DEBT-026**
+requires six-year invoice retention and notes it is "enforced by convention, not by the
+schema". A runtime role with no `DELETE` on `Order` / `OrderItem` / `BillPdf` would make that
+a database guarantee instead of a promise. The two items should be fixed together.
+
+### Fixed — and the restriction was proven by refusal, not by reading grants
+
+Two roles now. `MIGRATE_DATABASE_URL` carries the owner and is used by `prisma migrate`
+through the datasource's `directUrl`; `DATABASE_URL` carries `tirupati_app`, which the
+running application uses and which can do row-level work and nothing else. The whole grant
+set is `scripts/db-roles.sql`, idempotent and re-runnable, so this is reproducible on
+production rather than a manual change that exists only on one laptop.
+
+Verified by attempting the things it must refuse:
+
+```
+app role INSERT on "Product"   -> t
+app role CREATE TABLE          -> ERROR: permission denied for schema public
+app role DELETE FROM "Order"   -> ERROR: permission denied for table Order
+prisma migrate status          -> Database schema is up to date!
+```
+
+The third line is **DEBT-026 closed structurally**. Six-year GST invoice retention was
+"enforced by convention, not by the schema"; the application can no longer delete an invoice
+even if a future cleanup sweep tries.
+
+**The suite that validates this is the E2E one, not the unit one.** `vitest.setup.ts` points
+at `TEST_DATABASE_URL`, which is the owner role on a throwaway database — so 863 passing
+unit/integration tests say nothing about the restriction. Playwright starts `pnpm dev`, which
+reads `DATABASE_URL`, so it is the only suite exercising the restricted connection. **120 E2E
+tests pass against it**, including the flagship bill-to-claim journey (which inserts an
+`Order`, its `OrderItem`s and a `BillPdf`), the admin CRUD screens that do delete rows, and
+the CSV export. Nothing was over-revoked.
+
+Two operational notes for deployment, both discovered by hitting them:
+
+- `prisma generate` resolves **both** URLs, and `pnpm build` runs generate first — so
+  `MIGRATE_DATABASE_URL` must be set at build time on the platform, not only at migration
+  time. A missing value fails the build, not the migration.
+- Tests must keep the owner role: they `TRUNCATE` between files, and TRUNCATE requires table
+  ownership rather than a grantable privilege.
+
+## SEC-030 — MEDIUM, open. CSP, HSTS and Permissions-Policy are absent
+
+Measured against `next start`, not read from config. Every response carries `nosniff`,
+`X-Frame-Options: DENY` and `Referrer-Policy: strict-origin-when-cross-origin` — the three
+Phase 1 set — and nothing else.
+
+The design constraint that goes with this is the one worth reading, because it changes what
+DEV should build. It is in "Constraints for DEV" below.
+
+## SEC-031 — MEDIUM, open. A Prisma error prints the customer's email and phone
+
+§9.1 asks for "structured logging with phone numbers and emails **redacted**". There is
+neither structure nor redaction: logging is `console.error` in eleven places plus Prisma's own
+output.
+
+This was probed rather than assumed, because the interesting question is whether PII can
+actually reach a log line. It can, by the shortest possible path:
+
+```
+--- error echoes email: true
+--- error echoes phone: true
+          email: "victim.person@example.com",
+          phone: "+919812345678",
+```
+
+A Prisma validation error serialises the **whole argument object** into its message.
+`serverError(err, context)` in `lib/http.ts` passes that error straight to `console.error`, so
+any route whose input reaches Prisma in a shape Prisma rejects prints the customer's email and
+phone verbatim into production stdout — which on the deployment target is a dashboard, is
+retained, and is often shipped onward to a log aggregator.
+
+A second, narrower path: `lib/auth/rate-limit.ts:80` logs `rule.key` on a Redis fault, and the
+key embeds the identifier by construction (`otp:send:id:user@example.com`,
+`login:id:+919876543210`). Every fail-closed event writes one.
+
+This is the same class as **DEBT-031** (backups now hold invoices): the data did not change,
+the set of places it lands did, and the handling rules were written when those places held
+nothing sensitive.
+
+## SEC-032 — MEDIUM, open. Every per-IP limit is keyed on an attacker-controlled value
+
+DEBT-009 raised this in Phase 3 and assigned it here. Confirming it: `clientIp()` takes the
+**leftmost** `x-forwarded-for` entry, which is the one a client can set. Behind a proxy that
+appends rather than replaces, `X-Forwarded-For: 1.2.3.4` makes every request look like it came
+from a different address of the caller's choosing.
+
+What rides on that value is the whole per-IP layer: OTP send and verify, login, the claim
+token, calculator shares, enquiries, bill creation — and, if it is built as specified, the
+§9.1 global limit too. Per-identifier limits are unaffected, which is what keeps this MEDIUM
+rather than HIGH: credential guessing against one account is still bounded.
+
+DEBT-009 said "confirm the deployment topology". That is the right instruction and it cannot
+be answered from inside the repository, but the code can stop _depending_ on the answer being
+favourable. Constraint in "Constraints for DEV".
+
+## SEC-033 — LOW, open. An impossible date 500s the bills list and the CSV export
+
+`parseBillFilters` validates dates with `/^\d{4}-\d{2}-\d{2}$/`, which accepts `9999-99-99`.
+That becomes `new Date(...)` → `Invalid Date` → Prisma. Probed against the real database:
+
+```
+from=9999-99-99  : THROWS -> PrismaClientValidationError:
+                   Invalid value for argument `gte`: Provided Date object is invalid.
+page=99999999999 : OK (no throw)
+control          : OK
+```
+
+So `/admin/bills?from=9999-99-99` and `/admin/bills/export?from=9999-99-99` both 500. The
+function's own comment says "a hand-edited URL cannot 500"; it can. LOW because it is behind
+`requireAdmin`, discloses nothing, and the admin is doing it to themselves.
+
+Recorded at all because of _where_ it is. `/admin/bills/export` is one of the two route files
+with no Zod schema, and this is precisely the failure the §9.1 requirement exists to prevent —
+a hand-rolled parser that looks like validation and has a gap in it. The second suspected
+defect in the same function, an unbounded `page` overflowing Prisma's `skip`, **does not
+exist**: it was probed and does not throw. Both are stated because a review that reports only
+its confirmed suspicions is not reporting its method.
+
+## SEC-034 — INFO. No global rate limit (DEBT-012 remains open)
+
+Unchanged from Phase 4's assessment: the public rate routes are read-only, capped, and
+`s-maxage=300`, so the exposure is request volume rather than data. The correct layer is still
+the proxy. Constraints below, including the one that stops it taking the site down.
+
+## SEC-035 — INFO. Dependabot is not enabled
+
+`pnpm audit` is clean today. `.github/` contains `workflows/tests.yml` and nothing else, so
+nothing watches for the next advisory. §9.1 asks for it explicitly.
+
+## SEC-028 — MEDIUM, **fixed in this review**. The CSRF check existed twice and had drifted
+
+The only finding this review fixed directly, because it was a live regression in a control
+this log itself introduced.
+
+Phase 7 added the origin check in two places, for a real reason: a route handler needs a
+`NextResponse` and a Server Action cannot return one. Phase 7 then recorded, in a comment on
+the second copy, that "the logic is identical and both are tested".
+
+Both halves of that sentence were false. **SEC-017** — reject a downgraded `http://` origin in
+production, because `Host` carries no scheme and `http://shop.example` compares equal to a
+host of `shop.example` once the default port normalises away — was applied to `lib/http.ts`
+only. `lib/admin/actions.ts` still compared hosts alone. And the test coverage matched the
+code rather than the claim: `lib/http.test.ts` has "rejects a downgraded http origin in
+production"; `lib/admin/admin.test.ts` tests a wrong _host_ and never a downgraded _scheme_.
+
+The reason this matters more than the usual duplicated-logic complaint is **D-024**: every
+admin mutation in this application is a Server Action. So the copy that kept the bug was the
+one guarding the rate editor, the product editor, settings, and the bill actions — and the
+copy that got the fix guards two JSON endpoints. SEC-017 was recorded as fixed while remaining
+open everywhere it mattered most.
+
+Fixed by making the decision exist once: `checkSameOrigin()` in `lib/http.ts` returns a verdict
+(`ok` / `absent` / `malformed` / `mismatch`) and both shapes are thin wrappers over it. The
+`absent` case is preserved deliberately and is not a hole — no `Origin` header means a
+server-to-server caller, and CSRF requires a browser with an ambient cookie, which always
+sends one.
+
+**Mutation-checked.** `lib/admin/actions.csrf.test.ts` was run against the pre-fix
+implementation and fails on exactly the case that was missing:
+
+```
+× refuses http:// when the host matches, in production
+  AssertionError: expected true to be false
+  Tests  1 failed | 3 passed
+```
+
+and passes against the fix. The test asserts the mutation **did not run**, not merely that the
+result was `ok: false` — a check that returned an error while still writing would pass a
+status-shaped assertion. A positive control (https from the same host runs), the development
+localhost case, and the wrong-host case are asserted alongside, so a check that refused
+everything would not look identical to a correct one.
+
+`@TEST:` this file is a security regression test written by SECURITY because the fix needed
+one; it is yours to own from here. 863 unit/integration tests pass (up from 859), `pnpm lint`,
+`pnpm format:check`, `tsc --noEmit` and `pnpm build` all clean.
+
+## What was re-confirmed and found correct
+
+Checked against the running production build, not re-argued from earlier phases.
+
+**Error responses leak nothing (§9.1 item 8).** Verified by causing real 500s rather than by
+reading `serverError`. With Postgres stopped mid-flight, `/bills/{uuid}` — which has no
+try/catch around its query — returned `500` with an **empty body**; `/search?q=gold` returned
+500 with no leak markers; `/api/health` returned a clean `503`; and `/` still returned **200**
+from the ISR cache. Bodies were grepped for `at …(`, `node_modules`, `prisma`, absolute paths
+and `ECONNREFUSED`: zero matches. The stack traces went to stdout, which is correct, and is
+what makes SEC-031 the finding it is.
+
+**No secret has ever been committed.** `.env` and `.env.*` are gitignored with an
+`!.env.example` exception; `git ls-files` shows only `.env.example` tracked. A history scan
+across all commits for assignment-shaped secrets returned test fixtures, obviously-fake values
+and code identifiers only — no live credential. Consistent with SEC-003.
+
+**Injection surface is where Phase 6 left it.** Application `$queryRaw` use is three sites:
+`lib/catalog/search.ts` (reviewed in Phase 6, every user value a `${}` bound parameter),
+`lib/bills/numbering.ts` (the atomic sequence), and `app/admin/page.tsx` (the 30-day chart) —
+plus `SELECT 1` in the health check. No `$queryRawUnsafe` anywhere, no string-built SQL.
+
+**No XSS primitives.** Zero `dangerouslySetInnerHTML` in `app/`, `components/` or `lib/`. No
+`eval` or `new Function`. Every one of the six `target="_blank"` links carries
+`rel="noopener noreferrer"` — checked individually, not by sampling.
+
+**`process.env` is still confined to `lib/env.ts`.** The Phase 1 lint rule holds: the only
+other occurrences in the repository are in test files and `*.config.ts`, both exempt by design.
+
+**CSV injection is handled.** `csvField` prefixes a tab to any value starting `= + - @` before
+quoting, so an admin-entered customer name cannot become a formula in the accountant's
+spreadsheet. Worth noting because the export is the one place application data lands in a
+program that executes its input.
+
+**Access control is unchanged and correct.** `requireAdmin()` in every admin route handler and
+`adminAction`; 404 rather than 403 throughout; authorisation checked before input validation so
+a malformed body cannot elicit a 400 that confirms a route exists; `/bills/{key}` still refuses
+a bare key. `PUBLIC_USER_SELECT` is an allowlist, so `passwordHash` cannot reappear in a
+response by someone adding a column.
+
+## Two stale comments that matter
+
+Both assert a Next.js limitation that **Next 16 does not have**, and both are load-bearing —
+they are the stated reason a control lives somewhere other than where it belongs.
+
+`proxy.ts:20` and `lib/auth/guard.ts:8` say the proxy "runs at the edge and cannot reach Redis
+or Prisma". Per `node_modules/next/dist/docs/01-app/03-api-reference/03-file-conventions/proxy.md`:
+
+> Proxy defaults to using the Node.js runtime. The `runtime` config option is not available in
+> Proxy files.
+> …
+> | `v16.0.0` | Middleware is deprecated and renamed to Proxy. Proxy defaults to the Node.js runtime |
+
+So the global Redis-backed limiter §9.1 asks for **can** live in the proxy. The comments are a
+Next 14/15 fact carried into a Next 16 file — exactly what `AGENTS.md`'s version notice warns
+about.
+
+The conclusion those comments support is still correct for a different reason, and must not be
+weakened: `proxy.ts` is **not** a security boundary, because a matcher is one typo away from
+exempting a route and because Server Actions are POSTs to the page's own route (documented in
+the same file) — so a matcher change silently removes coverage. Re-check in the handler. Fix
+the reasoning, keep the rule.
+
+## Constraints for DEV — read before building §9.1
+
+Four constraints. Two of them change what gets built, in the way the Phase 7 design review's
+did.
+
+### 1. Do **not** use a nonce-based CSP. It would silently destroy ISR.
+
+This is the constraint most likely to be got wrong, because the nonce recipe is the first thing
+Next's own CSP guide shows and it is the right answer for most applications. It is the wrong
+answer here, and the failure is not loud.
+
+Next's guide is explicit about the cost:
+
+> When you use nonces in your CSP, **all pages must be dynamically rendered**. … Static
+> optimization and Incremental Static Regeneration (ISR) are disabled.
+
+This application is built on ISR — `/` at 300s, `/rates` at 300s, `/collections`,
+`/products/[slug]` and `/policies/[slug]` at 600s, several with `generateStaticParams`. It is
+serving from that cache right now; measured on the production build:
+
+```
+/       200  x-nextjs-cache: HIT   Cache-Control: s-maxage=300, stale-while-revalidate=…
+/rates  200  x-nextjs-cache: HIT
+```
+
+§9.2 sets LCP < 2.0s and TTFB < 400ms on throttled 4G and asks DEV to "verify ISR is actually
+serving cached HTML — check the `x-nextjs-cache: HIT` header". A nonce CSP turns every one of
+those HITs into a full server render. §9.1 would be met and §9.2 would become unreachable, and
+nothing would fail — the site would just get slower.
+
+The second half is worse, and is why "just be careful" is not a plan. A nonce written into a
+**cached** page is a fixed string, while the header sent with each request is fresh — so every
+request after the first serves HTML whose nonce does not match, and the browser blocks every
+script. The page renders and does not hydrate. If DEV sets the CSP on the _request_ headers
+(which is how Next learns the nonce) for a route that is statically rendered or ISR-cached,
+that is what happens.
+
+Verified against the built output rather than reasoned about: a prerendered page contains
+**4 inline `<script>` tags** carrying the RSC flight payload, with no nonce and no `integrity`
+attribute. `script-src 'self'` alone blocks them and the page will not hydrate.
+
+Experimental SRI does not rescue this. In `next/dist/server/app-render/required-scripts.js`
+the SRI manifest is applied to external bootstrap and preinit scripts **by `src`**; the inline
+data stream is nonce-only. Integrity attributes cannot cover an inline script.
+
+**So: `script-src 'self' 'unsafe-inline'`, and document why — which §9.1 already anticipates by
+requiring the `unsafe-inline` justification in writing.** `'unsafe-eval'` must be absent, as
+§9.1 requires, and it genuinely is not needed in production.
+
+That concession is smaller here than it looks, and the reason should be recorded next to it:
+`unsafe-inline` matters when an attacker can get markup into a page, and this application has
+no `dangerouslySetInnerHTML`, no `eval`, no HTML-bearing user content, and React escaping
+everywhere — checked above. CSP is defence in depth against a future mistake, not a control
+holding a known gap shut.
+
+**If a strict `script-src` is wanted anyway**, the way to get it without paying for it is a
+second, tighter policy on the surfaces that are _already_ `force-dynamic` — `/admin/*`,
+`/account/*`, `/claim/*` — where a nonce costs nothing because nothing is cached, and where
+the value is highest. Two rules if that path is taken: emit exactly **one** CSP header per
+response (two headers are enforced as an intersection and will produce confusing breakage), and
+never set the CSP on the _request_ headers for a cacheable route. Optional; the baseline policy
+is the requirement.
+
+The rest of item 1 is uncontroversial: `Strict-Transport-Security:
+max-age=63072000; includeSubDomains; preload`, `Permissions-Policy` denying camera, microphone
+and geolocation, and the three already present. `frame-ancestors 'none'` belongs in the CSP
+alongside the existing `X-Frame-Options: DENY` — the header is the legacy control, the
+directive is the one modern browsers enforce. `img-src` must permit the `ALLOWED_IMAGE_HOSTS`
+entries or every product photo disappears.
+
+### 2. The global limiter must fail **open**. This inverts the existing rule, on purpose.
+
+`lib/auth/rate-limit.ts` fails **closed**, and Phase 3 was right: a limiter that fails open
+hands unlimited OTP attempts to anyone who can pressure Redis. **Do not copy that behaviour to
+the global limit.**
+
+A global fail-closed limiter means a Redis outage returns 429 for every request to every page —
+it converts "Redis is down" into "the site is down". That directly contradicts MASTER-SPEC §7,
+§9.5's "Redis down → slower, functional", and Phase 1 TEST's verified degradation, which this
+review re-confirmed still holds (`/` served 200 with Postgres stopped).
+
+The two limiters are different kinds of control and should fail in different directions:
+
+| Limiter              | Protects against    | On a Redis fault                                 |
+| :------------------- | :------------------ | :----------------------------------------------- |
+| Per-route (Phase 3)  | credential guessing | **closed** — deny. Losing it is a vulnerability  |
+| Global per-IP (§9.1) | flooding            | **open** — allow. Losing it is a lost mitigation |
+
+State it in the module, because the next person to read the two files will otherwise "fix" the
+inconsistency.
+
+Three sizing notes for the same file. **Exclude RSC prefetches** (`next-router-prefetch` /
+`purpose: prefetch`) — `next/link` fires one per link, so a catalogue page can generate dozens
+of proxy-visible requests per navigation and a limit tuned for humans will lock out browsing.
+**Be generous on the default tier**: a large share of this shop's customers reach it through
+carrier CGNAT, where one address is thousands of people, so a tight per-IP page limit blocks a
+neighbourhood rather than an attacker. And **give `/api/health` headroom** — §9.4 puts uptime
+checks on it, and a monitor that gets a 429 reports a false outage.
+
+### 3. Make the client IP trustworthy, or make the limits honest about not being (SEC-032)
+
+Taking the leftmost `x-forwarded-for` entry trusts the client. Taking the **rightmost** trusts
+the nearest proxy, which is the spoof-resistant choice, and it is correct both for a platform
+that replaces the header and for one that appends.
+
+It has one catastrophic failure mode that must be designed out rather than hoped away: if the
+hop count is wrong, the derived address is the load balancer's, every visitor lands in one
+bucket, and the global limiter locks out the entire site. So make the number of trusted hops
+**explicit configuration**, and add the guard that makes a misconfiguration self-correcting —
+if the selected entry is private, loopback or link-local, it is an infrastructure address, so
+fall back to the rightmost public entry rather than using it as an identity.
+
+Then confirm the topology, which is the part DEBT-009 actually asked for and the part that
+cannot be done from the repository: send a request with a forged `X-Forwarded-For` through the
+real deployment and log what arrives. Keep DEBT-009 open until that has been run against
+production infrastructure.
+
+### 4. The enumeration test must assert behaviour, not an import (§9.1 item 3)
+
+§9.1's own words: "a checklist item decays, a test does not." A test that greps route files for
+a schema import decays the same way — it passes on a file that imports a schema and forgets to
+apply it, and it fails on `/bills/[key]`, which validates its key with a strict UUIDv4 regex and
+is _correct_.
+
+Two of twenty route files do not use Zod today, and they are different cases:
+
+- `/bills/[key]` — a strict UUIDv4 regex, reject-not-coerce, malformed keys never reach the
+  database. Substantively compliant.
+- `/admin/bills/export` — a hand-rolled allowlist parser, and the one with SEC-033 in it.
+
+The honest test drives each route with a malformed input and asserts a **4xx and no write** —
+which is what "reject, don't coerce" means. An allowlist is a fine way to satisfy it; the test
+should care that bad input is refused, not which library refused it. Whatever shape is chosen,
+mutation-check it: widen one schema and confirm the test fails, or it is asserting nothing.
+
+---
+
+# OWASP Top 10 (2021) — full application review
+
+§9.1 item 10. Every row states where the control lives and what proves it. "Verified" means
+measured in this pass or asserted by a test that has been mutation-checked in an earlier one.
+
+## A01 — Broken Access Control · **PASS**
+
+The application's strongest area, and the one with the most history behind it.
+
+- Every admin route handler and every Server Action calls `requireAdmin()`; `proxy.ts` is
+  documented as not being the boundary and the handler re-checks. Non-admins get **404**, never
+  403, so the route's existence is not confirmed — and authorisation runs **before** input
+  validation, so a malformed body cannot elicit a 400 that leaks the same fact (SEC-016).
+- IDOR: `/account/orders` takes no parameters at all — there is no id to tamper with.
+  `/account/orders/[id]` and `/bills/{key}` filter by the session's `userId`. `/bills/{key}`
+  refuses a correct key carrying nothing else (DEBT-021), accepting only a valid HMAC
+  signature, session ownership, or admin — with a byte-identical 404 for every refusal.
+- `/admin/bills/export` is a route handler under `/admin` and therefore gets **no layout**, so
+  `requireAdminPage()` never runs for it. It calls `requireAdmin()` itself. This is the exact
+  shape of bug that "the proxy is not a boundary" exists to catch, and it was caught.
+- Vertical escalation is bounded by session rotation on privilege change (§3.3) and an 8h admin
+  TTL.
+
+Nothing new this pass.
+
+## A02 — Cryptographic Failures · **PASS**
+
+- Passwords: Argon2id, `memoryCost 19456 / timeCost 2 / parallelism 1`, one shared module.
+- OTP: hashed and peppered at rest, 5-minute TTL, single-use by conditional `UPDATE` in
+  Postgres, 6-attempt lockout. Claim tokens follow the same pattern.
+- Sessions: 32 random bytes base64url (256 bits, not a UUID's 122), opaque, server-side,
+  revocable. Cookie `httpOnly`, `SameSite=Lax`, `Secure` in production.
+- Bill URLs: HMAC-SHA256 compared with `timingSafeEqual` on equal-length buffers.
+- Enquiry logging stores an HMAC fingerprint rather than the session id (SEC-013) — the
+  difference between an analytics row and a session-hijacking kit.
+
+One gap, and it is transport rather than cryptography: **HSTS is absent** (SEC-030). `Secure`
+cookies mean the session cannot be sent in clear, but the first request to `http://` still
+happens without it. `Strict-Transport-Security` with `preload` is what closes that, and it is
+already on §9.1's list.
+
+## A03 — Injection · **PASS**
+
+- No `$queryRawUnsafe`; three `$queryRaw` sites, all parameterised via tagged template.
+  `websearch_to_tsquery` rather than `to_tsquery` in search, so a typo like `gold &` is a
+  no-result query rather than a 500 (Phase 6).
+- 18 of 20 route files parse input through Zod; the other two validate by hand, one correctly
+  (`/bills/[key]`) and one with SEC-033 in it.
+- XSS: no `dangerouslySetInnerHTML`, no `eval`, no `new Function`, React escaping throughout,
+  `rel="noopener noreferrer"` on all six `target="_blank"` links. Media link URLs are
+  scheme-restricted so `javascript:` cannot reach an `href` (SEC-018).
+- Header injection: `Content-Disposition` filenames sanitised at the header, independently of
+  the schema that also restricts them (SEC-021).
+- CSV formula injection: neutralised in `csvField`.
+- PDF: not an escaping problem but an encoding one — `lib/bills/pdf-text.ts` prevents a
+  character the font cannot draw from silently printing as the wrong glyph on an invoice.
+
+CSP would be the defence-in-depth layer here and is absent (SEC-030).
+
+## A04 — Insecure Design · **PASS**
+
+The category the project's process is aimed at. Price tampering is the app-specific risk and is
+answered structurally rather than by validation: the client cannot submit a rate or a total, the
+server recomputes every line from the database at request time, a submitted total is **rejected**
+rather than ignored, and the ticker's jitter is a pure function with no import path into any
+server module. `Order.userId` has exactly two writers and `phoneVerified: true` exactly one.
+
+Design reviews preceded implementation for both new authentication surfaces (Phase 7's admin
+panel, Phase 9's claim token), and in both cases the review changed what was built.
+
+## A05 — Security Misconfiguration · **FAIL**
+
+The category this pass fails on, and all four open findings land here.
+
+| Item                                  | State                                                        |
+| :------------------------------------ | :----------------------------------------------------------- |
+| Security headers                      | 3 of 6 — SEC-030                                             |
+| Database privileges                   | **fixed** — DML-only runtime role, no DDL (SEC-029)          |
+| Global rate limiting                  | absent — SEC-034                                             |
+| Dependabot                            | not enabled — SEC-035                                        |
+| Stack traces in production            | correctly suppressed — verified                              |
+| `/__design` gallery blocked in prod   | rewritten to a 404, verified in Phase 2 against a real build |
+| Redis bound to loopback, password-set | verified in dev; production needs one ops confirmation       |
+| `.env` never committed                | verified across all commits                                  |
+
+## A06 — Vulnerable and Outdated Components · **PARTIAL**
+
+`pnpm audit`: "No known vulnerabilities found". Dependencies are current and pinned or
+caret-ranged; Next 16.3.0, React 19.2.8, Prisma 6.19.3, Zod 4.4.3. `onlyBuiltDependencies`
+restricts which packages may run install scripts, which is a supply-chain control worth having
+by default.
+
+No automated watch (SEC-035). A clean audit is a fact about today.
+
+## A07 — Identification and Authentication Failures · **PASS**
+
+- Enumeration: one shared `GENERIC_AUTH_ERROR` constant for unknown-identifier and
+  wrong-password, a dummy Argon2 verification on the unknown-user path, and `padTo()` flattening
+  total response time. Body, status and timing all match.
+- Rate limits per identifier **and** per IP on OTP send, OTP verify, login and claim. Failing
+  closed — correct at this layer, and see constraint 2 for why the global one must not.
+- Session fixation: `createSession` issues a fresh id on login; `rotateSession` drops every
+  existing session on privilege change. Logout deletes the Redis key, not just the cookie.
+- Password policy is length and guessability, no composition rules (§3.1's reasoning).
+
+One caveat that is a product decision rather than a defect: **possession of a phone number is
+proven by a WhatsApp-delivered claim token, not by SMS OTP** (D-011, D-031). Reviewed and
+accepted under SEC-026/SEC-027.
+
+## A08 — Software and Data Integrity Failures · **PASS**
+
+- `pnpm-lock.yaml` committed; `packageManager` pinned to an exact pnpm version.
+- No CDN-loaded scripts — nothing to tamper with in transit, which is also why
+  `script-src 'self'` plus inline is a narrower concession than it would be elsewhere.
+- Invoice integrity: bills recompute server-side, snapshot their rates per item, and the
+  invoice sequence is a single atomic `INSERT … ON CONFLICT DO UPDATE … RETURNING` proven
+  gapless under fifty concurrent writers. Void is a soft stamp; there is no hard delete.
+- Signed direct-to-provider uploads: the Cloudinary secret signs server-side and never reaches
+  the browser (Phase 7 §7.8).
+
+SEC-029's fix strengthens this category directly: six-year invoice retention (DEBT-026) was a
+convention and is now a database guarantee — the application's role has no `DELETE` on
+`Order`, `OrderItem` or `BillPdf`, verified by refusal.
+
+## A09 — Security Logging and Monitoring Failures · **FAIL**
+
+Auditing is good; logging is not, and monitoring does not exist yet.
+
+**Working:** `AuditLog` records actor, action, entity, before/after and IP for every admin
+mutation, and `adminAction` makes the audited path the easy path — nothing writes to `AuditLog`
+outside it. Rate-limit fail-closed events are logged. `/admin/audit` is read-only by
+construction.
+
+**Not working:** no structured logging, no redaction, and PII demonstrably reaching log lines
+(SEC-031). There is no correlation id, so the four log lines belonging to one failed request
+cannot be tied together. Alerting is §9.4 and is not built — including the one alert that is a
+business incident rather than a technical one, "rates not updated in 24h".
+
+`@DEV:` when Sentry lands (§9.4), the PII scrubbing §9.4 requires configured "**before** launch"
+and the redaction SEC-031 asks for are the same control. Build the redactor once and give it to
+both, or the two will disagree about what a phone number looks like.
+
+## A10 — Server-Side Request Forgery · **PASS**
+
+The strongest single control in the codebase, and the one that most deserved its design review.
+
+`lib/media/ssrf.ts` resolves the hostname **once**, checks the resolved address against
+private, loopback, link-local and CGNAT ranges, and then connects to the **pinned IP** rather
+than re-resolving. That defeats the DNS-rebinding attack the obvious "resolve, check, then
+`fetch()`" shape is wide open to — where the check gets a public answer and the connection gets
+`169.254.169.254`. Redirects are followed by hand with the same check re-applied at every hop.
+47 assertions, including the redirect case.
+
+`next.config.ts`'s `remotePatterns` is derived from the same `ALLOWED_IMAGE_HOSTS` the guard
+uses, `https` only and no wildcards, so the image optimiser and the admin URL field cannot
+drift into one permitting a host the other rejects (SEC-015).
+
+Two other outbound fetches exist and both are bounded: the bill logo fetch (SEC-025, fails
+soft) and Resend's HTTPS API.
+
+## Summary
+
+| Category                      | Verdict  |
+| :---------------------------- | :------- |
+| A01 Broken Access Control     | PASS     |
+| A02 Cryptographic Failures    | PASS     |
+| A03 Injection                 | PASS     |
+| A04 Insecure Design           | PASS     |
+| A05 Security Misconfiguration | **FAIL** |
+| A06 Vulnerable Components     | PARTIAL  |
+| A07 Auth Failures             | PASS     |
+| A08 Integrity Failures        | PASS     |
+| A09 Logging & Monitoring      | **FAIL** |
+| A10 SSRF                      | PASS     |
+
+Both failures are configuration and instrumentation rather than application logic, which is
+consistent with where the project has spent its attention. Neither is difficult; both are on
+§9.1's checklist already.
+
+## Carried to deployment — not answerable from the repository
+
+Three items that need the real infrastructure and must be confirmed before launch:
+
+1. **Redis in production** — password-protected and not publicly bound. Verified for the local
+   compose stack; the managed instance needs its TLS and credential configuration confirmed
+   (§9.1 item 7).
+2. **The `x-forwarded-for` topology** — SEC-032 / DEBT-009. Send a forged header through the
+   real deployment and log what arrives.
+3. **Secret rotation before launch** (§9.1 item 5) — no secret has ever been committed, but the
+   development values in `.env` must not become the production ones. `lib/env.ts` already
+   refuses a `CHANGE_ME` placeholder under `NODE_ENV=production`, which catches an unfilled
+   variable but not a reused development one.
+
+Backups are a fourth, already tracked: **DEBT-031** — they now contain customer invoices and
+must be encrypted at rest with a retention period that reconciles with DEBT-026's six years.

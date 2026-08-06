@@ -91,41 +91,47 @@ export function parseQuery<S extends z.ZodType>(
 }
 
 /**
- * Reject a state-changing request that did not come from our own origin.
+ * The origin verdict, as a value rather than a response.
  *
- * Created by Phase 7 (specs/07-admin-panel.md §7 SECURITY: "CSRF: state-changing routes
- * require `SameSite=Lax` plus an origin check").
+ * ── Why this is a separate function (SEC-028) ──
+ * There are two callers with two different return types: a route handler needs a
+ * `NextResponse`, a Server Action cannot return one. Phase 7 solved that by writing the
+ * logic twice, and the copies drifted: SEC-017's fix — reject a downgraded `http://` origin
+ * in production — was applied to the route-handler copy only, so every admin mutation in the
+ * application (all of which are Server Actions, D-024) still accepted one. The comment on
+ * the second copy asserted "the logic is identical and both are tested"; neither half was
+ * true.
  *
- * ── Why this exists when the cookie is already SameSite=Lax ──
- * Lax does block the session cookie on a cross-site POST, so this is defence in depth
- * rather than a hole being closed. But it makes the browser's default the *only* control,
- * and Lax has edge cases — a same-site-but-different-subdomain attacker, and browsers that
- * treat the default differently. One header check costs nothing and removes the dependency.
+ * So the decision lives here once and the two shapes are thin wrappers. A control that is
+ * stated twice is a control that will eventually be true once.
  *
- * `Origin` is sent by every browser on a cross-origin request and on same-origin POSTs, and
- * it cannot be set by page JavaScript. A request with NO origin header is allowed through:
- * that is a server-to-server caller (curl, the Playwright request fixture, a health check),
- * which is not a CSRF scenario — CSRF requires a browser with an ambient cookie, and a
- * browser always sends the header.
- *
- * Applied to every mutating handler in the application, not only Phase 7's. A control that
- * only guards code written after it was invented has a hole in the shape of the older code.
+ * `absent` is distinguished from `ok` because the callers report it differently, not because
+ * either rejects it — see `requireSameOrigin`.
  */
-export async function requireSameOrigin(): Promise<NextResponse | null> {
+export type OriginVerdict = 'ok' | 'absent' | 'malformed' | 'mismatch';
+
+export async function checkSameOrigin(): Promise<OriginVerdict> {
   const h = await headers();
   const origin = h.get('origin');
 
-  // No Origin — not a browser form post. See above.
-  if (!origin) return null;
+  /**
+   * No Origin — not a browser form post.
+   *
+   * That is a server-to-server caller (curl, the Playwright request fixture, a health
+   * check), which is not a CSRF scenario: CSRF requires a browser with an ambient cookie,
+   * and a browser always sends the header on a cross-origin request and on same-origin
+   * POSTs. It also cannot be set by page JavaScript.
+   */
+  if (!origin) return 'absent';
 
   const host = h.get('host');
-  if (!host) return errorJson('Bad request.', 400);
+  if (!host) return 'malformed';
 
   let parsed: URL;
   try {
     parsed = new URL(origin);
   } catch {
-    return errorJson('Bad request.', 400);
+    return 'malformed';
   }
 
   /**
@@ -138,16 +144,39 @@ export async function requireSameOrigin(): Promise<NextResponse | null> {
    * `http://localhost`.
    */
   if (env.NODE_ENV === 'production' && parsed.protocol !== 'https:') {
-    return errorJson('Bad request.', 403);
+    return 'mismatch';
   }
 
-  if (parsed.host !== host) {
-    // Deliberately terse. Naming the expected origin would help an attacker tune, and a
-    // legitimate caller never sees this.
-    return errorJson('Bad request.', 403);
-  }
+  return parsed.host === host ? 'ok' : 'mismatch';
+}
 
-  return null;
+/**
+ * Reject a state-changing request that did not come from our own origin.
+ *
+ * Created by Phase 7 (specs/07-admin-panel.md §7 SECURITY: "CSRF: state-changing routes
+ * require `SameSite=Lax` plus an origin check").
+ *
+ * ── Why this exists when the cookie is already SameSite=Lax ──
+ * Lax does block the session cookie on a cross-site POST, so this is defence in depth
+ * rather than a hole being closed. But it makes the browser's default the *only* control,
+ * and Lax has edge cases — a same-site-but-different-subdomain attacker, and browsers that
+ * treat the default differently. One header check costs nothing and removes the dependency.
+ *
+ * Applied to every mutating handler in the application, not only Phase 7's. A control that
+ * only guards code written after it was invented has a hole in the shape of the older code.
+ */
+export async function requireSameOrigin(): Promise<NextResponse | null> {
+  switch (await checkSameOrigin()) {
+    case 'ok':
+    case 'absent':
+      return null;
+    case 'malformed':
+      return errorJson('Bad request.', 400);
+    case 'mismatch':
+      // Deliberately terse. Naming the expected origin would help an attacker tune, and a
+      // legitimate caller never sees this.
+      return errorJson('Bad request.', 403);
+  }
 }
 
 /**

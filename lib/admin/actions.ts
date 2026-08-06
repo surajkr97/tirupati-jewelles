@@ -28,6 +28,7 @@ import { headers } from 'next/headers';
 import { requireAdmin, UnauthorisedError, type PublicUser } from '@/lib/auth/guard';
 import { db } from '@/lib/db';
 import { env } from '@/lib/env';
+import { checkSameOrigin } from '@/lib/http';
 
 export type ActionResult<T = undefined> =
   { ok: true; data: T } | { ok: false; error: string; field?: string };
@@ -58,24 +59,20 @@ async function clientIp(): Promise<string> {
 /**
  * Same-origin check for a Server Action.
  *
- * Duplicated from `lib/http.ts` rather than shared because that one returns a
- * `NextResponse`, which an action cannot return. The logic is identical and both are
- * tested; a shared core returning a boolean would be the tidier refactor if a third caller
- * ever appears.
+ * ── SEC-028: this used to be a second implementation, and it had drifted ──
+ * The check was duplicated here because `lib/http.ts` returns a `NextResponse`, which an
+ * action cannot return. SEC-017 then tightened the route-handler copy to reject a
+ * downgraded `http://` origin in production — and did not touch this one. Since every admin
+ * mutation is a Server Action (D-024), the control SEC-017 believed it had fixed was still
+ * missing everywhere it mattered most.
+ *
+ * Now both shapes call one decision in `lib/http.ts`. `absent` means no `Origin` header at
+ * all, which is a server-to-server caller rather than a CSRF scenario; the reasoning is
+ * recorded there.
  */
 async function isSameOrigin(): Promise<boolean> {
-  const h = await headers();
-  const origin = h.get('origin');
-  if (!origin) return true; // Not a browser form post — see lib/http.ts.
-
-  const host = h.get('host');
-  if (!host) return false;
-
-  try {
-    return new URL(origin).host === host;
-  } catch {
-    return false;
-  }
+  const verdict = await checkSameOrigin();
+  return verdict === 'ok' || verdict === 'absent';
 }
 
 /**
