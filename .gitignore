@@ -33,3 +33,6 @@ celerybeat-schedule*
 .DS_Store
 Thumbs.db
 *.swp
+
+# Preview photography — regenerate with scripts/fetch-photos.mjs. Never shipped.
+public/photos/

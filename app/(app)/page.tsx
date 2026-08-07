@@ -49,7 +49,7 @@ async function loadTickerData() {
 }
 
 export default async function HomePage() {
-  const [{ serialised, history }, categories] = await Promise.all([
+  const [{ serialised, history }, categories, hero] = await Promise.all([
     loadTickerData(),
     db.category.findMany({
       where: { isActive: true },
@@ -57,14 +57,34 @@ export default async function HomePage() {
       take: 6,
       select: { id: true, name: true, slug: true, imageUrl: true },
     }),
+    /**
+     * §7.6: "every image on the site replaceable from the dashboard."
+     *
+     * This lookup was owed by Phase 7 and never landed — the frame below was left hardcoded
+     * to `null` with a comment saying the MediaSlot lookup "arrives in Phase 7". It did not,
+     * so the admin could set HERO_BANNER and nothing changed. Wired here.
+     *
+     * `isActive` is honoured, so clearing or deactivating the slot returns the frame to the
+     * branded empty state §2.2 requires rather than breaking the layout.
+     */
+    db.mediaSlot.findUnique({
+      where: { slotKey: 'HERO_BANNER' },
+      select: { imageUrl: true, headline: true, isActive: true },
+    }),
   ]);
 
   return (
     <>
-      {/* Hero. The MediaSlot lookup arrives in Phase 7; until then ImageFrame renders a
-          branded placeholder so an empty slot looks deliberate (§2.2). */}
+      {/* Hero — MediaSlot HERO_BANNER, or a branded placeholder while it is empty (§2.2). */}
       <Section className="pt-6 pb-0 md:pt-8">
-        <ImageFrame src={null} alt="" ratio="16/9" priority />
+        <ImageFrame
+          src={hero?.isActive ? hero.imageUrl : null}
+          // Decorative unless the owner has given the slot a headline to describe it.
+          alt={hero?.headline ?? ''}
+          ratio="16/9"
+          sizes="(max-width: 768px) 100vw, 1200px"
+          priority
+        />
       </Section>
 
       {/* Above the fold at 375px — §4.5. */}

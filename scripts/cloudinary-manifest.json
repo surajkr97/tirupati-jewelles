@@ -1,0 +1,94 @@
+{
+  "about": {
+    "publicId": "tirupati/products/aa7cff7a-2581-4693-8a5b-575ba1791ea8",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/aa7cff7a-2581-4693-8a5b-575ba1791ea8"
+  },
+  "bangles-1": {
+    "publicId": "tirupati/products/3eb00bd4-b123-45ef-9412-360c2c63f71c",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/3eb00bd4-b123-45ef-9412-360c2c63f71c"
+  },
+  "bangles-2": {
+    "publicId": "tirupati/products/bd314b42-5d98-458c-ae62-76abbad67167",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/bd314b42-5d98-458c-ae62-76abbad67167"
+  },
+  "bangles-3": {
+    "publicId": "tirupati/products/fec30038-29ab-4961-a0b0-c23bc8b257e2",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/fec30038-29ab-4961-a0b0-c23bc8b257e2"
+  },
+  "bracelets-1": {
+    "publicId": "tirupati/products/230b28fe-702a-448b-a6c7-4f721e9b36f4",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/230b28fe-702a-448b-a6c7-4f721e9b36f4"
+  },
+  "bracelets-2": {
+    "publicId": "tirupati/products/08c4d7f5-847a-4f8a-b1d5-a6142b73809e",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/08c4d7f5-847a-4f8a-b1d5-a6142b73809e"
+  },
+  "bracelets-3": {
+    "publicId": "tirupati/products/2453f9bc-7626-4689-a61b-2a7980a9547d",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/2453f9bc-7626-4689-a61b-2a7980a9547d"
+  },
+  "chains-1": {
+    "publicId": "tirupati/products/ad4d888c-83e8-4a36-aed4-1b35f7f262a8",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/ad4d888c-83e8-4a36-aed4-1b35f7f262a8"
+  },
+  "chains-2": {
+    "publicId": "tirupati/products/bae80e34-adba-4cf3-9147-5cdc6eb56266",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/bae80e34-adba-4cf3-9147-5cdc6eb56266"
+  },
+  "chains-3": {
+    "publicId": "tirupati/products/3adcdce6-33be-4dbf-8748-0bc774cc2667",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/3adcdce6-33be-4dbf-8748-0bc774cc2667"
+  },
+  "earrings-1": {
+    "publicId": "tirupati/products/cf56284a-2000-45e4-9b46-16dddb82a1e5",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/cf56284a-2000-45e4-9b46-16dddb82a1e5"
+  },
+  "earrings-2": {
+    "publicId": "tirupati/products/b3fe6310-50ea-4731-b637-3dc80ccec846",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/b3fe6310-50ea-4731-b637-3dc80ccec846"
+  },
+  "earrings-3": {
+    "publicId": "tirupati/products/5867e389-d038-4737-ab53-4c1c568f7083",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/5867e389-d038-4737-ab53-4c1c568f7083"
+  },
+  "feature": {
+    "publicId": "tirupati/products/ef9b3b4c-0cbf-4c0c-aa27-bc05aeb0abc8",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/ef9b3b4c-0cbf-4c0c-aa27-bc05aeb0abc8"
+  },
+  "footer": {
+    "publicId": "tirupati/products/20b0432a-ddbe-4868-8ddc-84e60b16c446",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/20b0432a-ddbe-4868-8ddc-84e60b16c446"
+  },
+  "hero": {
+    "publicId": "tirupati/products/41cf480f-41e9-4446-bb82-fd34a081b4b1",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/41cf480f-41e9-4446-bb82-fd34a081b4b1"
+  },
+  "necklaces-1": {
+    "publicId": "tirupati/products/3e097ed0-4a59-4b51-b5e1-d953c17edfbe",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/3e097ed0-4a59-4b51-b5e1-d953c17edfbe"
+  },
+  "necklaces-2": {
+    "publicId": "tirupati/products/b313f2fe-84de-4768-afe4-68e2b1c8863c",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/b313f2fe-84de-4768-afe4-68e2b1c8863c"
+  },
+  "necklaces-3": {
+    "publicId": "tirupati/products/a9529690-b944-4722-98c0-58e56cc74f9f",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/a9529690-b944-4722-98c0-58e56cc74f9f"
+  },
+  "offer-strip": {
+    "publicId": "tirupati/products/b339fd6d-c6f2-4ec3-a7dd-b7e599fd57f9",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/b339fd6d-c6f2-4ec3-a7dd-b7e599fd57f9"
+  },
+  "rings-1": {
+    "publicId": "tirupati/products/16d97317-a06c-4d87-b7c3-f5609885d161",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/16d97317-a06c-4d87-b7c3-f5609885d161"
+  },
+  "rings-2": {
+    "publicId": "tirupati/products/41e7c6cc-d042-422c-bd28-6f97949f4cf8",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/41e7c6cc-d042-422c-bd28-6f97949f4cf8"
+  },
+  "rings-3": {
+    "publicId": "tirupati/products/1ebec42a-e953-446b-999b-ddeba9cefe3a",
+    "url": "https://res.cloudinary.com/daeqn8kwz/image/upload/f_auto,q_auto/tirupati/products/1ebec42a-e953-446b-999b-ddeba9cefe3a"
+  }
+}
