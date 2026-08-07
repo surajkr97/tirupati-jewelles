@@ -78,9 +78,17 @@ test.describe('the admin panel', () => {
   }) => {
     await page.goto('/admin');
 
-    // §7.2: the rates shortcut belongs on the home screen because it is the most frequent
-    // daily action.
-    await expect(page.getByRole('link', { name: /Update/ })).toBeVisible();
+    /**
+     * §7.2: the rates shortcut belongs on the home screen because it is the most frequent
+     * daily action.
+     *
+     * Matched exactly, not as /Update/. The loose pattern passed for months and then broke
+     * the first time a rate went stale, because §7.2's "rates not updated in 48 hours" alert
+     * renders its own `Update` link and the two collide under strict mode. The dashboard was
+     * behaving correctly; the locator was ambiguous — the same shape as DEBT-038, where an
+     * assertion written against a fresh database stopped holding once the data aged.
+     */
+    await expect(page.getByRole('link', { name: 'Update →' })).toBeVisible();
     await expect(page.getByText('Gold 22K')).toBeVisible();
     await expect(page.getByText('Sold today')).toBeVisible();
   });
