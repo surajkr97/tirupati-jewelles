@@ -47,6 +47,7 @@ export default async function CollectionsPage() {
                   alt={category.name}
                   ratio="1/1"
                   sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 380px"
+                  blurDataURL={category.blurDataUrl ?? undefined}
                   // §6.5: priority only above the fold. The first row at 375px is two
                   // tiles; the rest lazy-load.
                   priority={index < 2}

@@ -6,15 +6,21 @@
  * links". Those links were pointing at 404s, which is worse than not linking at all — a
  * dead policy link on a page whose job is reassurance does the opposite of reassure.
  *
- * ── What this page deliberately does NOT do ──
- * It does not state terms. Buyback percentages, deduction rules and exchange windows are
- * the shop owner's commercial and legal commitments, and inventing plausible-sounding ones
- * would be fabricating a contract on their behalf. What is written here is only what the
- * site can truthfully say today: the policy exists, it is confirmed in store, and here is
- * how to ask.
+ * ── What this page deliberately does NOT do, and why that is now the final answer ──
+ * It states no numbers. Buyback percentages, deduction rules and exchange windows are the
+ * shop's commercial and legal commitments, and inventing plausible-sounding ones would be
+ * fabricating a contract on their behalf. What is written here is only what the site can
+ * truthfully say: the policy exists, the assessment happens in store, and here is how to ask.
  *
- * The owner supplies the real copy before launch — tracked as DEBT-018. Phase 7's admin
- * panel is the natural home for it.
+ * **DEBT-018 is closed on the owner's decision (Phase 9): general policy only, no
+ * shop-specific terms.** So this copy is the policy rather than a placeholder for one. Two
+ * things follow from that and should not be quietly undone:
+ *
+ *   1. Every sentence here is a claim a customer may rely on. "We buy back our own
+ *      hallmarked pieces at the prevailing rate" is a promise; keep it true, and keep the
+ *      deduction language non-specific unless the shop decides otherwise.
+ *   2. §9.6 still requires privacy, terms and shipping pages, which these are not. They are
+ *      a separate obligation and are not covered by this decision.
  */
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';

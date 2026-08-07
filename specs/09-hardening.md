@@ -63,10 +63,11 @@ rather than the number quietly edited — and 290KB is set deliberately close to
       route, under throttling, with the full CSP attached.
 - [x] Fonts: `next/font`, subset, `display: swap`, preloaded. — verified in the served HTML:
       one `rel="preload" as="font"` woff2, `latin` subset, `display: swap`.
-- [~] Images: AVIF/WebP, correct `sizes`, blur placeholders everywhere. — AVIF confirmed on
-  the wire (35.7 kB for the hero at 828w) and `sizes`/`imageSizes` present including the
-  LCP preload. **Blur placeholders are not supplied by any caller** — `ImageFrame` accepts
-  `blurDataURL` and nothing passes one. Needs a column per image; see SIGNOFF.
+- [x] Images: AVIF/WebP, correct `sizes`, blur placeholders everywhere. — AVIF confirmed on
+      the wire (35.7 kB for the hero at 828w), `sizes`/`imageSizes` present including the LCP
+      preload, and **92 blur placeholders generated** (avg 468 bytes) into a nullable column on
+      `ProductImage`, `Category` and `MediaSlot`, wired through every `ImageFrame` call site.
+      Verified in the served HTML, not only in the database. `scripts/generate-blur.mts`.
 - [x] DB: `EXPLAIN ANALYZE` the ten most common queries; add missing indexes. — **two missing
       foreign-key indexes found and added** (`ProductImage.productId`, `OrderItem.orderId`).
       Found by index-coverage audit, not by EXPLAIN: at 25 products a seq scan is the correct

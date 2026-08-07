@@ -55,7 +55,7 @@ export const PRODUCT_CARD_SELECT = {
   createdAt: true,
   category: { select: { name: true, slug: true } },
   images: {
-    select: { url: true, alt: true },
+    select: { url: true, alt: true, blurDataUrl: true },
     orderBy: { sortOrder: Prisma.SortOrder.asc },
     take: 1,
   },
@@ -73,6 +73,8 @@ export interface PricedProduct {
   categorySlug: string;
   imageUrl: string | null;
   imageAlt: string | null;
+  /** §9.2 blur placeholder for the first image; null until generate-blur.mts has run. */
+  imageBlur: string | null;
   isFeatured: boolean;
   createdAt: Date;
   price: LineResult;
@@ -101,6 +103,7 @@ export function priceProduct(row: ProductRow, rates: RatesByPurity): PricedProdu
     categorySlug: row.category.slug,
     imageUrl: row.images[0]?.url ?? null,
     imageAlt: row.images[0]?.alt ?? null,
+    imageBlur: row.images[0]?.blurDataUrl ?? null,
     isFeatured: row.isFeatured,
     createdAt: row.createdAt,
     price: calculateLine(
@@ -255,7 +258,7 @@ export const PRODUCT_DETAIL_SELECT = {
   createdAt: true,
   category: { select: { name: true, slug: true } },
   images: {
-    select: { id: true, url: true, alt: true },
+    select: { id: true, url: true, alt: true, blurDataUrl: true },
     orderBy: { sortOrder: Prisma.SortOrder.asc },
   },
 } satisfies Prisma.ProductSelect;
@@ -345,6 +348,7 @@ export async function listActiveCategories() {
       name: true,
       slug: true,
       imageUrl: true,
+      blurDataUrl: true,
       _count: { select: { products: { where: { isActive: true } } } },
     },
   });
@@ -353,7 +357,7 @@ export async function listActiveCategories() {
 export async function getCategoryBySlug(slug: string) {
   return db.category.findFirst({
     where: { slug, isActive: true },
-    select: { id: true, name: true, slug: true, imageUrl: true },
+    select: { id: true, name: true, slug: true, imageUrl: true, blurDataUrl: true },
   });
 }
 

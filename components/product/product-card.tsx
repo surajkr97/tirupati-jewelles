@@ -46,6 +46,7 @@ export function ProductCard({
         ratio="1/1"
         // Two-up on mobile, three-up on desktop inside a 1200px container.
         sizes="(max-width: 768px) 50vw, (max-width: 1200px) 33vw, 380px"
+        blurDataURL={product.imageBlur ?? undefined}
         priority={priority}
       />
 

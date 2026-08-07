@@ -21,6 +21,8 @@ export interface GalleryImage {
   id: string;
   url: string;
   alt: string | null;
+  /** §9.2 blur placeholder; null until `scripts/generate-blur.mts` has run. */
+  blurDataUrl?: string | null;
 }
 
 export function Gallery({ images, name }: { images: GalleryImage[]; name: string }) {
@@ -82,6 +84,7 @@ export function Gallery({ images, name }: { images: GalleryImage[]; name: string
         alt={only.alt ?? name}
         ratio="1/1"
         sizes="(max-width: 768px) 100vw, 50vw"
+        blurDataURL={only.blurDataUrl ?? undefined}
         priority
       />
     );
@@ -108,6 +111,7 @@ export function Gallery({ images, name }: { images: GalleryImage[]; name: string
               alt={image.alt ?? `${name} — image ${index + 1}`}
               ratio="1/1"
               sizes="(max-width: 768px) 100vw, 50vw"
+              blurDataURL={image.blurDataUrl ?? undefined}
               // §6.5: priority only on the first gallery image; the rest lazy-load.
               priority={index === 0}
             />

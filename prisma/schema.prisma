@@ -140,13 +140,15 @@ enum Purity {
 // ───────────────────────────────────────────────────────────────────── catalog
 
 model Category {
-  id        String    @id @default(uuid())
-  name      String
-  slug      String    @unique
-  imageUrl  String?
-  sortOrder Int       @default(0)
-  isActive  Boolean   @default(true)
-  products  Product[]
+  id          String    @id @default(uuid())
+  name        String
+  slug        String    @unique
+  imageUrl    String?
+  /// See ProductImage.blurDataUrl.
+  blurDataUrl String?
+  sortOrder   Int       @default(0)
+  isActive    Boolean   @default(true)
+  products    Product[]
 }
 
 model Product {
@@ -181,6 +183,17 @@ model ProductImage {
   alt       String?
   sortOrder Int     @default(0)
 
+  /// Phase 9 §9.2: "blur placeholders everywhere."
+  ///
+  /// A ~20-byte-wide JPEG, base64 in a data URI, generated once from the stored image and
+  /// handed to `next/image` as `blurDataURL`. Stored rather than derived at render time
+  /// because deriving it means fetching the full image on the server for every page render,
+  /// which is the opposite of the optimisation.
+  ///
+  /// Nullable on purpose: an image without one still renders, it just fades in from the
+  /// frame's flat tint. A missing placeholder must never be a broken page.
+  blurDataUrl String?
+
   // Phase 9 §9.2. Postgres does NOT index a foreign key automatically, and Prisma does not
   // add one either — so this was a sequential scan per lookup. Every product card and every
   // gallery reads images by productId, and §6.2 renders them in sortOrder, so the composite
@@ -193,14 +206,16 @@ model ProductImage {
 }
 
 model MediaSlot {
-  id        String   @id @default(uuid())
-  slotKey   String   @unique // HERO_BANNER | OFFER_STRIP | CATEGORY_TILE_1 ...
-  imageUrl  String?
-  linkUrl   String?
-  headline  String?
-  subtext   String?
-  isActive  Boolean  @default(true)
-  updatedAt DateTime @updatedAt
+  id          String   @id @default(uuid())
+  slotKey     String   @unique // HERO_BANNER | OFFER_STRIP | CATEGORY_TILE_1 ...
+  imageUrl    String?
+  /// See ProductImage.blurDataUrl.
+  blurDataUrl String?
+  linkUrl     String?
+  headline    String?
+  subtext     String?
+  isActive    Boolean  @default(true)
+  updatedAt   DateTime @updatedAt
 }
 
 // ────────────────────────────────────────────────────────────── orders & bills

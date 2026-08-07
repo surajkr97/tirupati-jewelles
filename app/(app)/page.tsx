@@ -55,7 +55,7 @@ export default async function HomePage() {
       where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
       take: 6,
-      select: { id: true, name: true, slug: true, imageUrl: true },
+      select: { id: true, name: true, slug: true, imageUrl: true, blurDataUrl: true },
     }),
     /**
      * §7.6: "every image on the site replaceable from the dashboard."
@@ -69,7 +69,7 @@ export default async function HomePage() {
      */
     db.mediaSlot.findUnique({
       where: { slotKey: 'HERO_BANNER' },
-      select: { imageUrl: true, headline: true, isActive: true },
+      select: { imageUrl: true, blurDataUrl: true, headline: true, isActive: true },
     }),
   ]);
 
@@ -83,6 +83,7 @@ export default async function HomePage() {
           alt={hero?.headline ?? ''}
           ratio="16/9"
           sizes="(max-width: 768px) 100vw, 1200px"
+          blurDataURL={hero?.blurDataUrl ?? undefined}
           priority
         />
       </Section>
@@ -100,7 +101,12 @@ export default async function HomePage() {
           {categories.map((category) => (
             <li key={category.id}>
               <Link href={`/collections/${category.slug}`} className="block">
-                <ImageFrame src={category.imageUrl} alt={category.name} ratio="1/1" />
+                <ImageFrame
+                  src={category.imageUrl}
+                  alt={category.name}
+                  ratio="1/1"
+                  blurDataURL={category.blurDataUrl ?? undefined}
+                />
                 <p className="mt-2 text-body font-medium text-ink">{category.name}</p>
               </Link>
             </li>
