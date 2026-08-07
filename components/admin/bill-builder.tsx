@@ -66,9 +66,33 @@ function newId(): string {
  * 150KB the admin panel does not need. The server normalises and re-validates regardless;
  * this only decides whether the button is enabled.
  */
-function isIndianMobile(input: string): boolean {
-  const digits = input.replace(/\D/g, '').replace(/^(91|0)/, '');
-  return /^[6-9]\d{9}$/.test(digits);
+export function isIndianMobile(input: string): boolean {
+  const digits = input.replace(/\D/g, '');
+
+  /**
+   * ── A prefix is only a prefix if something is left after it ──
+   *
+   * This used to be `.replace(/^(91|0)/, '')`, which strips those characters from ANY
+   * input — including a plain ten-digit number that happens to begin `91`. `9101222943`
+   * became `01222943`, failed the test below, and the Generate button stayed disabled
+   * forever under the message "Enter a 10-digit Indian mobile number".
+   *
+   * `91xxxxxxxx` is an assigned Indian mobile block, so this was not hypothetical: a
+   * walk-in customer whose number starts 91 could not be billed at all. The server would
+   * have accepted the number — `lib/auth/identifier.ts` parses it properly — but the button
+   * never enabled, so nothing was ever sent.
+   *
+   * Length is what distinguishes a country code from the number itself: `+91` plus ten
+   * digits is twelve, a `0` trunk prefix plus ten is eleven, and a bare mobile is ten.
+   */
+  const national =
+    digits.length === 12 && digits.startsWith('91')
+      ? digits.slice(2)
+      : digits.length === 11 && digits.startsWith('0')
+        ? digits.slice(1)
+        : digits;
+
+  return /^[6-9]\d{9}$/.test(national);
 }
 
 export function BillBuilder({ products }: { products: ProductOption[] }) {

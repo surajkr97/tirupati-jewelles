@@ -87,14 +87,42 @@ export function StickyBar({
       data-testid={testId}
       className={cn(
         'fixed inset-x-0 bottom-0 z-40',
-        'border-t border-line bg-cream/90 backdrop-blur-md',
+        /**
+         * ── DEBT-033: the band below this bar must not swallow the bottom nav ──
+         *
+         * The `pb-…` below reserves the nav's height so the bar's CONTENT sits above it.
+         * But that padding is still part of this element's box, which is `bottom-0` and
+         * `z-40` against the nav's `z-30` — so it painted `bg-cream/90` over the nav and,
+         * worse, captured its clicks. Hit-tested with `document.elementFromPoint` at the
+         * centre of each nav link: **all five returned the sticky bar**, on `/calculator`
+         * and on every product page. The nav showed through dimmed, reading as available
+         * while being completely dead.
+         *
+         * So the outer box is now transparent and click-through, and the chrome —
+         * background, blur, top border — moved to the inner element, which stops above the
+         * nav. The nav is fully visible and fully tappable; the bar looks unchanged.
+         *
+         * `pointer-events-none` here with `pointer-events-auto` on the child is the whole
+         * mechanism. Do not move the background back out here.
+         */
+        'pointer-events-none',
         // Clears the mobile bottom nav; on desktop there is none, only the safe area.
         'pb-[calc(var(--spacing-bottom-nav)+env(safe-area-inset-bottom))] md:pb-[env(safe-area-inset-bottom)]',
         className,
       )}
     >
-      <div className="mx-auto flex w-full max-w-[1200px] items-center gap-4 px-[20px] py-4 md:px-[40px]">
-        {children}
+      {/*
+        The visible bar. Full-bleed so the background reaches both edges, with the content
+        constrained inside it — the background cannot live on the `max-w-[1200px]` row or it
+        would render as a centred band on desktop.
+
+        The measured height still comes from the OUTER element, so it continues to include
+        the reserved nav band and the layout's footer clearance is unaffected.
+      */}
+      <div className="pointer-events-auto border-t border-line bg-cream/90 backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-[1200px] items-center gap-4 px-[20px] py-4 md:px-[40px]">
+          {children}
+        </div>
       </div>
     </div>
   );

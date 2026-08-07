@@ -406,6 +406,64 @@ test.describe('§5 DESIGN', () => {
     expect(fieldBox!.y + fieldBox!.height).toBeLessThanOrEqual(barBox!.y + 1);
   });
 
+  test('the sticky bar does not swallow the bottom nav (DEBT-033)', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-375', 'The nav is mobile-only');
+
+    /**
+     * ── Why this is hit-tested rather than looked at ──
+     * The bar is `bottom-0 z-40`; the nav is `bottom-0 z-30`. The bar reserves the nav's
+     * height as bottom padding so its CONTENT sits clear — but that padding was still part
+     * of its box, so it painted over the nav and captured every click. The nav showed
+     * through the translucent background, reading as available while being completely dead.
+     *
+     * Nothing about that is visible in a screenshot, and no assertion about position or
+     * visibility catches it: the links ARE there and they ARE visible. Only asking the
+     * browser "what would receive a tap here?" finds it. Measured before the fix: 5 of 5
+     * links returned the sticky bar, on this route and on every product page.
+     */
+    await page.goto('/calculator');
+    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+    await page.waitForTimeout(300);
+
+    /**
+     * The assertion is specifically "the STICKY BAR is not what receives the tap", not "the
+     * link is the topmost element". Those differ under `pnpm dev`, which is what Playwright
+     * runs: Next's dev-tools indicator floats over the bottom-left corner and covers the
+     * Home link. That is a dev-only overlay and not a product defect — verified by
+     * hit-testing a production build, where all five links are reachable — so asserting
+     * topmost-ness here would fail for a reason that never reaches a customer.
+     */
+    const blocked = await page.evaluate(() => {
+      const nav = document.querySelector('nav.fixed');
+      const links = Array.from(nav?.querySelectorAll('a') ?? []);
+
+      return links
+        .filter((link) => {
+          const box = link.getBoundingClientRect();
+          const hit = document.elementFromPoint(
+            box.x + box.width / 2,
+            box.y + box.height / 2,
+          );
+          return Boolean(hit?.closest('[data-sticky-bar]'));
+        })
+        .map((link) => link.textContent?.trim() ?? '');
+    });
+
+    expect(
+      blocked,
+      `the sticky bar is intercepting taps meant for: ${blocked.join(', ')}`,
+    ).toEqual([]);
+
+    // The positive control: the fix must not have made the BAR unclickable instead.
+    const barControl = page
+      .getByTestId('total-bar')
+      .getByRole('button', { name: /Show the full breakdown/i });
+    await expect(barControl).toBeVisible();
+    await barControl.click({ trial: true });
+  });
+
   test('no horizontal scroll', async ({ page }) => {
     await page.goto('/calculator');
 
