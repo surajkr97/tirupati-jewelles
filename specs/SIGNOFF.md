@@ -2248,6 +2248,72 @@ verified with `isOurUpload()`. The hostile cases (`.php` renamed `.jpg`, 100 MB)
 `@TEST:` §9.1 is now green end to end. §9.2–§9.7 have no TEST coverage yet, and DEBT-020
 (Lighthouse on a product page with real images) is still owed.
 
+### Phase 9 — SECURITY (§9.1, final review)
+
+Status: **PASS** — zero CRITICAL, **zero HIGH outstanding**. Nine of ten §9.1 items pass; item
+5 is PARTIAL on one operational action that cannot be performed from inside the repository.
+
+Full review in `SECURITY-LOG.md`. Findings this pass: **SEC-036** (HIGH, fixed), **SEC-037**
+(MEDIUM, fixed), **SEC-038** (LOW, fixed), **SEC-039** (MEDIUM, fixed).
+
+**Independence caveat, stated rather than buried.** This block was written by the same agent
+that made the fixes it reviews — the arrangement `AGENTS.md` separates roles precisely to avoid.
+What that limits is the _rating_, not the evidence: every claim was re-measured from scratch
+against a production build on `next start`, or probed against the running Postgres and Redis,
+rather than taken from the notes of the pass that made the changes. The commands and their
+outputs are quoted in `SECURITY-LOG.md`. Read the numbers, not the verdict.
+
+| #   | §9.1 item                                    | Verdict     |
+| :-- | :------------------------------------------- | :---------- |
+| 1   | Headers in `next.config.ts`                  | **PASS**    |
+| 2   | Global per-IP rate limit in the proxy        | **PASS**    |
+| 3   | Every API route Zod-validated + enumeration  | **PASS**    |
+| 4   | `pnpm audit` clean; Dependabot               | **PASS**    |
+| 5   | Secrets rotated; none ever committed         | **PARTIAL** |
+| 6   | DB user least privilege — no DDL at runtime  | **PASS**    |
+| 7   | Redis password-protected, not publicly bound | **PASS**    |
+| 8   | No stack traces in production                | **PASS**    |
+| 9   | Structured logging, PII redacted             | **PASS**    |
+| 10  | OWASP Top 10 documented                      | **PASS**    |
+
+**A05 re-rated FAIL → PASS.** All six headers confirmed on six different response shapes,
+including a 404 and the response `proxy.ts` manufactures itself. No `unsafe-eval` anywhere.
+
+**A09 re-rated FAIL → PARTIAL, deliberately not PASS.** The logging half is closed and verified
+at the emitter. The category's other half is monitoring, and §9.4 — Sentry, uptime checks,
+alerting — does not exist. Marking A09 green today would be exactly the kind of tick this phase
+has spent its time undoing. **It should be re-rated to PASS when §9.4 lands.**
+
+#### One check that nearly produced a false finding
+
+Forcing real 500s by stopping Postgres, `/search` returned a 15 kB body that tripped a
+stack-frame grep. It was `Chat on WhatsApp` matching `at [A-Za-z]`. Zero actual frames, no
+paths, no `node_modules`, no `ECONNREFUSED`; the body is the generic error page, and `/`
+continued to serve 200 from ISR throughout. Recorded because a leak-detector that cries wolf
+is how a real leak eventually gets waved through.
+
+#### What travels forward
+
+- `@DEV:` **`SEED_ADMIN_PASSWORD` must be rotated before launch** — exposed in a working
+  transcript. Argon2id at rest, so the database is unaffected; the `.env` value is the
+  exposure, and §9.1 item 5 requires rotation regardless. This is the only thing standing
+  between item 5 and PASS.
+- `@DEV:` **DEBT-009's ops half.** `TRUSTED_PROXY_HOPS` is verified against synthetic headers
+  only. Send a forged `x-forwarded-for` through the real deployment and log what arrives.
+- `@TEST:` **§7.7's positive path still has no automated test.** Three unit tests now pin the
+  `lookup` contract where SEC-036 lived, but nothing asserts end to end that a legitimate https
+  URL is fetched and sniffed. That needs an https test server. Until then this control's success
+  path rests on a manual probe — which is the same shape as the defect.
+- `@SECURITY:` re-rate **A09** when §9.4 lands, and reuse `redact()` for Sentry's `beforeSend`
+  so the two cannot grow different ideas of what a phone number looks like.
+
+### Phase 9 §9.1 — SIGNED OFF
+
+DEV **PASS** · TEST **PASS** (findings 1–4, all fixed) · SECURITY **PASS**.
+
+§9.2 is in progress and measured; §9.3–§9.7 not started. Phase 9 as a whole is **not** signed
+off, and §9.8's launch checklist depends on all of it.
+
 ### Phase 9 — DESIGN
 
 Not started.

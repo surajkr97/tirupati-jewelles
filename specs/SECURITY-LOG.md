@@ -1294,9 +1294,26 @@ server module. `Order.userId` has exactly two writers and `phoneVerified: true` 
 Design reviews preceded implementation for both new authentication surfaces (Phase 7's admin
 panel, Phase 9's claim token), and in both cases the review changed what was built.
 
-## A05 — Security Misconfiguration · **FAIL**
+## A05 — Security Misconfiguration · **PASS** (re-rated, Phase 9 §9.1 final)
 
-The category this pass fails on, and all four open findings land here.
+~~FAIL~~ at the first pass, when all four open findings landed here. Re-rated after
+re-measuring every item against a production build on `next start` rather than re-reading the
+diff:
+
+| Item                | Verified                                                                                                                   |
+| :------------------ | :------------------------------------------------------------------------------------------------------------------------- |
+| Security headers    | **6 of 6** on `/`, `/rates`, `/api/rates`, a 404, the proxy-rewritten `/admin`, and `/bills/{key}`                         |
+| `unsafe-eval`       | absent from the policy entirely                                                                                            |
+| HSTS                | `max-age=63072000; includeSubDomains; preload` — exactly §9.1's string                                                     |
+| Global rate limit   | 60 allowed / 10 refused from one address; a second address unaffected                                                      |
+| Rate-limit bypasses | **closed** — `purpose: prefetch` now yields the same 60/10, `/api/health` 600/100                                          |
+| DB least privilege  | runtime role is not a superuser; CREATE, DROP, DELETE on `Order`/`BillPdf` and `pg_authid` all refused, SELECT still works |
+| Redis               | `127.0.0.1:6379` only; unauthenticated `PING` → `NOAUTH`                                                                   |
+| `pnpm audit`        | no known vulnerabilities                                                                                                   |
+| Secrets             | zero tracked `.env` files                                                                                                  |
+
+The original text of the failing pass follows, kept because the fix is only legible against
+what was wrong.
 
 | Item                                  | State                                                        |
 | :------------------------------------ | :----------------------------------------------------------- |
@@ -1348,9 +1365,31 @@ SEC-029's fix strengthens this category directly: six-year invoice retention (DE
 convention and is now a database guarantee — the application's role has no `DELETE` on
 `Order`, `OrderItem` or `BillPdf`, verified by refusal.
 
-## A09 — Security Logging and Monitoring Failures · **FAIL**
+## A09 — Security Logging and Monitoring Failures · **PARTIAL** (re-rated, Phase 9 §9.1 final)
 
-Auditing is good; logging is not, and monitoring does not exist yet.
+~~FAIL~~ at the first pass. **Logging is now closed; monitoring is not, and the category name
+has two halves — so this cannot be a PASS yet, and marking it one would be the kind of tick
+this phase has spent its time undoing.**
+
+**Closed.** `lib/log.ts` emits structured JSON in production and redacts in both environments.
+Verified at the emitter rather than on the pure function — the distinction that mattered,
+since SEC-031 was a missing call site, not a broken algorithm. The measured Prisma error comes
+back without the customer's email or phone and still names the failing call. The rate limiter's
+fail-closed line no longer prints the identifier its key embeds. Error responses leak nothing:
+re-verified by stopping Postgres and reading the real 500 bodies — zero stack frames, no
+`node_modules`, no absolute paths, no `ECONNREFUSED`; `/` continued to serve 200 from ISR
+throughout.
+
+Also closed here, and worth naming because it cut the other way: the redactor was destroying
+invoice numbers (**SEC-038**). A log that cannot be correlated fails the _logging_ half just as
+surely as one that leaks.
+
+**Still open — this is §9.4, not §9.1.** No Sentry, no uptime checks, no alerting. §9.4 also
+requires "PII scrubbing configured **before** launch", which `redact()` is already exported to
+serve, so the two must not grow separate ideas of what a phone number looks like. **A09 should
+be re-rated to PASS only when §9.4 lands.**
+
+The original text of the failing pass follows.
 
 **Working:** `AuditLog` records actor, action, entity, before/after and IP for every admin
 mutation, and `adminAction` makes the audited path the easy path — nothing writes to `AuditLog`
@@ -1597,3 +1636,149 @@ wrong server looks exactly like a feature that does not work.
 A05 and A09 — the two OWASP categories that failed the review — are the two this work
 addressed. Both should be re-rated by the closing SECURITY pass rather than by the agent that
 wrote the code.
+
+---
+
+# Phase 9 §9.1 — final review
+
+Findings SEC-036 to SEC-039. Every claim below was re-measured against a production build on
+`next start`, or probed against the running Postgres and Redis — not read off a diff, and not
+taken from the notes of the pass that made the changes.
+
+**Independence caveat, stated rather than buried.** This block was written by the same agent
+that made the fixes it reviews, which is exactly the arrangement `AGENTS.md` separates roles to
+avoid. What that limits is the _rating_, not the evidence: the measurements are reproducible
+commands whose outputs are quoted, and the regression tests were each confirmed to fail against
+the pre-fix code. Read the numbers, not the verdict.
+
+## SEC-036 · HIGH · fixed — the §7.7 URL guard rejected every URL, including valid ones
+
+`checkImageUrl()` returned `unreachable — "Invalid IP address: undefined"` for **every** input.
+Five call sites depended on it, so every route by which an image can enter this application was
+dead: pasting a URL into a media slot, the slot preview validator, pasting a URL onto a product,
+`confirmUpload` after a **successful** Cloudinary upload, and the invoice logo — which fails
+soft, so bills printed without a logo and nothing reported it.
+
+**Root cause.** `net.connect` invokes a custom `lookup` hook with `{ all: true }` and reads
+`addresses[0].address`; the hook answered with the three-argument `(err, address, family)` form,
+so that read was `undefined`.
+
+**Why 47 SSRF assertions missed it.** Every one is a _rejection_. The suite's "against real
+servers" block runs an **http** server, so the scheme check returns before anything connects and
+`requestPinned` — the function that performs the fetch — was never once executed successfully.
+The single test that touches the hook calls it as `lookup('example.com', {}, cb)`: the one
+options shape `net.connect` never uses. It asserted the branch Node does not take.
+
+Rated HIGH rather than MEDIUM because it silently disabled a control's entire positive path in a
+signed-off phase, and because the failure mode of the invoice logo is invisible by design.
+
+**Verified after the fix**, both directions:
+
+```
+ACCEPT                     https://res.cloudinary.com/…/tirupati/products/41cf480f-…
+reject  host_not_allowed   https://images.pexels.com/photos/29038003/…
+reject  host_not_allowed   https://res.cloudinary.com.attacker.test/x.jpg
+reject  scheme_not_https   http://169.254.169.254/latest/meta-data/
+reject  scheme_not_https   file:///etc/passwd
+```
+
+The allowlist was not widened to achieve the first line, and the pinning property is unchanged:
+both callback shapes return only the single already-validated address, so the DNS-rebinding gap
+the module exists to close stays closed.
+
+**@TEST: §7.7's positive path still has no automated test.** Three unit tests now pin the
+`lookup` contract, which is where the defect was, but nothing asserts end-to-end that a
+legitimate https URL is fetched and sniffed. That needs an https test server, and until it
+exists this control's success path is proven only by the manual probe above.
+
+## SEC-037 · MEDIUM · fixed — the global rate limit was opt-out by request header
+
+`shouldSkip()` removed a request from the limiter entirely when it carried
+`next-router-prefetch`, `purpose: prefetch` or `x-purpose: prefetch`, or when the path was
+`/api/health`. None is a capability; any client can set a header. Measured before the fix, over
+real HTTP against a production build:
+
+```
+150 requests to /login carrying `purpose: prefetch`  ->  150 x 200   (tier is 60)
+  5 from the same address WITHOUT the header         ->    5 x 200   (budget untouched)
+700 requests to /api/health from one address         ->  700 x 200
+```
+
+The second line is the proof: the budget was intact afterwards, so those 150 were never counted.
+`/api/health` matters more than it looks — it runs a Postgres query and a Redis ping per hit, so
+an uncounted path there is a connection-pool exhaustion primitive aimed at both dependencies
+§9.5 is about.
+
+MEDIUM, not HIGH: the per-route limiters inside the handlers fail closed and remain the actual
+credential-guessing control, so what was lost is flood mitigation rather than protection.
+
+**Fixed by replacing exemption with isolation** — prefetches count in their own bucket at the
+same tier limit, `/api/health` has its own tier. Re-measured after the fix, independently:
+
+```
+/login x70 from one address                    ->  60 x 200, 10 x 429
+/login x70 carrying `purpose: prefetch`        ->  60 x 200, 10 x 429
+/api/health x700 from one address              -> 600 x 200, 100 x 429
+a different address, same moment               ->       200
+```
+
+A monitor is isolated rather than exempt: an address already refused on `/login` still receives
+200 on `/api/health`, so co-located traffic cannot starve §9.4's uptime check into a false
+outage. The 429 body says only `Too many requests` — no tier, no budget, no `x-ratelimit-*`.
+
+## SEC-038 · LOW · fixed — the log redactor destroyed invoice numbers
+
+The phone pattern carried no boundary assertion, so it matched a digit run beginning inside
+another token: `order JW-2026-00042 failed` became `order JW-[phone:…042] failed`. ISO
+timestamps and BIS numbers likewise.
+
+Not a leak — the failure is toward safety — but item 9 asks for _structured logging_ with PII
+redacted, and the invoice number is the primary key of every support conversation this shop will
+have, on a legally numbered six-year-retained series (DEBT-026). A log nobody can correlate
+fails the first half of that requirement. Fixed with lookarounds; every phone spelling the suite
+asserts is still redacted.
+
+## SEC-039 · MEDIUM · fixed — SEC-032 reached one of two client-IP implementations
+
+`lib/admin/actions.ts` kept a private `clientIp()` taking `split(',')[0]` — the leftmost
+`x-forwarded-for` entry, which is whatever the caller sent. Not used for rate limiting, so not a
+limiter bypass; it is the value stamped on **every `AuditLog` row**. §7 SECURITY requires "all
+admin mutations write an AuditLog with actor and IP", §7.3 displays it as rate-change history,
+and §7.10 makes the log read-only precisely so it can be relied on afterwards. It recorded
+`1.2.3.4` from a forged header, and `not-an-ip-at-all` just as willingly.
+
+**This is the third time this one file has held a duplicated decision** — SEC-017 missed a copy
+of the origin check, SEC-028 fixed that copy without looking nine lines up, and SEC-032 then
+missed this one. The pattern is not carelessness; it is that the file re-implements what
+`lib/http.ts` exports. Both decisions are now single-sourced, and `TRUSTED_PROXY_HOPS` finally
+configures the whole application rather than half of it — which matters when DEBT-009's ops
+confirmation is finally run.
+
+## The §9.1 checklist, re-measured
+
+| #   | Item                                         | Verdict     | Evidence                                                                         |
+| :-- | :------------------------------------------- | :---------- | :------------------------------------------------------------------------------- |
+| 1   | Headers in `next.config.ts`                  | **PASS**    | 6 of 6 on six response shapes incl. a 404 and a proxy-made 429; no `unsafe-eval` |
+| 2   | Global per-IP rate limit in the proxy        | **PASS**    | 60/10 per address; both bypasses closed and re-measured. SEC-037                 |
+| 3   | Every API route Zod-validated + enumeration  | **PASS**    | Proven past the auth boundary, and across all 18 Server Actions                  |
+| 4   | `pnpm audit` clean; Dependabot               | **PASS**    | "No known vulnerabilities found"; four ecosystems configured                     |
+| 5   | Secrets rotated; none ever committed         | **PARTIAL** | Zero tracked `.env` files. **`SEED_ADMIN_PASSWORD` is pending rotation**         |
+| 6   | DB user least privilege — no DDL at runtime  | **PASS**    | Not a superuser; DDL, `DELETE` on retained tables and `pg_authid` refused        |
+| 7   | Redis password-protected, not publicly bound | **PASS**    | `127.0.0.1:6379`; unauthenticated `PING` → `NOAUTH`. Production still owed       |
+| 8   | No stack traces in production                | **PASS**    | Postgres stopped, real 500s read: zero frames, no paths. `/` stayed 200          |
+| 9   | Structured logging, PII redacted             | **PASS**    | Asserted at the emitter, not the pure function. SEC-038                          |
+| 10  | OWASP Top 10 documented                      | **PASS**    | All ten; A05 **PASS**, A09 **PARTIAL** pending §9.4                              |
+
+## Verdict
+
+**Zero CRITICAL. Zero HIGH outstanding** — SEC-036 was HIGH and is fixed. Nine of ten items
+pass; item 5 is PARTIAL on one operational action that cannot be done from inside the
+repository.
+
+Two things travel forward and neither is a §9.1 defect:
+
+- **`SEED_ADMIN_PASSWORD` must be rotated before launch.** It was exposed in a working
+  transcript. The stored hash is Argon2id and the database is unaffected; the `.env` value is
+  the exposure. §9.1 item 5 requires rotation before launch regardless.
+- **DEBT-009's ops half.** `TRUSTED_PROXY_HOPS` is verified against synthetic headers only.
+  Send a forged `x-forwarded-for` through the real deployment and log what arrives.

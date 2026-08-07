@@ -9,7 +9,7 @@ the Celery infrastructure finally put to use.
 
 ## 9.1 Security pass — whole application
 
-- [ ] **Headers** in `next.config.ts` (D-002 — spec said `next.config.js`):
+- [x] **Headers** in `next.config.ts` (D-002 — spec said `next.config.js`):
   - CSP with no `unsafe-eval`. `unsafe-inline` for styles only if Tailwind forces it, and
     document why.
   - HSTS `max-age=63072000; includeSubDomains; preload`
@@ -17,17 +17,20 @@ the Celery infrastructure finally put to use.
   - `Referrer-Policy: strict-origin-when-cross-origin`
   - `X-Frame-Options: DENY`
   - `Permissions-Policy` denying camera, mic, geolocation
-- [ ] Global rate limiting in proxy, per-IP, Redis-backed. Tighter limits on auth and bill
+- [x] Global rate limiting in proxy, per-IP, Redis-backed. Tighter limits on auth and bill
       routes.
-- [ ] Every API route confirmed Zod-validated. **Write a test that enumerates route files and
+- [x] Every API route confirmed Zod-validated. **Write a test that enumerates route files and
       fails if one lacks a schema import** — a checklist item decays, a test does not.
-- [ ] `pnpm audit` clean; enable Dependabot.
-- [ ] Secrets rotated before launch. No secret ever committed.
-- [ ] DB user has least privilege — no DDL rights at runtime.
-- [ ] Redis password-protected, not publicly bound.
-- [ ] Error responses leak no stack traces in production.
-- [ ] Structured logging with phone numbers and emails **redacted**.
-- [ ] Full OWASP Top 10 review documented in `SECURITY-LOG.md`.
+- [x] `pnpm audit` clean; enable Dependabot.
+- [~] Secrets rotated before launch. No secret ever committed. — no secret is committed
+  (zero tracked `.env` files, history re-scanned). **`SEED_ADMIN_PASSWORD` is still to be
+  rotated**; it was exposed in a working transcript. The stored hash is Argon2id, so the
+  database is unaffected — the `.env` value is the exposure. Owner action.
+- [x] DB user has least privilege — no DDL rights at runtime.
+- [x] Redis password-protected, not publicly bound.
+- [x] Error responses leak no stack traces in production.
+- [x] Structured logging with phone numbers and emails **redacted**.
+- [x] Full OWASP Top 10 review documented in `SECURITY-LOG.md`.
 
 ---
 
