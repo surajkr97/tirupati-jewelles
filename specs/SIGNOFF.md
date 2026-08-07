@@ -1697,9 +1697,90 @@ resolves both URLs. `scripts/db-roles.sql` must be run against the production da
 `DATABASE_URL` is pointed at the restricted role. And `TRUSTED_PROXY_HOPS` must be confirmed
 against the real topology before the per-IP limits mean anything.
 
-### Phase 9 — DEV (§9.2–§9.7)
+### Phase 9 — DEV (§9.2 Performance — baseline measured)
 
-Not started.
+Status: **PARTIAL.** Five of the six budget lines pass. The sixth — JS per route — is missed
+by 55% and is **not reachable by tuning**; it needs a decision, recorded as **D-035**.
+§9.3–§9.7 not started.
+
+**Measured, not estimated.** A production build on `next start`, driven by a real browser at
+Lighthouse's mobile profile (1.6 Mbps down, 150 ms RTT, 4× CPU throttle), counting
+`encodedDataLength` — bytes on the wire after compression.
+
+| Route              |    LCP |    CLS |   JS (gzip) | Images | ISR |
+| :----------------- | -----: | -----: | ----------: | -----: | --: |
+| `/`                | 1264ms |      0 | **278.6kB** | 145 kB | HIT |
+| `/rates`           |  696ms | 0.0001 | **278.6kB** |      0 | HIT |
+| `/collections`     |  680ms |      0 | **278.6kB** |  79 kB | HIT |
+| `/products/[slug]` |  716ms | 0.0002 | **282.5kB** |  50 kB | HIT |
+| `/calculator`      |  676ms | 0.0206 | **278.6kB** |      0 | HIT |
+
+Budget: LCP < 2000ms · CLS < 0.05 · TTFB < 400ms · JS < 180 kB
+
+| Metric | Target  | Measured         | Verdict                                     |
+| :----- | :------ | :--------------- | :------------------------------------------ |
+| LCP    | < 2.0s  | 676–1264 ms      | **PASS** warm — see the cold-start note     |
+| CLS    | < 0.05  | 0 – 0.0206       | **PASS**, comfortably                       |
+| TTFB   | < 400ms | 5–27 ms          | **PASS** server-side; excludes real network |
+| JS     | < 180kB | 278.6 kB         | **FAIL** — D-035                            |
+| ISR    | HIT     | HIT, every route | **PASS** — D-033's claim now measured       |
+
+**ISR is the one worth calling out as a win.** D-033 argued that a nonce-free CSP was
+necessary to keep pages cacheable, and §9.1 asserted `x-nextjs-cache: HIT` on two routes. It
+now holds on every route measured, under throttling, with the full CSP attached. The argument
+and the measurement agree.
+
+#### The JS budget is a framework floor, not bloat
+
+Attribution from the analyzer, gzipped: **`next` 245 kB**, **`react-dom` 55 kB**, app code
+100 kB, `lucide-react` 23 kB, `vaul` 20 kB, `zod` 19 kB, `sonner` 9 kB.
+
+The figure barely moves between routes, which is the finding — it is not route code. React and
+Next alone exceed the 180 kB budget before this application contributes a byte.
+
+**The obvious hypothesis was checked and is wrong.** `@react-pdf/renderer`, `pdfkit`, Prisma,
+argon2 and `libphonenumber-js` were each searched for in the client chunks; none is present, so
+nothing server-only has leaked. Icons are imported per symbol (`import { X } from
+'lucide-react'`), so tree-shaking already works. There is no unjustified dependency to remove,
+which is what §9.2's checklist item assumes there will be.
+
+**One optimisation was tried, measured, and reverted.** Deferring `sonner` behind
+`next/dynamic` made first-load **larger** — 278.6 kB → 281.0 kB. `<Toaster />` mounts in the
+root layout, so the lazy chunk is fetched on load regardless and the wrapper is pure overhead.
+Recorded because it looks like an obvious win and is not, and because a change that is not
+re-measured would have been reported as one.
+
+#### Two measurement faults found in my own instruments
+
+Worth recording, because a performance number nobody can reproduce is worse than none.
+
+1. **The first run reported 0 kB of JS on every route.** It summed `content-length`, which is
+   absent on compressed responses. Re-instrumented on CDP `Network.loadingFinished`
+   (`encodedDataLength`). An impossible number is easy to catch; a plausible wrong one would
+   not have been.
+2. **`/` measured 2676 ms LCP cold and 1264 ms warm.** The cold figure is over budget and is
+   real: the first visitor to a given image variant waits for `/_next/image` to generate it.
+   Both numbers matter and are reported — the warm one is what a typical visitor sees, the cold
+   one is what the first one does. §9.2's remaining image work should be judged against the
+   cold path.
+
+#### Not done in §9.2
+
+Dynamic-importing the bill builder and PDF viewer; `EXPLAIN ANALYZE` on the ten most common
+queries; Redis hit-rate instrumentation; compression and CDN configuration; blur placeholders.
+The budget measurement came first deliberately — §9.2's other items are optimisations, and
+optimising before measuring is how the wrong thing gets faster.
+
+`@DEV:` **D-035 is a decision, not a task.** Either accept ~280 kB as the floor for a Next 16
+App Router storefront and amend the budget with the measurement attached, or treat the budget
+as binding and reconsider the framework — which is not a Phase 9 conversation. Continuing to
+tune against 180 kB will not reach it.
+
+`@TEST:` **DEBT-020 is now runnable** — products have real images, so a Lighthouse mobile run
+on a product page finally measures a page that exists. It is the one §9.2 acceptance criterion
+("Lighthouse mobile ≥ 90 all categories") that this baseline does not cover, because Lighthouse
+was not run: the metrics above are direct Web Vitals measurements, which are more precise per
+metric but do not produce Lighthouse's category scores.
 
 ### Phase 9 — TEST (§9.1)
 

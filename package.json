@@ -23,7 +23,8 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "verify:upload": "tsx scripts/verify-upload.mts",
-    "verify:bill": "tsx --import ./scripts/loaders/register-server-only.mjs scripts/verify-bill.mts"
+    "verify:bill": "tsx --import ./scripts/loaders/register-server-only.mjs scripts/verify-bill.mts",
+    "build:analyze": "ANALYZE=true next build --webpack"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
@@ -58,6 +59,7 @@
     "zod": "4.4.3"
   },
   "devDependencies": {
+    "@next/bundle-analyzer": "^16.3.0",
     "@playwright/test": "1.62.1",
     "@tailwindcss/postcss": "4.3.3",
     "@testing-library/jest-dom": "^7.0.0",

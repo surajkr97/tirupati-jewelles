@@ -56,6 +56,15 @@ the Celery infrastructure finally put to use.
 
 ---
 
+## 9.2 — Dependencies added
+
+- `@next/bundle-analyzer` (devDependency) — §9.2's first checklist item names it. It only
+  produces a report on a **webpack** build; Turbopack, the Next 16 default, prints a
+  compatibility warning and writes nothing. `pnpm build:analyze` pins `--webpack`. See D-034,
+  including the `.next/types` trap that comes with the flag.
+
+---
+
 ## 9.3 Activating Celery
 
 The dormant infrastructure from Phase 1 now earns its keep.

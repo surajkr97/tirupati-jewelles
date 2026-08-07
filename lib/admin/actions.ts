@@ -67,7 +67,6 @@ interface AdminContext {
   audit: (entry: AuditEntry) => Promise<void>;
 }
 
-
 /**
  * Same-origin check for a Server Action.
  *

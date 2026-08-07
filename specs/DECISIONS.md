@@ -855,3 +855,72 @@ paths is available at any time. Two rules if it is taken: emit exactly **one** C
 response — two are enforced as an intersection and produce confusing breakage — and never set
 the CSP on the _request_ headers for a cacheable route, which is what bakes a nonce into cached
 HTML.
+
+---
+
+## D-034 — `@next/bundle-analyzer` needs `next build --webpack`; Turbopack silently writes nothing
+
+**Phase 9 §9.2.** The checklist says "`@next/bundle-analyzer`; remove anything unjustified."
+On Next 16 that instruction does not work as written, and it fails in the quiet way:
+
+```
+The Next Bundle Analyzer is not compatible with Turbopack builds, no report will be generated.
+```
+
+Next 16 builds with Turbopack by default, so `ANALYZE=true next build` compiles successfully,
+prints that line among the build output, and produces no report. A checklist item ticked on
+that basis would be measuring nothing — the same failure shape as the tests this phase kept
+finding.
+
+Two routes exist and both were tried. `next experimental-analyze` is Next's own replacement;
+it ran for over ten minutes without producing output and was abandoned. `next build --webpack`
+still works in Next 16 and the analyzer works with it, so `pnpm build:analyze` pins that flag.
+
+**One caveat on every number it produces:** it analyses a _webpack_ build, while production
+ships _Turbopack_ output. Module attribution is indicative, not exact. The per-route totals in
+the §9.2 report are therefore measured over the wire from a real production build rather than
+read off the analyzer.
+
+A second, unrelated trap comes with the flag: a webpack build regenerates `.next/types` more
+strictly than Turbopack and surfaced `TS2344` on `app/api/rates/history/route.ts` exporting
+`MAX_HISTORY_DAYS`. That error does **not** reproduce on a Turbopack build and disappears once
+`.next/types` is regenerated. Delete `.next/types` after running the analyzer, or `pnpm
+typecheck` will fail on an artefact rather than a defect.
+
+## D-035 — the §9.2 JS budget of 180 kB is not reachable on this stack
+
+**Measured, not estimated.** A production build served on `next start`, driven by a real
+browser at Lighthouse's mobile profile (1.6 Mbps, 150 ms RTT, 4× CPU), counting
+`encodedDataLength` — bytes on the wire after compression, which is what "gzipped" means:
+
+| Route              | First-load JS |
+| :----------------- | ------------: |
+| `/`                |      278.6 kB |
+| `/rates`           |      278.6 kB |
+| `/collections`     |      278.6 kB |
+| `/products/[slug]` |      282.5 kB |
+| `/calculator`      |      278.6 kB |
+
+The figure is essentially constant across routes, which is the finding: it is not route code.
+Analyzer attribution, gzipped: **`next` 245 kB**, **`react-dom` 55 kB**, app code 100 kB,
+`lucide-react` 23 kB, `vaul` 20 kB, `zod` 19 kB, `sonner` 9 kB.
+
+The framework floor alone exceeds the budget. Every removable dependency in the list totals
+about 70 kB, and removing all of them — which would mean no bottom sheets, no icons and no
+toasts — still lands near 210 kB.
+
+**The first guess was wrong and is worth recording.** The obvious hypothesis was that a
+server-only library had leaked into a client chunk; `@react-pdf/renderer`, `pdfkit`, Prisma,
+argon2 and `libphonenumber-js` were each checked for and none is present. Icons are imported
+per-symbol, so tree-shaking is already correct. There is no bloat to remove; there is a
+framework baseline.
+
+**One optimisation was tried and reverted.** Deferring `sonner` behind `next/dynamic` made
+first-load _larger_ — 278.6 kB → 281.0 kB. `<Toaster />` mounts in the root layout, so the
+lazy chunk is requested on load anyway and the wrapper is pure overhead. Recorded because it
+looks like an obvious win and is not.
+
+**What this means for §9.2.** The other five budget lines pass and are not in question — LCP,
+CLS, TTFB and ISR are all comfortably inside. This one line needs a decision from the owner of
+the budget rather than more tuning: either accept ~280 kB as the floor for a Next 16 App Router
+storefront, or change the framework, which is not a Phase 9 conversation.

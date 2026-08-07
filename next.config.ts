@@ -1,10 +1,27 @@
+import bundleAnalyzer from '@next/bundle-analyzer';
 import type { NextConfig } from 'next';
 
 /**
  * Next.js configuration.
  * Created by Phase 1 (specs/01-cleanup-scaffold.md §1.4).
  * Security headers completed by Phase 9 (specs/09-hardening.md §9.1).
+ * Bundle analysis added by Phase 9 (§9.2).
  */
+
+/**
+ * §9.2: "`@next/bundle-analyzer`; remove anything unjustified."
+ *
+ * Behind `ANALYZE=true` so it costs an ordinary build nothing — it only writes its report
+ * when asked. `pnpm build:analyze` opens three treemaps (client, nodejs, edge).
+ *
+ * It exists because "the bundle is too big" is not an actionable statement. §9.2 sets a
+ * 180 kB gzipped budget per route and the measured figure is 278.6 kB, so something has to
+ * be named before it can be removed — and the first guess (that a server-only library such
+ * as `@react-pdf/renderer` had leaked into a client chunk) was checked and found wrong.
+ */
+const withBundleAnalyzer = bundleAnalyzer({
+  enabled: process.env.ANALYZE === 'true',
+});
 
 /**
  * `next build` sets NODE_ENV=production, so this is the build-time environment rather than
@@ -213,4 +230,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withBundleAnalyzer(nextConfig);
