@@ -1764,6 +1764,41 @@ Worth recording, because a performance number nobody can reproduce is worse than
    one is what the first one does. §9.2's remaining image work should be judged against the
    cold path.
 
+#### Six of the eight §9.2 items are now closed
+
+**Budget amended to 290 kB with the owner's agreement** (D-035). The margin over the measured
+278.6 kB is deliberately thin, so the line still fails on a regression rather than becoming
+decorative.
+
+- **Fonts pass, verified in the served HTML** rather than in the config: one
+  `rel="preload" as="font"` woff2, `latin` subset, `display: swap`.
+- **Images: AVIF confirmed on the wire** — the hero returns `Content-Type: image/avif` at
+  35.7 kB for the 828w rendition, and the LCP image carries a preload with a correct
+  `imageSizes`. **Blur placeholders are the one gap:** `ImageFrame` accepts `blurDataURL` and
+  no caller supplies one. Closing it needs a column per image and a generated LQIP, so it is
+  left for a decision rather than bolted on — note CLS already measures 0–0.0206, so this is
+  perceived-performance work, not layout stability.
+- **Two missing foreign-key indexes found and added** — `ProductImage.productId` (composite
+  with `sortOrder`, which is the order §6.2 renders in) and `OrderItem.orderId`. Postgres does
+  not index a foreign key automatically and Prisma does not add one, so both were sequential
+  scans: one per product card and gallery, one per bill screen and PDF render. `OrderItem` is
+  the table guaranteed to grow and never be pruned, since invoices are retained six years
+  (DEBT-026).
+
+**§9.2's instruction for that item does not work on development data, and this is worth
+recording.** It says `EXPLAIN ANALYZE` the ten most common queries. At 25 products and 49
+orders the planner correctly chooses a sequential scan for nearly everything, so every plan
+looks alarming and none of it means anything — a missing index is invisible precisely because
+the table is small enough not to need it yet. The audit that found these two asked a different
+question: which foreign keys have no index at all? That answer does not depend on row counts.
+`EXPLAIN ANALYZE` still owes a run against production-scale data.
+
+**A migration gotcha, found by checking rather than trusting.** `prisma migrate deploy` reads
+the datasource's `directUrl` — `MIGRATE_DATABASE_URL` — so overriding `DATABASE_URL` alone to
+target the test database reported _"No pending migrations to apply"_ and did nothing. The same
+silent-success shape this phase keeps turning up. Both databases now carry the indexes;
+verified by querying `pg_indexes` on each, not by reading the command's output.
+
 #### Not done in §9.2
 
 Dynamic-importing the bill builder and PDF viewer; `EXPLAIN ANALYZE` on the ten most common

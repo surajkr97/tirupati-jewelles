@@ -180,6 +180,16 @@ model ProductImage {
   url       String
   alt       String?
   sortOrder Int     @default(0)
+
+  // Phase 9 §9.2. Postgres does NOT index a foreign key automatically, and Prisma does not
+  // add one either — so this was a sequential scan per lookup. Every product card and every
+  // gallery reads images by productId, and §6.2 renders them in sortOrder, so the composite
+  // serves the filter and the ordering in one index.
+  //
+  // Invisible today: at 75 rows the planner correctly prefers a seq scan, which is exactly
+  // why this was found by checking index coverage rather than by reading EXPLAIN output on
+  // development data.
+  @@index([productId, sortOrder])
 }
 
 model MediaSlot {
@@ -265,6 +275,12 @@ model OrderItem {
   /// which physical piece was sold.
   hallmarkNo String?
   bisCertNo  String?
+
+  // Phase 9 §9.2, same reason as ProductImage: an unindexed foreign key. Every bill screen,
+  // every PDF render and every /account/orders row reads items by orderId, and invoices are
+  // retained for six years (DEBT-026) — so this is the one table guaranteed to keep growing
+  // and never be pruned.
+  @@index([orderId])
 }
 
 /// Per-year invoice sequence (Phase 8 §8.2).

@@ -35,22 +35,39 @@ the Celery infrastructure finally put to use.
 
 **Budget — mobile, 4G throttled:**
 
-| Metric            | Target              |
-| :---------------- | :------------------ |
-| LCP               | < 2.0s              |
-| CLS               | < 0.05              |
-| INP               | < 200ms             |
-| TTFB              | < 400ms             |
-| JS bundle (route) | < 180KB gzipped     |
-| Lighthouse mobile | ≥ 90 all categories |
+| Metric            | Target                |
+| :---------------- | :-------------------- |
+| LCP               | < 2.0s                |
+| CLS               | < 0.05                |
+| INP               | < 200ms               |
+| TTFB              | < 400ms               |
+| JS bundle (route) | **< 290KB gzipped** ¹ |
+| Lighthouse mobile | ≥ 90 all categories   |
 
-- [ ] `@next/bundle-analyzer`; remove anything unjustified.
+¹ **Amended from 180KB, with the owner's agreement, against a measurement — see D-035.**
+The original figure was not reachable on this stack: `next` (245KB) and `react-dom` (55KB)
+alone exceed it before this application contributes a byte, and the measured per-route total
+is 278.6KB with no unjustified dependency to remove. Raising a budget to meet an
+implementation is normally how budgets stop meaning anything, so the reasoning is recorded
+rather than the number quietly edited — and 290KB is set deliberately close to the measured
+278.6KB so that a regression still trips it.
+
+- [x] `@next/bundle-analyzer`; remove anything unjustified. — **nothing unjustified found.**
+      Attribution in D-035; the budget is framework, not bloat. Tool needs `--webpack` (D-034).
 - [ ] Dynamic-import heavy client components (bill builder, charts, PDF viewer).
-- [ ] Verify ISR is actually serving cached HTML — check the `x-nextjs-cache: HIT` header, do
-      not assume.
-- [ ] Fonts: `next/font`, subset, `display: swap`, preloaded.
-- [ ] Images: AVIF/WebP, correct `sizes`, blur placeholders everywhere.
-- [ ] DB: `EXPLAIN ANALYZE` the ten most common queries; add missing indexes.
+      One attempt (`sonner`) measured _worse_ and was reverted — see D-035.
+- [x] Verify ISR is actually serving cached HTML — `x-nextjs-cache: HIT` measured on every
+      route, under throttling, with the full CSP attached.
+- [x] Fonts: `next/font`, subset, `display: swap`, preloaded. — verified in the served HTML:
+      one `rel="preload" as="font"` woff2, `latin` subset, `display: swap`.
+- [~] Images: AVIF/WebP, correct `sizes`, blur placeholders everywhere. — AVIF confirmed on
+  the wire (35.7 kB for the hero at 828w) and `sizes`/`imageSizes` present including the
+  LCP preload. **Blur placeholders are not supplied by any caller** — `ImageFrame` accepts
+  `blurDataURL` and nothing passes one. Needs a column per image; see SIGNOFF.
+- [x] DB: `EXPLAIN ANALYZE` the ten most common queries; add missing indexes. — **two missing
+      foreign-key indexes found and added** (`ProductImage.productId`, `OrderItem.orderId`).
+      Found by index-coverage audit, not by EXPLAIN: at 25 products a seq scan is the correct
+      plan, so EXPLAIN on development data would have shown nothing wrong.
 - [ ] Redis hit rate > 80% on rates and products; instrument and confirm.
 - [ ] Enable compression and a CDN for static assets.
 

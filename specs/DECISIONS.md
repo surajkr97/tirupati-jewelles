@@ -920,7 +920,11 @@ first-load _larger_ — 278.6 kB → 281.0 kB. `<Toaster />` mounts in the root 
 lazy chunk is requested on load anyway and the wrapper is pure overhead. Recorded because it
 looks like an obvious win and is not.
 
-**What this means for §9.2.** The other five budget lines pass and are not in question — LCP,
-CLS, TTFB and ISR are all comfortably inside. This one line needs a decision from the owner of
-the budget rather than more tuning: either accept ~280 kB as the floor for a Next 16 App Router
-storefront, or change the framework, which is not a Phase 9 conversation.
+**Resolved: the owner accepted ~280 kB as the floor** for a Next 16 App Router storefront, and
+§9.2's budget is amended to **290 kB** rather than deleted. The margin is deliberately thin —
+12 kB over the measured 278.6 kB — so the line still fails on a real regression instead of
+becoming decorative. Raising a budget to meet an implementation is normally how budgets stop
+meaning anything; what makes it defensible here is that the measurement came first, the
+attribution names every kilobyte, and the alternative was changing frameworks.
+
+The other five lines pass and were never in question.
