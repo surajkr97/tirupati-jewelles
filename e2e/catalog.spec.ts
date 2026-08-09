@@ -177,7 +177,17 @@ test.describe('the product page — §6.2', () => {
     ]) {
       await expect(page.getByText(label, { exact: false }).first()).toBeVisible();
     }
-    await expect(page.getByText(/Price indicative/)).toBeVisible();
+    /**
+     * §9.6: "Rate disclaimer present on the homepage, /rates, and every product page."
+     *
+     * The product page used to carry a bespoke sentence — "Price indicative · based on
+     * today's rate" — which omitted **"Final price confirmed in store"**, the half of the
+     * notice MASTER-SPEC §8 relies on. It is the shared `RateDisclaimer` now, so all three
+     * surfaces say the same thing; this asserts the sentence that went missing, not just
+     * the word "indicative", because the word alone passed against the weaker copy.
+     */
+    await expect(page.getByText(/Indicative rate/)).toBeVisible();
+    await expect(page.getByText(/Final price confirmed in store/)).toBeVisible();
   });
 
   test('the breakdown adds up to the total', async ({ page }) => {

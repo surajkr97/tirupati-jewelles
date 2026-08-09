@@ -30,6 +30,7 @@ import {
   getCategoryBySlug,
   listProducts,
 } from '@/lib/catalog/products';
+import { canonical } from '@/lib/seo';
 
 export const revalidate = 600;
 
@@ -56,6 +57,17 @@ export async function generateMetadata({
   return {
     title: category.name,
     description: `${category.name} in 22K and 18K gold and 999 silver, hallmarked and priced from today's rate.`,
+    /**
+     * The UNFILTERED collection URL, deliberately (§9.6).
+     *
+     * §6.1 puts filters and sorting in the query string so a filtered view is shareable, and
+     * the same decision means `?purity=K22_916&sort=price_asc&page=2` is a distinct URL for
+     * every combination — dozens of pages showing subsets of the same set. Pointing all of
+     * them at the collection itself is what a canonical is for; without it this is the
+     * classic faceted-navigation duplicate-content problem, and the shop's own pages compete
+     * with each other.
+     */
+    ...canonical(`/collections/${category.slug}`),
   };
 }
 

@@ -11,10 +11,12 @@ import Link from 'next/link';
 import { Section } from '@/components/shell';
 import { ImageFrame } from '@/components/ui';
 import { listActiveCategories } from '@/lib/catalog/products';
+import { canonical } from '@/lib/seo';
 
 export const revalidate = 600;
 
 export const metadata: Metadata = {
+  ...canonical('/collections'),
   title: 'Collections',
   description:
     'Browse rings, necklaces, earrings, bracelets, chains and bangles in 22K and 18K gold and 999 silver.',

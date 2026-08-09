@@ -9,6 +9,7 @@ import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
 
 import { Toaster } from '@/components/ui';
+import { SITE_URL } from '@/lib/seo';
 
 import './globals.css';
 
@@ -18,13 +19,53 @@ const inter = Inter({
   variable: '--font-inter',
 });
 
+const SITE_NAME = 'Tirupati Jewelles';
+// Deliberately not "live rates": the ticker shows an admin-set indicative rate, and
+// MASTER-SPEC §8 is explicit that claiming otherwise is the consumer-protection exposure
+// this build is mitigating. See DEBT-002. This wording is repeated into the OG description
+// rather than a second one being written, for the same reason RateDisclaimer is one
+// component — a claim about pricing must not have two versions.
+const SITE_DESCRIPTION =
+  "Today's gold and silver rates, price calculator, and hallmark-certified jewellery.";
+
 export const metadata: Metadata = {
-  title: 'Tirupati Jewelles',
-  // Deliberately not "live rates": the ticker shows an admin-set indicative rate, and
-  // MASTER-SPEC §8 is explicit that claiming otherwise is the consumer-protection
-  // exposure this build is mitigating. See DEBT-002.
-  description:
-    "Today's gold and silver rates, price calculator, and hallmark-certified jewellery.",
+  /**
+   * §9.6 (canonical URLs). Every relative URL Next resolves for metadata — canonical,
+   * `og:url`, `og:image` — is resolved against this. Without it Next warns and falls back to
+   * `localhost:3000`, which is invisible in development and produces canonicals pointing at
+   * a developer's machine in production.
+   *
+   * Routes still set an ABSOLUTE canonical through `lib/seo.ts`, so a missing or wrong
+   * `metadataBase` cannot silently redirect the whole site's canonical to the wrong origin.
+   */
+  metadataBase: new URL(SITE_URL),
+  title: {
+    default: SITE_NAME,
+    // A route's own title becomes "Gold 22K necklace · Tirupati Jewelles".
+    template: `%s · ${SITE_NAME}`,
+  },
+  description: SITE_DESCRIPTION,
+  applicationName: SITE_NAME,
+  openGraph: {
+    type: 'website',
+    siteName: SITE_NAME,
+    locale: 'en_IN',
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+    url: SITE_URL,
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: SITE_NAME,
+    description: SITE_DESCRIPTION,
+  },
+  robots: {
+    // The storefront is indexable. `/admin`, `/bills` and the account tree send their own
+    // `noindex` from their layouts (§7.1, DEBT-021) and are disallowed in robots.ts; this
+    // default must not be read as overriding them.
+    index: true,
+    follow: true,
+  },
 };
 
 export const viewport: Viewport = {

@@ -200,10 +200,25 @@ export function ItemCard({
           </span>
         </button>
 
+        {/*
+          The id lives on the WRAPPER, not on the `<dl>` (§9.7).
+
+          `aria-controls` on the toggle above points at it, so it has to exist in both
+          states — and the empty state is not a term/definition pair. It used to be a `<p>`
+          sitting as a direct child of the `<dl>`, which axe reports as `definition-list`:
+          "a `<dl>` must only directly contain properly-ordered `<dt>`/`<dd>` groups". Real
+          rather than pedantic — a screen reader announcing a list of N items and then
+          reading a sentence that is neither a term nor a definition is announcing a
+          structure that is not there.
+
+          It escaped §9.7's own axe pass because that test fills a weight before expanding,
+          so `result` was truthy and this branch never rendered. It appeared once the rates
+          fetch happened to be slower than the click.
+        */}
         {showBreakdown && (
-          <dl id={breakdownId} className="mt-4 flex flex-col gap-2 text-small">
+          <div id={breakdownId} className="mt-4">
             {result ? (
-              <>
+              <dl className="flex flex-col gap-2 text-small">
                 <BreakdownRow
                   label={`Metal value${purityOption ? ` (${purityOption.unit})` : ''}`}
                   value={result.metalValue}
@@ -221,11 +236,13 @@ export function ItemCard({
                   value={result.gstAmount}
                 />
                 <BreakdownRow label="Item total" value={result.lineTotal} emphasis />
-              </>
+              </dl>
             ) : (
-              <p className="text-muted">Fix the highlighted fields to see a total.</p>
+              <p className="text-small text-muted">
+                Fix the highlighted fields to see a total.
+              </p>
             )}
-          </dl>
+          </div>
         )}
       </div>
     </Card>

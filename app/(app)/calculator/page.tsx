@@ -24,10 +24,12 @@ import { CalculatorIsland } from '@/components/calculator/calculator-island';
 import { Section } from '@/components/shell';
 import { Skeleton } from '@/components/ui';
 import { getPricingDefaults } from '@/lib/settings';
+import { canonical } from '@/lib/seo';
 
 export const revalidate = 300;
 
 export const metadata: Metadata = {
+  ...canonical('/calculator'),
   title: 'Price calculator',
   description:
     'Price several pieces at once with today’s gold and silver rates, making charges and GST included.',

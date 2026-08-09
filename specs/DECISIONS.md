@@ -1143,3 +1143,79 @@ over six seconds and asserts the announced text takes **one** distinct value whi
 displayed text takes more than one. The second half is the positive control: without it the
 assertion would pass just as green against a ticker that never started, which is the failure
 mode Phase 4 TEST recorded and guarded against for the same component.
+
+---
+
+## D-040 — the product page's price disclaimer is the shared component, not its own sentence
+
+**Raised as:** Phase 9 §9.6, "Rate disclaimer present on the homepage, `/rates`, and every
+product page." Expected to be a verification; it was a defect.
+
+**All three surfaces had a disclaimer. Two of them had the same one.** Phase 4 extracted
+`RateDisclaimer` for exactly this reason — §4.6 required `/rates` to carry "the same
+disclaimer as the ticker card", and the DEV note recorded the argument in one line: _"two
+copies of a legal notice drift within a month."_ Phase 6 then wrote the product page's price
+block and gave it a third wording:
+
+| Surface      | Text                                                                     |
+| :----------- | :----------------------------------------------------------------------- |
+| Ticker (`/`) | Indicative rate · Updated 11:42 AM · **Final price confirmed in store.** |
+| `/rates`     | Indicative rate · Updated 11:42 AM · **Final price confirmed in store.** |
+| Product page | Price indicative · based on today's rate                                 |
+
+**What drifted is the half that does the work.** "Indicative" describes the number;
+"final price confirmed in store" is the sentence that tells a customer the shop is not
+bound by it. MASTER-SPEC §8 treats the disclaimer as the mitigation for showing a price the
+shop will not necessarily transact at, and DEBT-002 records the owner accepting the residual
+risk **on the basis that the mitigations stand**. The weakest wording was on the page where a
+customer is closest to acting on the figure — beside a total, under a working breakdown, above
+an enquiry button.
+
+**Fixed by deleting the sentence rather than editing it.** `PriceBreakdown` renders
+`RateDisclaimer` and takes the rate's `effectiveAt` as a prop. That timestamp is the piece's
+own purity — a customer looking at a silver piece is told when the SILVER rate was set, not
+when the shop last touched gold — which the block could not show before, because it never had
+the timestamp.
+
+**The E2E was complicit and is fixed too.** `catalog.spec.ts` asserted `/Price indicative/`,
+which passed against the weaker copy and would have passed against anything containing those
+two words. It now asserts the sentence that was missing.
+
+---
+
+## D-041 — the legal pages describe the system; they do not invent the shop's commitments
+
+**Raised as:** Phase 9 §9.6, "Legal pages: privacy, terms, refund/exchange, shipping."
+
+**The precedent, and where it stops.** DEBT-018 settled how this project writes policy copy:
+buyback and exchange state that a policy exists and that terms are confirmed in store, and
+state no percentages, because those are the owner's commercial commitments and inventing
+plausible ones would be fabricating a contract. §9.6's four pages are not the same kind of
+document, and applying that rule unchanged would have produced four pages saying nothing.
+
+**A privacy policy is a statement of fact about a system, and a wrong one is a lie told at
+scale.** So it was written from the implementation rather than from a template, and every
+claim on it is checkable in this repository:
+
+| Claim on the page                                      | Where it comes from                      |
+| :----------------------------------------------------- | :--------------------------------------- |
+| Passwords hashed with Argon2id, unreadable by anyone   | §3.1, `lib/auth/argon2.ts`               |
+| One-time codes stored hashed, 5-minute TTL, single use | §3.2, D-010                              |
+| One cookie, a random id, HttpOnly and Secure           | §3.3 — an opaque session, not a JWT      |
+| Enquiries logged against a one-way identifier          | SEC-013, an HMAC keyed on SESSION_SECRET |
+| No analytics, no ad network, no cookie banner needed   | there is none in the codebase            |
+| Invoices kept indefinitely                             | DEBT-003 (owner), DEBT-026 (GST)         |
+
+**The shipping page says the shop does not ship, because it does not.** That is not a
+placeholder. DEBT-034 records the same fact from the tax side: every bill is split CGST/SGST,
+which is only correct for an intra-state counter sale.
+
+**There is no invented refund window.** For an over-the-counter jeweller, buyback and exchange
+ARE the routes by which a piece comes back, and the refunds page says so and links to them. A
+distinct cash-refund policy — a window, conditions, deductions — is the owner's to state, and
+is **DEBT-043** rather than a sentence written on their behalf.
+
+**Two sentences commit the shop rather than describe the build**, and are flagged for the
+owner in SIGNOFF: _"We do not sell your details, and we do not share them with anyone for
+marketing"_ and _"We do not ship."_ Both are true of what has been built. Only the owner can
+ratify them as policy.

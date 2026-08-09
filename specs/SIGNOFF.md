@@ -2966,3 +2966,144 @@ is `[~]`, not `[x]`, and the gap is **DEBT-042**.
 
 `@DESIGN:` §9.7 is complete apart from that. `@TEST:` DEBT-042 needs one manual pass on the
 three flagship flows with VoiceOver or NVDA before launch.
+
+### Phase 9 — DEV / TEST (§9.6 SEO & content)
+
+Status: **PASS** — all six items. Two of them were defects rather than gaps.
+
+Verified: `pnpm typecheck`, `pnpm lint`, `prettier --check` and `pnpm build` clean;
+**1,146 unit/integration tests** (up from 1,128); E2E green across 375 / 768 / 1280.
+
+New: `lib/seo.ts`, `app/sitemap.ts`, `app/robots.ts`, `components/seo/json-ld.tsx`,
+`lib/seo.test.ts` (18), `e2e/seo.spec.ts` (25). No new dependencies — `sitemap.ts` and
+`robots.ts` are Next file conventions, and the JSON-LD is a `<script>` tag rather than a
+library.
+
+#### The two findings
+
+**1. The footer had linked to two 404s since Phase 2.** `POLICY_LINKS` carries
+`/policies/privacy` and `/policies/terms`, and neither page existed — on the footer of every
+storefront page, for three phases. Phase 6 hit the _identical_ defect in the trust block
+("the trust block's policy links 404'd"), fixed it there, and added an E2E that fetches every
+link **in the trust block**. The footer was one component away and never covered. Both pages
+exist now, `refunds` and `shipping` are linked too, and `e2e/seo.spec.ts` fetches every URL
+in the sitemap rather than only the ones someone remembered to list.
+
+**2. The product page carried a weaker rate disclaimer than the other two surfaces — D-040.**
+§9.6 asks for the disclaimer on the homepage, `/rates` and every product page. All three had
+one; two had the same one:
+
+| Surface      | Text                                                                     |
+| :----------- | :----------------------------------------------------------------------- |
+| Ticker (`/`) | Indicative rate · Updated 11:42 AM · **Final price confirmed in store.** |
+| `/rates`     | Indicative rate · Updated 11:42 AM · **Final price confirmed in store.** |
+| Product page | Price indicative · based on today's rate                                 |
+
+The half that drifted is the half that does the work. Phase 4 extracted `RateDisclaimer`
+because "two copies of a legal notice drift within a month"; Phase 6 then wrote a third
+wording, and it landed on the page where a customer is closest to acting on the figure —
+beside a total, under a working breakdown, above an enquiry button. DEBT-002 records the
+owner accepting the residual risk **on the basis that the mitigations stand**.
+
+Now one component, three surfaces, and the timestamp is the piece's **own purity** — a
+customer looking at silver is told when the silver rate was set. The E2E was complicit and is
+fixed too: it asserted `/Price indicative/`, which passed against the weaker copy.
+
+#### Structured data says nothing the page does not
+
+`Product` carries `product.price.lineTotal` — the same value the breakdown renders, from
+`calculateLine`, not a second derivation. `e2e/seo.spec.ts` reads the rendered total out of
+the DOM and compares the two, because a rich result that disagrees with the page is the shop
+quoting a figure it will not honour, through Google, **outside the disclaimer**. That is
+MASTER-SPEC §8's exposure with a third party repeating it.
+
+Three consequences of taking that seriously:
+
+- `availability: InStoreOnly`, not `InStock`. There is no checkout; §6.3 hands the customer
+  to WhatsApp. It is the one structured-data claim a customer could act on and be wrong about.
+- `priceValidUntil` is derived from the **rate's** timestamp, not the clock. The React
+  Compiler lint rule rejected `Date.now()` here as impure, and it was right about more than
+  purity: a wall-clock horizon on an ISR'd page is a fiction, since the page is generated once
+  and served for its whole window. A day from the rate the price was computed against expires
+  honestly — §7.2 already treats a rate older than 48h as stale enough to alert on.
+- `LocalBusiness` omits every field the owner has not supplied. §7.9 makes address and phone
+  optional and they are null on a fresh install; publishing an invented address as
+  machine-readable business data is how a wrong pin ends up on a map. It sits on the
+  storefront layout, so it never appears in `/admin` or on the auth screens.
+
+#### robots.txt and the sitemap are asserted against each other
+
+The interesting failures here are failures of _agreement_ and none is visible on a page: a
+sitemap listing a URL robots disallows, a canonical on the wrong origin. So `lib/seo.test.ts`
+runs every sitemap URL against the robots rules, and `e2e/seo.spec.ts` **fetches every URL in
+the sitemap** — a 404 in a sitemap is the defect nobody notices for months, because the page
+it points at is by definition one nobody visits.
+
+Three paths are disallowed that §9.6 does not name, and they matter more than the two it does:
+`/claim` (a crawler fetching a claim link **burns a single-use token** — DEBT-011),
+`/calculator/s` (someone's private share link, SEC-012) and `/account`. None of this is relied
+on as a control — all of them already refuse the request; robots.txt just stops a well-behaved
+crawler spending requests and putting the URL in a referrer log.
+
+The sitemap is generated from the same queries the pages use, so a soft-deleted piece and a
+live piece in a deactivated collection are both absent — asserted, because both 404 on a
+direct URL and listing either is advertising a dead link. `lastModified` on the rate pages is
+the newest rate's own timestamp; `new Date()` on every build tells a crawler everything
+changed on every deploy, which is how a sitemap gets ignored.
+
+#### Canonicals, including the one that was always going to be needed
+
+§6.1 put filters and sorting in the query string so a filtered view is shareable — which means
+`?purity=K22_916&sort=price_asc&page=2` is a distinct URL for a subset of the same set, dozens
+of them per collection. They all canonicalise to the collection. Without it the shop's own
+pages compete with each other, which is the standard faceted-navigation problem and was
+implicit in a decision made three phases ago.
+
+`/search` is left `noindex` (it already was) and is not in the sitemap: letting every `?q=`
+be crawled is how a small site acquires thousands of thin pages.
+
+#### The legal pages, and the line drawn through them — D-041
+
+DEBT-018 settled how this project writes policy copy: state that a policy exists, state no
+percentages, because those are the owner's commitments. Applying that rule unchanged to §9.6
+would have produced four pages saying nothing.
+
+**A privacy policy is not reassurance copy — it is a statement of fact about a system, and a
+wrong one is a lie told at scale.** So it was written from the implementation: Argon2id
+(§3.1), OTP hashed with a 5-minute TTL (§3.2), one opaque session cookie rather than a JWT
+(§3.3), the enquiry log keyed by an HMAC rather than by the session (SEC-013), invoices
+retained indefinitely (DEBT-003, DEBT-026), and no cookie banner because there is nothing to
+consent to. Every line is checkable in this repository.
+
+The shipping page says the shop does not ship, because it does not — DEBT-034 records the same
+fact from the tax side. There is **no invented refund window**: buyback and exchange are how a
+piece comes back, the page says so, and a distinct cash-refund policy is **DEBT-043**.
+
+#### One defect found by §9.7's own suite while §9.6 was running
+
+The full regression turned up `definition-list` on `/calculator` at 1280 — a `<p>` sitting as
+a direct child of a `<dl>`, in the branch that renders "Fix the highlighted fields to see a
+total". Pre-existing, from Phase 5, and not caused by §9.6.
+
+**It escaped §9.7's axe pass because that test filled a valid weight before expanding**, so
+`result` was always truthy and the empty branch never rendered. It appeared only when the
+rates fetch happened to be slower than the click, which is why it surfaced once at one
+viewport under full-suite load and not in the §9.7 run.
+
+Fixed by moving the id onto a wrapper `<div>` — `aria-controls` needs it in both states, and
+the empty state is not a term/definition pair. The test now expands **both** cards and gives
+the second an INVALID weight, because a blank card still prices and only a rejected field
+produces that branch.
+
+**Leaving the second card blank was the first attempt, and a mutation check caught it**:
+reverting the markup left the test green. It now reports `definition-list` against the old
+code, which is the only evidence that the assertion is worth having.
+
+`@OWNER:` two sentences commit the shop rather than describe the build, and need ratifying:
+**"We do not sell your details, and we do not share them with anyone for marketing"** and
+**"We do not ship."** Both are true of what has been built.
+
+`@DEV:` `NEXT_PUBLIC_SITE_URL` now determines every canonical, every sitemap `<loc>` and the
+JSON-LD `url`. It is `http://localhost:3000` in development and the generated artefacts say
+so. **Setting it to the real origin is a launch step**, not a nice-to-have — §9.8 should
+carry it.

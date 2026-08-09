@@ -26,7 +26,12 @@ import {
   type PurityKey,
   type RatesByPurity,
 } from '@/lib/pricing';
-import { getCurrentRates, toRatesByPurity } from '@/lib/rates';
+import {
+  getCurrentRates,
+  newestEffectiveAt,
+  RATE_FACES,
+  toRatesByPurity,
+} from '@/lib/rates';
 import { getPricingDefaults } from '@/lib/settings';
 
 /**
@@ -289,6 +294,8 @@ export interface PricedProductDetail extends PricedProduct {
   bisCertNo: string | null;
   ratePerGram: bigint;
   gstPct: number;
+  /** ISO timestamp of the rate this price came from. §9.6's disclaimer needs it. */
+  rateEffectiveAt: string;
   images: { id: string; url: string; alt: string | null }[];
 }
 
@@ -320,8 +327,22 @@ export async function getProductBySlug(
 
   const base = priceProduct({ ...row, images: row.images.slice(0, 1) }, rates, gstPct);
 
+  /**
+   * When THIS purity's rate was last set — for the §9.6 disclaimer on the price block.
+   *
+   * The face's own timestamp rather than `newestEffectiveAt`: a customer looking at a silver
+   * piece should be told when the SILVER rate was set, not when the shop last touched gold.
+   * Falls back to the newest across all three when the face has never been set, which is what
+   * `newestEffectiveAt` already handles honestly.
+   */
+  const face = RATE_FACES.find((entry) => entry.purity === row.purity);
+  const rateEffectiveAt = face
+    ? currentRates[face.key].effectiveAt
+    : newestEffectiveAt(currentRates).toISOString();
+
   return {
     ...base,
+    rateEffectiveAt,
     description: row.description,
     makingPct: row.makingPct.toNumber(),
     stoneCharge: row.stoneCharge,

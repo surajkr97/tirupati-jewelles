@@ -12,6 +12,7 @@
  * A server component. There is nothing interactive here, and the numbers must be in the
  * HTML for the crawler and for the first paint.
  */
+import { RateDisclaimer } from '@/components/rates/rate-disclaimer';
 import { formatINR } from '@/lib/money';
 import type { LineResult } from '@/lib/pricing';
 import { cn } from '@/lib/utils/cn';
@@ -22,6 +23,8 @@ export interface PriceBreakdownProps {
   ratePerGram: bigint;
   makingPct: number;
   gstPct: number;
+  /** ISO timestamp of the rate this price was computed from, for the disclaimer. */
+  effectiveAt: string;
   className?: string;
 }
 
@@ -36,6 +39,7 @@ export function PriceBreakdown({
   ratePerGram,
   makingPct,
   gstPct,
+  effectiveAt,
   className,
 }: PriceBreakdownProps) {
   return (
@@ -67,13 +71,20 @@ export function PriceBreakdown({
       </dl>
 
       {/*
-        §6.2 requires this line. It is the same mitigation MASTER-SPEC §8 relies on for the
-        ticker: the price is derived from a rate that moves, so it is described as
-        indicative rather than quoted.
+        §6.2 requires this line, and §9.6 requires "a rate disclaimer on the homepage,
+        /rates, and every product page".
+
+        It used to be a bespoke sentence — "Price indicative · based on today's rate" — which
+        is exactly the drift Phase 4 created `RateDisclaimer` to prevent: it dropped **"Final
+        price confirmed in store"**, the half of the notice that does the work. MASTER-SPEC §8
+        treats the disclaimer as the mitigation for showing a price the shop will not
+        necessarily transact at, and the product page is where a customer is closest to
+        acting on the figure — so it had the weakest wording in the place it mattered most.
+
+        One component, three surfaces. §4.6's reasoning applies verbatim: "two copies of a
+        legal notice drift within a month," and this one drifted in two.
       */}
-      <p className="text-small text-muted">
-        Price indicative · based on today&rsquo;s rate
-      </p>
+      <RateDisclaimer effectiveAt={effectiveAt} />
     </div>
   );
 }

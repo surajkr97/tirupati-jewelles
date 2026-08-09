@@ -22,6 +22,7 @@ import {
 import { Section } from '@/components/shell';
 import { formatShopDateTime, hasRealTimestamp } from '@/lib/datetime';
 import { getCurrentRates, getRateHistory, RATE_FACES } from '@/lib/rates';
+import { canonical } from '@/lib/seo';
 
 export const revalidate = 300;
 
@@ -32,6 +33,7 @@ const HISTORY_DAYS = 30;
 const SPARKLINE_DAYS = 7;
 
 export const metadata: Metadata = {
+  ...canonical('/rates'),
   title: 'Gold & silver rates today',
   description:
     'Indicative gold 22K, gold 18K and silver 999 rates. Final price confirmed in store.',

@@ -16,6 +16,18 @@ import { Section } from '@/components/shell';
 import { Card, ImageFrame } from '@/components/ui';
 import { db } from '@/lib/db';
 import { getCurrentRates, getRateHistory, RATE_FACES } from '@/lib/rates';
+import { canonical } from '@/lib/seo';
+
+import type { Metadata } from 'next';
+
+/**
+ * The home page inherits its title and description from the root layout — it IS the site.
+ * What it needs of its own is the canonical: `/` is reachable as `/?utm_source=…` from every
+ * link the shop shares on WhatsApp, and without this each of those is a separate URL.
+ */
+export const metadata: Metadata = {
+  ...canonical('/'),
+};
 
 export const revalidate = 300;
 

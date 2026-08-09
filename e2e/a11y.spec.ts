@@ -118,9 +118,32 @@ test.describe('§9.7 — axe on the interactive states', () => {
     await page.getByRole('button', { name: /Add another item/i }).click();
     await expect(page.getByTestId('item-card')).toHaveCount(2);
 
+    /**
+     * Wait for the price before expanding, so BOTH branches of the breakdown are audited
+     * deterministically rather than whichever one the rates fetch happened to produce.
+     *
+     * This mattered: the first version expanded immediately, so on a fast machine `result`
+     * was always truthy and the empty-state branch — which had a `<p>` directly inside the
+     * `<dl>` — was never seen. It surfaced once, at 1280 under full-suite load, and the
+     * defect was real.
+     *
+     * The second card is given an INVALID weight rather than left blank, because a blank
+     * card still prices (to nothing) and only a REJECTED field produces the "Fix the
+     * highlighted fields" branch. Leaving it blank was the first attempt, and a mutation
+     * check caught it: reverting the markup left this test green.
+     */
+    await expect(page.getByTestId('item-total').first()).not.toHaveText('—');
+
+    await page.getByTestId('item-card').last().getByLabel('Weight').fill('abc');
+    await expect(page.getByTestId('item-total').last()).toHaveText('—');
+
     await page
       .getByRole('button', { name: /Show breakdown/i })
       .first()
+      .click();
+    await page
+      .getByRole('button', { name: /Show breakdown/i })
+      .last()
       .click();
 
     await expectNoViolations(page, 'axe violations on /calculator with items');

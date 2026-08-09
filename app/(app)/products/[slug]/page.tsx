@@ -16,6 +16,7 @@ import { Gallery } from '@/components/product/gallery';
 import { PriceBreakdown } from '@/components/product/price-breakdown';
 import { ProductCard, ProductGrid } from '@/components/product/product-card';
 import { TrustBlock } from '@/components/product/trust-block';
+import { JsonLd } from '@/components/seo/json-ld';
 import { Section } from '@/components/shell';
 import { Card } from '@/components/ui';
 import {
@@ -25,6 +26,7 @@ import {
 } from '@/lib/catalog/products';
 import { formatINR } from '@/lib/money';
 import type { PurityKey } from '@/lib/pricing';
+import { absoluteUrl, canonical, productJsonLd } from '@/lib/seo';
 
 export const revalidate = 600;
 
@@ -51,11 +53,28 @@ export async function generateMetadata({
 
   if (!product) return { title: 'Piece not found' };
 
+  const description =
+    product.description ??
+    `${product.name} — ${PURITY_LABEL[product.purity]}, hallmarked, priced from today's rate.`;
+
+  // §9.6: "OG images for products". The gallery's first image is the one the page itself
+  // gives `priority` to (§6.5), so a share card shows what the page shows. A piece with no
+  // photograph falls back to the site default rather than emitting a broken `og:image`.
+  const ogImage = product.images[0]?.url;
+
   return {
     title: product.name,
-    description:
-      product.description ??
-      `${product.name} — ${PURITY_LABEL[product.purity]}, hallmarked, priced from today's rate.`,
+    description,
+    ...canonical(`/products/${product.slug}`),
+    openGraph: {
+      type: 'website',
+      title: product.name,
+      description,
+      url: absoluteUrl(`/products/${product.slug}`),
+      ...(ogImage
+        ? { images: [{ url: ogImage, alt: product.images[0]?.alt ?? product.name }] }
+        : {}),
+    },
   };
 }
 
@@ -74,8 +93,49 @@ export default async function ProductPage({ params }: { params: Params }) {
 
   const related = await getRelatedProducts(product.categorySlug, product.slug);
 
+  /**
+   * §9.6's `Product` structured data.
+   *
+   * The price is `product.price.lineTotal` — the same value the breakdown below renders,
+   * from `calculateLine`, not a second derivation. A rich result that disagrees with the
+   * page is worse than no rich result: it is the shop quoting a price it will not honour,
+   * through a third party, outside the disclaimer (MASTER-SPEC §8).
+   *
+   * `priceValidUntil` is derived from the RATE's timestamp rather than from the clock.
+   *
+   * Two reasons, and the lint rule that rejected `Date.now()` here is right about both. It is
+   * impure during render — but more usefully, a wall-clock horizon on an ISR'd page is a
+   * fiction: the page is generated once and served for its whole window, so "now plus ten
+   * minutes" is already wrong for every request after the first.
+   *
+   * A day from the rate the price was computed against is the honest statement. §7.2 already
+   * treats a rate older than 48 hours as stale enough to alert the owner about, so a quote
+   * built on one that is more than a day old should not be advertised as current — and this
+   * expresses that by expiring rather than by being quietly optimistic.
+   */
+  const PRICE_VALID_FOR_MS = 24 * 60 * 60 * 1000;
+  const priceValidUntil = new Date(
+    new Date(product.rateEffectiveAt).getTime() + PRICE_VALID_FOR_MS,
+  ).toISOString();
+
   return (
     <>
+      <JsonLd
+        data={productJsonLd(
+          {
+            name: product.name,
+            slug: product.slug,
+            description: product.description,
+            imageUrls: product.images.map((image) => image.url),
+            pricePaise: product.price.lineTotal,
+            purityLabel: PURITY_LABEL[product.purity],
+            weightGrams: grams(product.weightMg),
+            hallmarkNo: product.hallmarkNo,
+          },
+          priceValidUntil,
+        )}
+      />
+
       <Section className="pt-6 md:pt-12">
         <div className="flex flex-col gap-8 md:flex-row md:gap-12">
           <div className="md:w-1/2">
@@ -106,6 +166,7 @@ export default async function ProductPage({ params }: { params: Params }) {
                 ratePerGram={product.ratePerGram}
                 makingPct={product.makingPct}
                 gstPct={product.gstPct}
+                effectiveAt={product.rateEffectiveAt}
               />
             </Card>
 

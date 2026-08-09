@@ -19,9 +19,20 @@ const SHOP_LINKS = [
   { href: '/search', label: 'Search' },
 ] as const;
 
+/**
+ * §9.6's legal pages.
+ *
+ * `/policies/privacy` and `/policies/terms` were listed here from Phase 2 and **did not
+ * exist until §9.6 wrote them** — the footer of every storefront page carried two links to a
+ * 404. Phase 6 hit the identical defect in the trust block, fixed it there, and added an E2E
+ * that fetches every link IN THE TRUST BLOCK; the footer was never covered, so the same bug
+ * sat one component away for three phases. `e2e/seo.spec.ts` now fetches these too.
+ */
 const POLICY_LINKS = [
   { href: '/policies/privacy', label: 'Privacy' },
   { href: '/policies/terms', label: 'Terms' },
+  { href: '/policies/refunds', label: 'Refunds' },
+  { href: '/policies/shipping', label: 'Shipping' },
   { href: '/policies/exchange', label: 'Buyback & exchange' },
 ] as const;
 

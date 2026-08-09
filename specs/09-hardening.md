@@ -146,12 +146,36 @@ The dormant infrastructure from Phase 1 now earns its keep.
 
 ## 9.6 SEO & content
 
-- [ ] Metadata per route; OG images for products.
-- [ ] `Product` and `LocalBusiness` JSON-LD structured data.
-- [ ] `sitemap.xml`, `robots.txt` — `/admin` and `/bills` disallowed.
-- [ ] Canonical URLs.
-- [ ] Legal pages: privacy, terms, refund/exchange, shipping.
-- [ ] Rate disclaimer present on the homepage, `/rates`, and every product page.
+- [x] Metadata per route; OG images for products. — `metadataBase` and a title template on
+      the root layout; a product's OG image is the gallery's first photograph, the one the
+      page itself gives `priority` to, and is omitted rather than broken when the piece has
+      none.
+- [x] `Product` and `LocalBusiness` JSON-LD structured data. — `JewelryStore` on the
+      storefront layout (never on `/admin` or the auth screens), `Product` on the product
+      page. The offer price is `product.price.lineTotal` — **the same value the breakdown
+      renders**, asserted against the rendered total in a browser. `InStoreOnly`, because
+      there is no checkout.
+- [x] `sitemap.xml`, `robots.txt` — `/admin` and `/bills` disallowed. — plus `/account`,
+      `/claim` and `/calculator/s`, which §9.6 does not name and which a crawler would
+      damage: fetching a claim link **burns a single-use token** (DEBT-011). The sitemap is
+      generated from the same queries the pages use, so a deactivated piece leaves it when it
+      leaves the catalogue. A test fetches every URL in it.
+- [x] Canonical URLs. — absolute, from `lib/seo.ts`. A filtered collection
+      (`?purity=…&sort=…&page=2`) canonicalises to the collection itself, which is the
+      faceted-navigation duplicate §6.1's URL-state decision was always going to create.
+- [x] Legal pages: privacy, terms, refund/exchange, shipping. — written to the stricter rule
+      described in the route file: the privacy page **describes what this application
+      actually does**, read off the implementation. **The footer had linked to
+      `/policies/privacy` and `/policies/terms` since Phase 2 and both were 404s.**
+- [x] Rate disclaimer present on the homepage, `/rates`, and every product page. — it was
+      **not** on the product page in the form the other two use: a bespoke line there dropped
+      "Final price confirmed in store". One `RateDisclaimer`, three surfaces. See D-040.
+
+## 9.6 — Dependencies added
+
+None. `sitemap.ts` and `robots.ts` are Next file conventions, and the JSON-LD is a `<script>`
+tag rather than a library — §9.1's CSP carries `unsafe-inline` on `script-src` by an explicit
+decision (D-033), so no nonce is needed and none is invented.
 
 ---
 
@@ -197,6 +221,11 @@ The dormant infrastructure from Phase 1 now earns its keep.
 - [ ] Test the full journey on a **real budget Android phone on real 4G.** Not a simulator.
       This is where the 95% of users actually are.
 - [ ] Rollback plan documented.
+- [ ] **`NEXT_PUBLIC_SITE_URL` set to the real origin.** §9.6 made it the source of every
+      canonical, every `<loc>` in `sitemap.xml`, the `Sitemap:` line in `robots.txt` and the
+      `url` in both JSON-LD blocks. It is `http://localhost:3000` in development and the
+      generated artefacts say so — a deploy that forgets it publishes a sitemap of localhost
+      URLs and canonicals pointing at a developer's machine, and nothing fails to build.
 
 ---
 
