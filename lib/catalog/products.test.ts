@@ -34,6 +34,7 @@ import { db } from '@/lib/db';
 import { calculateLine, type RatesByPurity } from '@/lib/pricing';
 import { RATES_CACHE_KEY } from '@/lib/rates';
 import { invalidate, redis } from '@/lib/redis';
+import { PRICING_DEFAULTS_KEY } from '@/lib/settings';
 
 const HAS_TEST_DB = Boolean(process.env.TEST_DATABASE_URL);
 const describeDb = HAS_TEST_DB ? describe : describe.skip;
@@ -115,7 +116,13 @@ describeDb('catalogue', () => {
         },
       ],
     });
-    await invalidate(RATES_CACHE_KEY);
+    /**
+     * The pricing defaults are cached too (DEBT-024), and `lib/settings.test.ts` writes a
+     * non-default GST rate. A leftover cached value would reprice every product here, so
+     * the key is dropped alongside the rates key — DEBT-030's rule: a harness that forces
+     * one backing value must force all of them.
+     */
+    await invalidate(RATES_CACHE_KEY, PRICING_DEFAULTS_KEY);
 
     /**
      * Drop the search cache between tests.
@@ -799,7 +806,7 @@ describeDb('catalogue', () => {
         select: PRODUCT_CARD_SELECT,
       });
 
-      expect(priceProduct(row, RATES)).toEqual(priceProduct(row, RATES));
+      expect(priceProduct(row, RATES, 3)).toEqual(priceProduct(row, RATES, 3));
     });
   });
 });

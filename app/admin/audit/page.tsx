@@ -73,8 +73,8 @@ export default async function AdminAuditPage({
           </p>
         </div>
 
-        <form className="flex flex-col gap-3" action="/admin/audit">
-          <div className="flex gap-3">
+        <form className="flex flex-col gap-4" action="/admin/audit">
+          <div className="flex gap-2">
             <select
               name="action"
               defaultValue={action ?? ''}

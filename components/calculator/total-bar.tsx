@@ -53,7 +53,7 @@ export function TotalBar({
             {formatINR(displayed)}
           </span>
         </span>
-        <ChevronUp className="size-5 shrink-0 text-muted" aria-hidden="true" />
+        <ChevronUp className="size-icon shrink-0 text-muted" aria-hidden="true" />
       </button>
 
       <Button

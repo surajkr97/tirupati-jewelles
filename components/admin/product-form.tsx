@@ -31,7 +31,10 @@ export interface ProductFormProps {
   categories: { id: string; name: string }[];
   /** Paise per gram, for the live preview. */
   rates: Record<PurityKey, string>;
+  /** The shop's §7.9 GST rate, for the live preview. */
   gstPct: number;
+  /** The shop's §7.9 making default, prefilled on a NEW piece only. DEBT-024. */
+  defaultMakingPct: number;
   initial?: {
     id: string;
     name: string;
@@ -55,7 +58,13 @@ const PURITIES: { value: PurityKey; label: string }[] = [
   { value: 'SILVER_999', label: 'Silver 999' },
 ];
 
-export function ProductForm({ categories, rates, gstPct, initial }: ProductFormProps) {
+export function ProductForm({
+  categories,
+  rates,
+  gstPct,
+  defaultMakingPct,
+  initial,
+}: ProductFormProps) {
   const [form, setForm] = useState({
     name: initial?.name ?? '',
     slug: initial?.slug ?? '',
@@ -63,7 +72,8 @@ export function ProductForm({ categories, rates, gstPct, initial }: ProductFormP
     categoryId: initial?.categoryId ?? categories[0]?.id ?? '',
     purity: initial?.purity ?? ('K22_916' as PurityKey),
     weightGrams: initial?.weightGrams ?? '',
-    makingPct: initial?.makingPct ?? '12',
+    // An existing piece keeps its own figure; only a new one takes the shop's default.
+    makingPct: initial?.makingPct ?? String(defaultMakingPct),
     stoneChargeRupees: initial?.stoneChargeRupees ?? '',
     hallmarkNo: initial?.hallmarkNo ?? '',
     bisCertNo: initial?.bisCertNo ?? '',
@@ -237,7 +247,7 @@ export function ProductForm({ categories, rates, gstPct, initial }: ProductFormP
 
       {/* §7.4's live preview. Same engine as the storefront, so what the admin sees here is
           what a customer will see on the product page. */}
-      <Card className="flex flex-col gap-3" data-testid="price-preview">
+      <Card className="flex flex-col gap-4" data-testid="price-preview">
         <h2 className="text-h3 font-semibold text-ink">Price at today&rsquo;s rate</h2>
 
         {preview ? (
@@ -294,7 +304,7 @@ export function ProductForm({ categories, rates, gstPct, initial }: ProductFormP
       {error && !error.field && (
         <p
           role="alert"
-          className="rounded-field bg-down/10 px-4 py-3 text-small text-down"
+          className="rounded-field bg-down/10 px-4 py-4 text-small text-down"
         >
           {error.message}
         </p>
@@ -342,16 +352,28 @@ function Toggle({
         aria-label={label}
         onClick={() => onChange(!checked)}
         className={cn(
-          'relative h-8 w-14 shrink-0 rounded-pill transition-colors duration-fast ease-standard',
+          'relative h-8 w-16 shrink-0 rounded-pill transition-colors duration-fast ease-standard',
           'focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none',
           checked ? 'bg-taupe-deep' : 'bg-line',
         )}
       >
+        {/*
+          `left-1` is load-bearing, and its absence was hidden by a second bug.
+
+          With no left anchor the knob falls at its STATIC position, which a `<button>`
+          centres (`text-align: center`) — so it started 32px in and `translate-x-*` moved it
+          from the middle of the track rather than from the edge. That was invisible while
+          `translate-x-7` was itself off-scale and emitting nothing. Measured, not read:
+          the knob sat at offset 36 when off and 64 when on, the second putting it entirely
+          outside a 64px track.
+
+          Anchored at 4px with 32px of travel, the 24px knob sits inset 4px at both ends.
+        */}
         <span
           className={cn(
-            'absolute top-1 size-6 rounded-pill bg-white shadow-card',
+            'absolute top-1 left-1 size-6 rounded-pill bg-white shadow-card',
             'transition-transform duration-base ease-standard',
-            checked ? 'translate-x-7' : 'translate-x-1',
+            checked ? 'translate-x-8' : 'translate-x-0',
           )}
         />
       </button>

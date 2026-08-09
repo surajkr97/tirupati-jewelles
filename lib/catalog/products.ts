@@ -27,6 +27,7 @@ import {
   type RatesByPurity,
 } from '@/lib/pricing';
 import { getCurrentRates, toRatesByPurity } from '@/lib/rates';
+import { getPricingDefaults } from '@/lib/settings';
 
 /**
  * Ceiling on how many rows are priced in memory for one filtered view.
@@ -80,17 +81,23 @@ export interface PricedProduct {
   price: LineResult;
 }
 
-/** MASTER-SPEC §4 default; Phase 7 makes it admin-configurable. */
-const GST_PCT = 3;
-
 /**
  * Price one product row.
  *
  * `makingPct` arrives as a Prisma `Decimal`. `.toNumber()` is safe and lossless here — the
  * column is `Decimal(5,2)`, so at most 5 significant digits — and `calculateLine` snaps it
  * to integer basis points immediately, before any money is touched.
+ *
+ * `gstPct` is a required parameter rather than the module constant it used to be (DEBT-024).
+ * The shop sets it in §7.9, so it is data, and it is passed in rather than read here so that
+ * one page's worth of cards cannot each perform their own settings lookup — and so this
+ * function stays synchronous and unit-testable with no I/O.
  */
-export function priceProduct(row: ProductRow, rates: RatesByPurity): PricedProduct {
+export function priceProduct(
+  row: ProductRow,
+  rates: RatesByPurity,
+  gstPct: number,
+): PricedProduct {
   const purity = row.purity as PurityKey;
 
   return {
@@ -113,7 +120,7 @@ export function priceProduct(row: ProductRow, rates: RatesByPurity): PricedProdu
         weightMg: row.weightMg,
         makingPct: row.makingPct.toNumber(),
         stoneCharge: row.stoneCharge,
-        gstPct: GST_PCT,
+        gstPct,
       },
       rates[purity],
     ),
@@ -144,7 +151,13 @@ export async function listProducts(
   categorySlug: string | null,
   filters: CatalogFilters,
 ): Promise<ProductListResult> {
-  const rates = toRatesByPurity(await getCurrentRates());
+  // Both are cache-aside reads; in parallel, because neither depends on the other.
+  const [currentRates, defaults] = await Promise.all([
+    getCurrentRates(),
+    getPricingDefaults(),
+  ]);
+  const rates = toRatesByPurity(currentRates);
+  const gstPct = defaults.gstPct;
 
   const where: Prisma.ProductWhereInput = {
     isActive: true,
@@ -186,7 +199,7 @@ export async function listProducts(
     ]);
 
     return {
-      products: rows.map((row) => priceProduct(row, rates)),
+      products: rows.map((row) => priceProduct(row, rates, gstPct)),
       total,
       hasMore: filters.page * PAGE_SIZE < total,
       clipped: false,
@@ -204,7 +217,7 @@ export async function listProducts(
   const clipped = candidates.length > PRICE_SORT_CEILING;
   const priced = candidates
     .slice(0, PRICE_SORT_CEILING)
-    .map((row) => priceProduct(row, rates));
+    .map((row) => priceProduct(row, rates, gstPct));
 
   const band = filters.price;
   const matching = band
@@ -297,10 +310,15 @@ export async function getProductBySlug(
   });
   if (!row) return null;
 
-  const rates = toRatesByPurity(await getCurrentRates());
+  const [currentRates, defaults] = await Promise.all([
+    getCurrentRates(),
+    getPricingDefaults(),
+  ]);
+  const rates = toRatesByPurity(currentRates);
+  const gstPct = defaults.gstPct;
   const purity = row.purity as PurityKey;
 
-  const base = priceProduct({ ...row, images: row.images.slice(0, 1) }, rates);
+  const base = priceProduct({ ...row, images: row.images.slice(0, 1) }, rates, gstPct);
 
   return {
     ...base,
@@ -311,7 +329,7 @@ export async function getProductBySlug(
     hallmarkNo: row.hallmarkNo,
     bisCertNo: row.bisCertNo,
     ratePerGram: rates[purity],
-    gstPct: GST_PCT,
+    gstPct,
     images: row.images,
   };
 }
@@ -322,7 +340,12 @@ export async function getRelatedProducts(
   excludeSlug: string,
   limit = 4,
 ): Promise<PricedProduct[]> {
-  const rates = toRatesByPurity(await getCurrentRates());
+  const [currentRates, defaults] = await Promise.all([
+    getCurrentRates(),
+    getPricingDefaults(),
+  ]);
+  const rates = toRatesByPurity(currentRates);
+  const gstPct = defaults.gstPct;
 
   const rows = await db.product.findMany({
     where: {
@@ -336,7 +359,7 @@ export async function getRelatedProducts(
     select: PRODUCT_CARD_SELECT,
   });
 
-  return rows.map((row) => priceProduct(row, rates));
+  return rows.map((row) => priceProduct(row, rates, gstPct));
 }
 
 export async function listActiveCategories() {

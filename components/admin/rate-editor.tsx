@@ -142,7 +142,7 @@ export function RateEditor({
 
       {confirming ? (
         // The §7.3 confirmation step. Deliberately loud, and it names both figures.
-        <div className="flex flex-col gap-3 rounded-field bg-down/10 p-4">
+        <div className="flex flex-col gap-4 rounded-field bg-down/10 p-4">
           <p className="text-body font-semibold text-down">
             That is a {confirming.changePct}% change.
           </p>

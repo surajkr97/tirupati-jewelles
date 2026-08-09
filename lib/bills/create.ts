@@ -47,11 +47,11 @@ import {
   calculateLine,
   gramsToMilligrams,
   rupeesToPaise,
-  DEFAULT_GST_PCT,
   type LineInput,
   type PurityKey,
 } from '@/lib/pricing';
 import { getCurrentRates, newestEffectiveAt, toRatesByPurity } from '@/lib/rates';
+import { getPricingDefaults } from '@/lib/settings';
 import { invalidate } from '@/lib/redis';
 import { DASHBOARD_TOTALS_KEY } from '@/lib/bills/totals';
 
@@ -76,8 +76,17 @@ export type CreateBillResult =
  * error rather than bad input — but `metal` is still derived from `purity` rather than
  * taken from the payload. Two fields that can disagree eventually will, and a
  * `GOLD`/`SILVER_999` pair prices at zero.
+ *
+ * `defaultGstPct` is the shop's §7.9 setting rather than MASTER-SPEC §4's constant
+ * (DEBT-024), and it is only reached when the line carries no rate of its own. Whatever it
+ * resolves to is snapshotted onto `OrderItem.gstPct` inside the transaction below, so a bill
+ * already raised is unaffected by a later settings change — §8.2's snapshot rule does the
+ * work that makes this safe to make configurable at all.
  */
-function toLine(item: CreateBillRequest['items'][number]): LineInput {
+function toLine(
+  item: CreateBillRequest['items'][number],
+  defaultGstPct: number,
+): LineInput {
   const purity = item.purity as PurityKey;
 
   return {
@@ -86,7 +95,7 @@ function toLine(item: CreateBillRequest['items'][number]): LineInput {
     weightMg: gramsToMilligrams(item.weightGrams),
     makingPct: item.makingPct.trim() === '' ? 0 : Number(item.makingPct),
     stoneCharge: item.stoneCharge.trim() === '' ? 0n : rupeesToPaise(item.stoneCharge),
-    gstPct: item.gstPct.trim() === '' ? DEFAULT_GST_PCT : Number(item.gstPct),
+    gstPct: item.gstPct.trim() === '' ? defaultGstPct : Number(item.gstPct),
   };
 }
 
@@ -119,11 +128,14 @@ export async function createBill(
   }
 
   // The rate, read from the server at request time. Never from the request.
-  const rates = await getCurrentRates();
+  const [rates, pricingDefaults] = await Promise.all([
+    getCurrentRates(),
+    getPricingDefaults(),
+  ]);
   const byPurity = toRatesByPurity(rates);
   const ratesAt = newestEffectiveAt(rates);
 
-  const lines = request.items.map(toLine);
+  const lines = request.items.map((item) => toLine(item, pricingDefaults.gstPct));
 
   const missing = lines.find((line) => byPurity[line.purity] === 0n);
   if (missing) {

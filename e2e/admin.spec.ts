@@ -13,6 +13,17 @@ import { expect, test } from '@playwright/test';
 
 import { ADMIN_STATE } from './admin-state';
 
+/**
+ * Minimum tap target, with a sub-pixel tolerance.
+ *
+ * Chromium reports fractional geometry, and at `deviceScaleFactor: 2` a 44px control
+ * measured 43.99993896484375 under full-suite load while measuring exactly 44 when the file
+ * ran alone — 6e-5 of a pixel of float error, asserted against as though it were a design
+ * regression. The tolerance is 0.01px: far below anything a human or a layout can produce,
+ * and the next size down the scale is 40px, so a real miss still fails.
+ */
+const TAP_MIN = 44 - 0.01;
+
 const ADMIN_ROUTES = [
   '/admin',
   '/admin/rates',
@@ -82,14 +93,19 @@ test.describe('the admin panel', () => {
      * §7.2: the rates shortcut belongs on the home screen because it is the most frequent
      * daily action.
      *
-     * Matched exactly, not as /Update/. The loose pattern passed for months and then broke
-     * the first time a rate went stale, because §7.2's "rates not updated in 48 hours" alert
-     * renders its own `Update` link and the two collide under strict mode. The dashboard was
-     * behaving correctly; the locator was ambiguous — the same shape as DEBT-038, where an
-     * assertion written against a fresh database stopped holding once the data aged.
+     * Every locator here is EXACT, not a substring. The loose patterns passed for months and
+     * then broke the first time a rate went stale, because §7.2's "rates not updated in 48
+     * hours" alert renders both its own `Update` link and the list `Rates Gold 22K, Gold
+     * 18K, …` — each of which collides with a loose match under strict mode. The dashboard
+     * is behaving correctly in both cases; the locators were ambiguous. Same shape as
+     * DEBT-038: an assertion written against a fresh database stops holding once the data
+     * ages.
+     *
+     * The `Update →` half was fixed at 427012d and the rate-label half was not, so this
+     * failed again 48 hours later. Both are exact now.
      */
     await expect(page.getByRole('link', { name: 'Update →' })).toBeVisible();
-    await expect(page.getByText('Gold 22K')).toBeVisible();
+    await expect(page.getByText('Gold 22K', { exact: true })).toBeVisible();
     await expect(page.getByText('Sold today')).toBeVisible();
   });
 
@@ -267,6 +283,72 @@ test.describe('§7 DESIGN — usable one-handed at 375px', () => {
     }
   });
 
+  /**
+   * DEBT-038. The dashboard overflowed once the shop's figures passed ₹1 crore, and Phase 7
+   * had audited the screen against an empty database where every tile read ₹0.
+   *
+   * So this asserts the property rather than today's data: substitute a figure larger than
+   * the shop will ever reach and require it to fit. A test that passes only because the
+   * seed is small is the test that let DEBT-038 through.
+   *
+   * Text width comes from a Range around the text node, not the <p>'s `scrollWidth` — a
+   * block-level <p> that does not overflow reports its own width, which would pass on a
+   * clipped figure just as happily as on a fitting one.
+   */
+  test('a stat tile holds a ₹1000-crore figure at 375px — DEBT-038', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-375', 'A mobile concern');
+
+    await page.goto('/admin');
+
+    const tiles = page.locator('[data-stat]');
+    expect(await tiles.count()).toBe(7);
+    expect(await page.locator('[data-stat-kind="money"]').count()).toBe(5);
+
+    const measured = await page.evaluate(() => {
+      /**
+       * A money tile gets ₹1000 crore — more than this shop will ever total, all digits,
+       * all separators. A count tile gets five digits, which is more bills than it will
+       * send in a month for the life of the business; requiring a count tile to hold a
+       * rupee figure would be asserting something the design does not claim.
+       */
+      const worstCase = { money: '₹9,99,99,99,999', count: '99,999' };
+
+      return [...document.querySelectorAll('[data-stat]')].map((card) => {
+        const value = card.querySelector('[data-stat-value]') as HTMLElement;
+        const kind = card.getAttribute('data-stat-kind') as 'money' | 'count';
+        value.textContent = worstCase[kind];
+
+        const range = document.createRange();
+        range.selectNodeContents(value);
+
+        const style = getComputedStyle(card);
+        return {
+          label: card.getAttribute('data-stat'),
+          box:
+            card.clientWidth -
+            parseFloat(style.paddingLeft) -
+            parseFloat(style.paddingRight),
+          text: range.getBoundingClientRect().width,
+        };
+      });
+    });
+
+    for (const tile of measured) {
+      expect(
+        tile.text,
+        `"${tile.label}" is ${Math.round(tile.text)}px of figure in a ${Math.round(tile.box)}px box`,
+      ).toBeLessThanOrEqual(tile.box);
+    }
+
+    // And the page itself, with every tile now carrying the worst case.
+    const overflows = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    expect(overflows, '/admin scrolls horizontally at ₹1000 crore').toBe(false);
+  });
+
   test('numeric fields ask for a numeric keyboard', async ({ page }) => {
     await page.goto('/admin/products/new');
 
@@ -286,7 +368,7 @@ test.describe('§7 DESIGN — usable one-handed at 375px', () => {
     expect(count).toBe(5);
     for (let i = 0; i < count; i += 1) {
       const box = await links.nth(i).boundingBox();
-      if (box) expect(box.height).toBeGreaterThanOrEqual(44);
+      if (box) expect(box.height).toBeGreaterThanOrEqual(TAP_MIN);
     }
   });
 });

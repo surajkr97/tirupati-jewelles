@@ -11,6 +11,8 @@ import tsPlugin from '@typescript-eslint/eslint-plugin';
 import tsParser from '@typescript-eslint/parser';
 import prettier from 'eslint-config-prettier';
 
+import designSystem from './eslint-rules/no-off-scale-spacing.mjs';
+
 const config = [
   {
     ignores: [
@@ -87,6 +89,23 @@ const config = [
         },
       ],
     },
+  },
+
+  /**
+   * Phase 9 (DEBT-032): a spacing utility with no matching `--spacing-*` token emits NO CSS.
+   *
+   * Phase 2 §2.1 disabled Tailwind's default scale so off-scale values would be "hard to
+   * reach by accident" — but reaching one produces silence, not an error, so 45 of them
+   * accumulated across Phases 6, 7 and 8 while DESIGN's review mandate was in force. This
+   * is the rule DEBT-032 asks for: the design system now fails loudly.
+   *
+   * The allowed set is parsed from `app/globals.css` by the rule itself, so it cannot drift
+   * from the stylesheet the browser loads.
+   */
+  {
+    files: ['**/*.tsx', '**/*.ts'],
+    plugins: { 'design-system': designSystem },
+    rules: { 'design-system/no-off-scale-spacing': 'error' },
   },
 
   prettier,

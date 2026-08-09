@@ -31,7 +31,7 @@ export function PolicyEnquiry({ policy }: { policy: string }) {
       rel="noopener noreferrer"
       className="inline-flex h-control items-center justify-center gap-2 self-start rounded-pill bg-taupe-deep px-6 text-body font-semibold text-white transition-transform duration-fast ease-standard active:scale-[0.98]"
     >
-      <MessageCircle className="size-5" aria-hidden="true" />
+      <MessageCircle className="size-icon" aria-hidden="true" />
       Ask about this on WhatsApp
     </a>
   );

@@ -40,7 +40,7 @@ import { Calculator } from '@/components/calculator/calculator';
 import { RateTicker } from '@/components/rates/rate-ticker';
 import type { SerialisedRates } from '@/lib/rates.keys';
 import { calculateTotal, type RatesByPurity } from '@/lib/pricing';
-import type { CalculatorItem } from '@/lib/calculator/types';
+import { SPEC_ITEM_DEFAULTS, type CalculatorItem } from '@/lib/calculator/types';
 
 /** The rate the admin set. Paise per gram — ₹1,18,420 per 10 g. */
 const TRUE_PER_GRAM = 1_184_200n;
@@ -149,7 +149,7 @@ describe('the calculator uses the TRUE rate while the ticker jitters', () => {
     render(
       <>
         <RateTicker initialRates={API_PAYLOAD} />
-        <Calculator initialItems={[ITEM]} />
+        <Calculator defaults={SPEC_ITEM_DEFAULTS} initialItems={[ITEM]} />
       </>,
     );
 
@@ -175,7 +175,7 @@ describe('the calculator uses the TRUE rate while the ticker jitters', () => {
   });
 
   it('the total equals the engine applied to the stored rate, to the paise', async () => {
-    render(<Calculator initialItems={[ITEM]} />);
+    render(<Calculator defaults={SPEC_ITEM_DEFAULTS} initialItems={[ITEM]} />);
     await settle();
 
     // Computed here from `RATES`, not read from the component — the point is that the
@@ -199,7 +199,7 @@ describe('the calculator uses the TRUE rate while the ticker jitters', () => {
   });
 
   it('reads the rate from /api/rates and nowhere else', async () => {
-    render(<Calculator initialItems={[ITEM]} />);
+    render(<Calculator defaults={SPEC_ITEM_DEFAULTS} initialItems={[ITEM]} />);
     await settle();
 
     const calls = (globalThis.fetch as unknown as { mock: { calls: unknown[][] } }).mock
@@ -217,7 +217,7 @@ describe('the calculator uses the TRUE rate while the ticker jitters', () => {
       vi.fn(async () => new Response('nope', { status: 500 })),
     );
 
-    render(<Calculator initialItems={[ITEM]} />);
+    render(<Calculator defaults={SPEC_ITEM_DEFAULTS} initialItems={[ITEM]} />);
     await settle();
 
     // A calculator that invents a rate is worse than one that admits it is offline.
@@ -236,7 +236,7 @@ describe('the calculator uses the TRUE rate while the ticker jitters', () => {
       ),
     );
 
-    render(<Calculator initialItems={[ITEM]} />);
+    render(<Calculator defaults={SPEC_ITEM_DEFAULTS} initialItems={[ITEM]} />);
     await settle();
 
     expect(screen.queryByTestId('grand-total')).not.toBeInTheDocument();

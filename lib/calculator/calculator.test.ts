@@ -21,7 +21,12 @@ import {
 import { MAX_LABEL_LENGTH, preloadedItemFromParams } from '@/lib/calculator/preload';
 import { calculatorItemsSchema, shareRequestSchema } from '@/lib/calculator/schema';
 import { clearItems, loadItems, saveItems, STORAGE_KEY } from '@/lib/calculator/storage';
-import { emptyItem, toLineInput, type CalculatorItem } from '@/lib/calculator/types';
+import {
+  emptyItem,
+  SPEC_ITEM_DEFAULTS,
+  toLineInput,
+  type CalculatorItem,
+} from '@/lib/calculator/types';
 import { calculateTotal, type RatesByPurity } from '@/lib/pricing';
 
 const RATES: RatesByPurity = {
@@ -34,7 +39,7 @@ let counter = 0;
 const nextId = () => `id-${(counter += 1)}`;
 
 function stateWith(count: number): CalculatorState {
-  let state = initialState(nextId());
+  let state = initialState(nextId(), SPEC_ITEM_DEFAULTS);
   for (let i = 1; i < count; i += 1) {
     state = calculatorReducer(state, { type: 'ADD_ITEM', id: nextId() });
   }
@@ -50,20 +55,70 @@ beforeEach(() => {
 
 describe('initial state', () => {
   it('starts with exactly one item — never an empty screen (§5.4)', () => {
-    const state = initialState('a');
+    const state = initialState('a', SPEC_ITEM_DEFAULTS);
 
     expect(state.items).toHaveLength(1);
     expect(state.notice).toBeNull();
   });
 
   it('pre-fills a making charge rather than implying free labour', () => {
-    expect(initialState('a').items[0]?.makingPct).toBe('12');
+    expect(initialState('a', SPEC_ITEM_DEFAULTS).items[0]?.makingPct).toBe('12');
+  });
+
+  /**
+   * DEBT-024. The prefills are the shop's §7.9 settings, not constants — and the reducer
+   * has to carry them, because `ADD_ITEM` and `CLEAR_ALL` mint blank lines long after the
+   * component that knew the settings has stopped being consulted.
+   */
+  it('prefills a blank line from the shop settings, not from a constant', () => {
+    const shop = { gstPct: 5, makingPct: 15 };
+    const first = initialState('a', shop).items[0];
+
+    expect(first?.makingPct).toBe('15');
+    expect(first?.gstPct).toBe('5');
+  });
+
+  it('keeps using them for every later blank line', () => {
+    const shop = { gstPct: 5, makingPct: 15 };
+
+    const added = calculatorReducer(initialState('a', shop), {
+      type: 'ADD_ITEM',
+      id: 'b',
+    });
+    expect(added.items[1]?.makingPct).toBe('15');
+    expect(added.items[1]?.gstPct).toBe('5');
+
+    const cleared = calculatorReducer(added, { type: 'CLEAR_ALL', id: 'c' });
+    expect(cleared.items[0]?.makingPct).toBe('15');
+
+    // Removing the last item mints the replacement blank line too.
+    const emptied = calculatorReducer(cleared, {
+      type: 'REMOVE_ITEM',
+      id: 'c',
+      replacementId: 'd',
+    });
+    expect(emptied.items[0]?.gstPct).toBe('5');
+  });
+
+  it('does not reprice a restored draft when the settings have moved', () => {
+    // The draft holds its own figures. A settings change since it was saved applies to the
+    // NEXT blank line, not to what the customer is already looking at.
+    const restored = calculatorReducer(initialState('a', { gstPct: 5, makingPct: 15 }), {
+      type: 'RESTORE',
+      items: [{ ...emptyItem('x', SPEC_ITEM_DEFAULTS), weightGrams: '10' }],
+    });
+
+    expect(restored.items[0]?.gstPct).toBe('3');
+    expect(restored.defaults).toEqual({ gstPct: 5, makingPct: 15 });
   });
 });
 
 describe('ADD_ITEM', () => {
   it('appends an item', () => {
-    const state = calculatorReducer(initialState('a'), { type: 'ADD_ITEM', id: 'b' });
+    const state = calculatorReducer(initialState('a', SPEC_ITEM_DEFAULTS), {
+      type: 'ADD_ITEM',
+      id: 'b',
+    });
 
     expect(state.items.map((i) => i.id)).toEqual(['a', 'b']);
   });
@@ -97,7 +152,7 @@ describe('ADD_ITEM', () => {
 
 describe('DUPLICATE_ITEM', () => {
   it('copies every field except the id', () => {
-    let state = initialState('a');
+    let state = initialState('a', SPEC_ITEM_DEFAULTS);
     state = calculatorReducer(state, {
       type: 'UPDATE_ITEM',
       id: 'a',
@@ -165,7 +220,7 @@ describe('REMOVE_ITEM', () => {
   });
 
   it('leaves a fresh blank card when the last one is removed', () => {
-    const state = calculatorReducer(initialState('a'), {
+    const state = calculatorReducer(initialState('a', SPEC_ITEM_DEFAULTS), {
       type: 'REMOVE_ITEM',
       id: 'a',
       replacementId: 'fresh',
@@ -191,7 +246,7 @@ describe('UPDATE_ITEM', () => {
   });
 
   it('derives metal from purity so the two can never disagree', () => {
-    let state = initialState('a');
+    let state = initialState('a', SPEC_ITEM_DEFAULTS);
 
     state = calculatorReducer(state, {
       type: 'UPDATE_ITEM',
@@ -209,7 +264,7 @@ describe('UPDATE_ITEM', () => {
   });
 
   it('cannot be tricked into a GOLD/SILVER_999 pair by patching metal directly', () => {
-    let state = initialState('a');
+    let state = initialState('a', SPEC_ITEM_DEFAULTS);
     state = calculatorReducer(state, {
       type: 'UPDATE_ITEM',
       id: 'a',
@@ -272,7 +327,7 @@ describe('the reducer is pure', () => {
 
 describe('toLineInput', () => {
   const item = (over: Partial<CalculatorItem> = {}): CalculatorItem => ({
-    ...emptyItem('a'),
+    ...emptyItem('a', SPEC_ITEM_DEFAULTS),
     weightGrams: '10',
     ...over,
   });
@@ -354,7 +409,7 @@ describe('toLineInput', () => {
 // ──────────────────────────────────────────────────── the Zod boundary
 
 describe('the Zod boundary', () => {
-  const valid = { ...emptyItem('a'), weightGrams: '10' };
+  const valid = { ...emptyItem('a', SPEC_ITEM_DEFAULTS), weightGrams: '10' };
 
   it('accepts a well-formed item set', () => {
     expect(calculatorItemsSchema.safeParse([valid]).success).toBe(true);
@@ -411,7 +466,7 @@ describe('the Zod boundary', () => {
 
 describe('preloading from a link (§5.6)', () => {
   const load = (query: string) =>
-    preloadedItemFromParams(new URLSearchParams(query), 'preloaded');
+    preloadedItemFromParams(new URLSearchParams(query), 'preloaded', SPEC_ITEM_DEFAULTS);
 
   it('returns null for a plain visit', () => {
     expect(load('')).toBeNull();
@@ -498,7 +553,9 @@ describe('preloading from a link (§5.6)', () => {
 // ──────────────────────────────────────────────────── sessionStorage
 
 describe('sessionStorage round trip', () => {
-  const items = [{ ...emptyItem('a'), weightGrams: '12.5', label: 'Bangle' }];
+  const items = [
+    { ...emptyItem('a', SPEC_ITEM_DEFAULTS), weightGrams: '12.5', label: 'Bangle' },
+  ];
 
   it('restores what was saved — §5.3, an accidental refresh loses nothing', () => {
     saveItems(items);

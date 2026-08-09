@@ -40,7 +40,7 @@ export default async function CollectionsPage() {
             <li key={category.id}>
               <Link
                 href={`/collections/${category.slug}`}
-                className="group flex flex-col gap-3 rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+                className="group flex flex-col gap-4 rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
               >
                 <ImageFrame
                   src={category.imageUrl}

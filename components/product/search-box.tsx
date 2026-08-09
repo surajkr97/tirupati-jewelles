@@ -42,7 +42,7 @@ export function SearchBox({ initialQuery }: { initialQuery: string }) {
   return (
     <div className="relative flex items-center">
       <Search
-        className="pointer-events-none absolute left-4 size-5 text-muted"
+        className="pointer-events-none absolute left-4 size-icon text-muted"
         aria-hidden="true"
       />
       <input

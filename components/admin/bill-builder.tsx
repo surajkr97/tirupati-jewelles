@@ -29,6 +29,7 @@ import { StickyBar } from '@/components/shell/sticky-bar';
 import { Button, Card, Input, Select, toast } from '@/components/ui';
 import { priceItems } from '@/lib/calculator/price-items';
 import { calculatorReducer, initialState } from '@/lib/calculator/reducer';
+import type { ItemDefaults } from '@/lib/calculator/types';
 import { formatINR } from '@/lib/money';
 import type { PurityKey, RatesByPurity } from '@/lib/pricing';
 import { ratesByPurityFromApi } from '@/lib/rates.keys';
@@ -95,10 +96,20 @@ export function isIndianMobile(input: string): boolean {
   return /^[6-9]\d{9}$/.test(national);
 }
 
-export function BillBuilder({ products }: { products: ProductOption[] }) {
+export function BillBuilder({
+  products,
+  defaults,
+}: {
+  products: ProductOption[];
+  /** The shop's §7.9 prefills for a new line, read server-side. DEBT-024. */
+  defaults: ItemDefaults;
+}) {
   const router = useRouter();
 
-  const [state, dispatch] = useReducer(calculatorReducer, initialState(newId()));
+  const [state, dispatch] = useReducer(
+    calculatorReducer,
+    initialState(newId(), defaults),
+  );
   const [extras, setExtras] = useState<Record<string, ItemExtras>>({});
 
   const [customerName, setCustomerName] = useState('');

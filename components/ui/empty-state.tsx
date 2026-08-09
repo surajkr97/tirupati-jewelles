@@ -29,7 +29,7 @@ export function EmptyState({
       {icon && <div className="text-muted">{icon}</div>}
       <div className="flex flex-col gap-2">
         <p className="text-h3 font-semibold text-ink">{title}</p>
-        {description && <p className="max-w-80 text-body text-muted">{description}</p>}
+        {description && <p className="max-w-xs text-body text-muted">{description}</p>}
       </div>
       {action}
     </div>

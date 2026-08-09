@@ -89,12 +89,12 @@ export function GalleryClient() {
       </Row>
 
       <Row title="Card">
-        <Card className="w-full max-w-80">
+        <Card className="w-full max-w-xs">
           <p className="text-body text-ink">
             Static card — radius 24, shadow, no border.
           </p>
         </Card>
-        <Card interactive className="w-full max-w-80">
+        <Card interactive className="w-full max-w-xs">
           <p className="text-body text-ink">
             Interactive — lifts on hover, presses on tap.
           </p>
@@ -102,25 +102,25 @@ export function GalleryClient() {
       </Row>
 
       <Row title="Input">
-        <div className="w-full max-w-80">
+        <div className="w-full max-w-xs">
           <Input label="Weight" placeholder="0.000" inputMode="decimal" suffix="g" />
         </div>
-        <div className="w-full max-w-80">
+        <div className="w-full max-w-xs">
           <Input label="Making charge" defaultValue="12" inputMode="numeric" suffix="%" />
         </div>
-        <div className="w-full max-w-80">
+        <div className="w-full max-w-xs">
           <Input label="Phone" hint="We send an OTP to confirm." inputMode="tel" />
         </div>
-        <div className="w-full max-w-80">
+        <div className="w-full max-w-xs">
           <Input label="Email" defaultValue="not-an-email" error="Enter a valid email." />
         </div>
-        <div className="w-full max-w-80">
+        <div className="w-full max-w-xs">
           <Input label="Disabled" disabled placeholder="Unavailable" />
         </div>
       </Row>
 
       <Row title="Select">
-        <div className="w-full max-w-80">
+        <div className="w-full max-w-xs">
           <Select label="Category" defaultValue="rings">
             <option value="rings">Rings</option>
             <option value="necklaces">Necklaces</option>
@@ -130,7 +130,7 @@ export function GalleryClient() {
       </Row>
 
       <Row title="SegmentedControl — arrow-key navigable">
-        <div className="w-full max-w-96">
+        <div className="w-full max-w-sm">
           <SegmentedControl
             label="Metal and purity"
             options={METALS}
@@ -170,26 +170,26 @@ export function GalleryClient() {
       </Row>
 
       <Row title="Skeleton — must match final dimensions exactly">
-        <div className="flex w-full max-w-80 flex-col gap-2">
-          <Skeleton className="h-8 w-32" />
+        <div className="flex w-full max-w-xs flex-col gap-2">
+          <Skeleton className="h-8 w-[128px]" />
           <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-4 w-24" />
+          <Skeleton className="h-4 w-[96px]" />
         </div>
       </Row>
 
       <Row title="ImageFrame — empty state must look deliberate">
-        <div className="w-full max-w-64">
+        <div className="w-full max-w-3xs">
           <ImageFrame src={null} alt="" ratio="1/1" />
           <p className="mt-2 text-small text-muted">No URL — branded placeholder</p>
         </div>
-        <div className="w-full max-w-64">
+        <div className="w-full max-w-3xs">
           <ImageFrame src={null} alt="" ratio="16/9" rounded="field" />
           <p className="mt-2 text-small text-muted">16/9, field radius</p>
         </div>
       </Row>
 
       <Row title="EmptyState">
-        <Card className="w-full max-w-96" padded={false}>
+        <Card className="w-full max-w-sm" padded={false}>
           <EmptyState
             icon={<PackageOpen className="size-8" />}
             title="No purchases yet"

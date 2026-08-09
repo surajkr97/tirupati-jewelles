@@ -14,6 +14,17 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 
+/**
+ * Minimum tap target, with a sub-pixel tolerance.
+ *
+ * Chromium reports fractional geometry, and at `deviceScaleFactor: 2` a 44px control
+ * measured 43.99993896484375 under full-suite load while measuring exactly 44 when the file
+ * ran alone — 6e-5 of a pixel of float error, asserted against as though it were a design
+ * regression. The tolerance is 0.01px: far below anything a human or a layout can produce,
+ * and the next size down the scale is 40px, so a real miss still fails.
+ */
+const TAP_MIN = 44 - 0.01;
+
 /** The pricing formula, reimplemented from MASTER-SPEC §4 for independent verification. */
 function lineTotalPaise(
   ratePerGram: bigint,
@@ -502,7 +513,7 @@ test.describe('§5 DESIGN', () => {
       if (!box) continue;
       // MASTER-SPEC §3. The trash and duplicate icons sit side by side, where a miss
       // deletes the wrong row.
-      expect(box.height, `button ${i} height`).toBeGreaterThanOrEqual(44);
+      expect(box.height, `button ${i} height`).toBeGreaterThanOrEqual(TAP_MIN);
     }
   });
 });

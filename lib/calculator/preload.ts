@@ -19,7 +19,12 @@
  * arithmetic happens.
  */
 import { isPurityKey } from '@/lib/calculator/reducer';
-import { emptyItem, metalForPurity, type CalculatorItem } from '@/lib/calculator/types';
+import {
+  emptyItem,
+  metalForPurity,
+  type CalculatorItem,
+  type ItemDefaults,
+} from '@/lib/calculator/types';
 
 export const MAX_LABEL_LENGTH = 80;
 
@@ -33,6 +38,7 @@ const RUPEES_PATTERN = /^\d{1,9}(\.\d{1,2})?$/;
 export function preloadedItemFromParams(
   params: URLSearchParams,
   id: string,
+  defaults: ItemDefaults,
 ): CalculatorItem | null {
   const purity = params.get('purity');
   const weight = params.get('weight');
@@ -51,7 +57,7 @@ export function preloadedItemFromParams(
     return null;
   }
 
-  const item = emptyItem(id);
+  const item = emptyItem(id, defaults);
 
   if (purity && isPurityKey(purity)) {
     item.purity = purity;

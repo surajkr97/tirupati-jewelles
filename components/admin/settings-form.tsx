@@ -206,7 +206,7 @@ export function SettingsForm({ initial, envJitter }: SettingsFormProps) {
         {error && !error.field && (
           <p
             role="alert"
-            className="rounded-field bg-down/10 px-4 py-3 text-small text-down"
+            className="rounded-field bg-down/10 px-4 py-4 text-small text-down"
           >
             {error.message}
           </p>

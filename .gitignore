@@ -36,3 +36,6 @@ Thumbs.db
 
 # Preview photography — regenerate with scripts/fetch-photos.mjs. Never shipped.
 public/photos/
+
+# Written and removed by eslint-rules/no-off-scale-spacing.test.ts.
+eslint-rules/__probe.tsx

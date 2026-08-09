@@ -173,6 +173,14 @@ model Product {
   createdAt   DateTime       @default(now())
 
   @@index([categoryId, isActive])
+  /// Trigram index for prefix and typo-tolerant search (§6.4).
+  ///
+  /// Declared HERE rather than only in raw SQL, which is why it went missing: the
+  /// `product_search_index` migration created it by hand, and because it did not exist in
+  /// this schema the very next `prisma migrate dev` saw it as drift and DROPPED it. It was
+  /// absent from Phase 7 until Phase 9 found it — invisible at 25 products, because a
+  /// sequential scan is the correct plan at that size. See DEBT-023.
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin, map: "Product_name_trgm_idx")
 }
 
 model ProductImage {

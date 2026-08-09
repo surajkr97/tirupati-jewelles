@@ -34,7 +34,7 @@ export function TrustBlock({ hasHallmark, hallmarkNo, bisCertNo }: TrustBlockPro
 
       <div className="flex flex-col gap-4">
         <Item
-          icon={<BadgeCheck className="size-5" aria-hidden="true" />}
+          icon={<BadgeCheck className="size-icon" aria-hidden="true" />}
           title="BIS Hallmark"
         >
           {hallmarked ? (
@@ -61,7 +61,7 @@ export function TrustBlock({ hasHallmark, hallmarkNo, bisCertNo }: TrustBlockPro
         </Item>
 
         <Item
-          icon={<ShieldCheck className="size-5" aria-hidden="true" />}
+          icon={<ShieldCheck className="size-icon" aria-hidden="true" />}
           title="Certified by"
         >
           {bisCertNo ? (
@@ -80,7 +80,7 @@ export function TrustBlock({ hasHallmark, hallmarkNo, bisCertNo }: TrustBlockPro
         </Item>
 
         <Item
-          icon={<RefreshCw className="size-5" aria-hidden="true" />}
+          icon={<RefreshCw className="size-icon" aria-hidden="true" />}
           title="Buyback &amp; exchange"
         >
           <p className="text-small text-muted">

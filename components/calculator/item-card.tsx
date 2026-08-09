@@ -80,7 +80,7 @@ export function ItemCard({
         />
 
         <IconButton label={`Duplicate ${displayName}`} onClick={onDuplicate}>
-          <Copy className="size-5" aria-hidden="true" />
+          <Copy className="size-icon" aria-hidden="true" />
         </IconButton>
 
         <IconButton
@@ -88,7 +88,7 @@ export function ItemCard({
           onClick={onRemove}
           destructive
         >
-          <Trash2 className="size-5" aria-hidden="true" />
+          <Trash2 className="size-icon" aria-hidden="true" />
         </IconButton>
       </div>
 
@@ -193,7 +193,7 @@ export function ItemCard({
             <ChevronDown
               aria-hidden="true"
               className={cn(
-                'size-5 text-muted transition-transform duration-base ease-standard',
+                'size-icon text-muted transition-transform duration-base ease-standard',
                 showBreakdown && 'rotate-180',
               )}
             />

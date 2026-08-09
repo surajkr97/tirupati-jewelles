@@ -19,6 +19,7 @@ import { formatShopDate } from '@/lib/datetime';
 import { db } from '@/lib/db';
 import { formatINR } from '@/lib/money';
 import { getCurrentRates, RATE_FACES } from '@/lib/rates';
+import { cn } from '@/lib/utils/cn';
 
 export const dynamic = 'force-dynamic';
 
@@ -150,7 +151,7 @@ export default async function AdminDashboardPage() {
         {/* §7.2: "Low-signal alerts". Shown only when there is something to act on — an
             always-present "0 problems" panel is noise that trains people to skip it. */}
         {(staleRates.length > 0 || productsWithoutImages > 0) && (
-          <Card className="flex flex-col gap-3">
+          <Card className="flex flex-col gap-4">
             <h2 className="text-h3 font-semibold text-ink">Worth a look</h2>
             <ul className="flex flex-col gap-2">
               {staleRates.length > 0 && (
@@ -182,32 +183,42 @@ export default async function AdminDashboardPage() {
         )}
 
         {/* §8.7: "Total sold — today / week / month / all time, from `SUM(grandTotal)`.
-            Exclude voided orders." */}
+            Exclude voided orders."
+
+            The money tiles run full width below 640px. See DEBT-038 and D-036: a half-width
+            tile at 375px leaves 112px of text, which holds about ₹9,99,999 — so this grid
+            was already too narrow for an ordinary lakh-scale figure, and a shop past a
+            crore overflowed the page. The counts stay paired because a count is short. */}
         <div className="grid grid-cols-2 gap-4">
           <Stat
             label="Sold today"
             value={formatINR(totals.today.total)}
             sub={`${totals.today.count} orders`}
+            money
           />
           <Stat
             label="This week"
             value={formatINR(totals.week.total)}
             sub={`${totals.week.count} orders`}
+            money
           />
           <Stat
             label="This month"
             value={formatINR(totals.month.total)}
             sub={`${totals.month.count} orders`}
+            money
           />
           <Stat
             label="All time"
             value={formatINR(totals.allTime.total)}
             sub={`${totals.allTime.count} orders`}
+            money
           />
           <Stat
             label="Average order"
             value={formatINR(totals.averageOrder)}
             sub="all time"
+            money
           />
           <Stat
             label="Bills sent"
@@ -225,7 +236,7 @@ export default async function AdminDashboardPage() {
             <p className="text-body text-muted">No sales recorded yet.</p>
           ) : (
             <div
-              className="flex h-32 items-end gap-1"
+              className="flex h-[128px] items-end gap-1"
               role="img"
               aria-label="Daily sales for the last 30 days"
             >
@@ -252,11 +263,11 @@ export default async function AdminDashboardPage() {
               No orders yet. They appear here once you send a bill.
             </p>
           ) : (
-            <ul className="flex flex-col gap-3">
+            <ul className="flex flex-col gap-4">
               {recentOrders.map((order) => (
                 <li
                   key={order.id}
-                  className="flex items-center justify-between gap-4 border-b border-line pb-3 last:border-0 last:pb-0"
+                  className="flex items-center justify-between gap-4 border-b border-line pb-2 last:border-0 last:pb-0"
                 >
                   <div className="flex min-w-0 flex-col">
                     <p className="truncate text-body font-medium text-ink tabular">
@@ -276,7 +287,7 @@ export default async function AdminDashboardPage() {
           )}
         </Card>
 
-        <Card className="flex flex-col gap-3">
+        <Card className="flex flex-col gap-4">
           <h2 className="text-h3 font-semibold text-ink">More</h2>
           <div className="flex flex-wrap gap-2">
             {[
@@ -300,11 +311,40 @@ export default async function AdminDashboardPage() {
   );
 }
 
-function Stat({ label, value, sub }: { label: string; value: string; sub: string }) {
+/**
+ * One stat tile.
+ *
+ * `money` widens the tile to the full row below `sm`, rather than shrinking the figure or
+ * abbreviating it to `₹1.39 Cr` (D-036). The figure is the thing the owner came for; the
+ * type scale and the exact rupees both stay intact and the tile gives up the space instead.
+ * A column of five money tiles also shares one left edge, so the figures compare by eye —
+ * which a 2-up grid never did.
+ *
+ * `data-stat` is the regression test's hook: DEBT-038 hid inside real data, so
+ * `e2e/admin.spec.ts` substitutes a worst-case figure rather than trusting the seed.
+ */
+function Stat({
+  label,
+  value,
+  sub,
+  money = false,
+}: {
+  label: string;
+  value: string;
+  sub: string;
+  /** A rupee figure, which grows with the shop. Counts do not. */
+  money?: boolean;
+}) {
   return (
-    <Card className="flex flex-col gap-1">
+    <Card
+      className={cn('flex flex-col gap-1', money && 'col-span-2 sm:col-span-1')}
+      data-stat={label}
+      data-stat-kind={money ? 'money' : 'count'}
+    >
       <p className="text-small text-muted">{label}</p>
-      <p className="text-h2 font-semibold text-ink tabular">{value}</p>
+      <p className="text-h2 font-semibold text-ink tabular" data-stat-value>
+        {value}
+      </p>
       <p className="text-small text-muted">{sub}</p>
     </Card>
   );

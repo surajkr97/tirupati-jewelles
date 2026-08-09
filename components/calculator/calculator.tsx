@@ -30,7 +30,7 @@ import { Button, Skeleton, toast } from '@/components/ui';
 import { priceItems } from '@/lib/calculator/price-items';
 import { calculatorReducer, initialState } from '@/lib/calculator/reducer';
 import { clearItems, loadItems, saveItems } from '@/lib/calculator/storage';
-import type { CalculatorItem } from '@/lib/calculator/types';
+import type { CalculatorItem, ItemDefaults } from '@/lib/calculator/types';
 import { ratesByPurityFromApi } from '@/lib/rates.keys';
 import type { RatesByPurity } from '@/lib/pricing';
 
@@ -50,14 +50,16 @@ export interface CalculatorProps {
    * requires the price NOT to move; omitted on the live calculator, which fetches.
    */
   frozenRates?: RatesByPurity;
+  /** The shop's §7.9 prefills, read server-side and passed in. DEBT-024. */
+  defaults: ItemDefaults;
 }
 
-export function Calculator({ initialItems, frozenRates }: CalculatorProps) {
+export function Calculator({ initialItems, frozenRates, defaults }: CalculatorProps) {
   const [state, dispatch] = useReducer(
     calculatorReducer,
     initialItems && initialItems.length > 0
-      ? { items: initialItems, notice: null }
-      : initialState(newId()),
+      ? { items: initialItems, notice: null, defaults }
+      : initialState(newId(), defaults),
   );
 
   const [rates, setRates] = useState<RatesByPurity | null>(frozenRates ?? null);
@@ -187,7 +189,7 @@ export function Calculator({ initialItems, frozenRates }: CalculatorProps) {
       {ratesError && (
         <p
           role="alert"
-          className="rounded-field bg-down/10 px-4 py-3 text-small text-down"
+          className="rounded-field bg-down/10 px-4 py-4 text-small text-down"
         >
           Could not load today&rsquo;s rates. Totals are unavailable until the connection
           recovers.
@@ -234,9 +236,9 @@ export function Calculator({ initialItems, frozenRates }: CalculatorProps) {
           <StickyBar>
             <div className="flex flex-1 flex-col gap-2">
               <Skeleton className="h-4 w-16" />
-              <Skeleton className="h-8 w-40" />
+              <Skeleton className="h-8 w-[160px]" />
             </div>
-            <Skeleton className="h-control w-28 rounded-pill" />
+            <Skeleton className="h-control w-[112px] rounded-pill" />
           </StickyBar>
         </>
       )}

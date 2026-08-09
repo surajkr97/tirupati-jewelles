@@ -17,6 +17,7 @@ import Link from 'next/link';
 
 import { Section } from '@/components/shell';
 import { Badge, Button, Card } from '@/components/ui';
+import { rankedAdminProductIds } from '@/lib/admin/product-search';
 import { db } from '@/lib/db';
 import { formatINR } from '@/lib/money';
 import { calculateLine, type PurityKey, type RatesByPurity } from '@/lib/pricing';
@@ -56,10 +57,23 @@ export default async function AdminProductsPage({
     getCurrentRates().then(toRatesByPurity),
   ]);
 
+  /**
+   * Search runs through the §6.4 indexes, not `contains` (DEBT-023).
+   *
+   * `name: { contains: q }` could not rank, could not reach the description, and could not
+   * match a collection name — so an admin and a customer typing the same words got
+   * different answers, and only the customer's were ordered by relevance.
+   *
+   * Two steps: SQL ranks and returns IDs, Prisma applies the category/status filters and
+   * selects the columns. `rankedAdminProductIds` sees inactive products, which the
+   * storefront's search must never do — see the note in that module for why it is a
+   * separate query rather than a flag.
+   */
+  const rankedIds = q ? await rankedAdminProductIds(q) : null;
+
   const products = await db.product.findMany({
     where: {
-      // Prisma parameterises this; `q` never reaches SQL as text.
-      ...(q ? { name: { contains: q, mode: 'insensitive' as const } } : {}),
+      ...(rankedIds ? { id: { in: rankedIds } } : {}),
       ...(categorySlug ? { category: { slug: categorySlug } } : {}),
       ...(status === 'live'
         ? { isActive: true }
@@ -67,7 +81,9 @@ export default async function AdminProductsPage({
           ? { isActive: false }
           : {}),
     },
-    orderBy: [{ isActive: 'desc' }, { createdAt: 'desc' }],
+    // When searching, relevance is the order; `IN` does not preserve one, so the rank is
+    // reapplied below. Otherwise: live pieces first, newest first.
+    orderBy: rankedIds ? undefined : [{ isActive: 'desc' }, { createdAt: 'desc' }],
     take: 100,
     select: {
       id: true,
@@ -85,6 +101,12 @@ export default async function AdminProductsPage({
     },
   });
 
+  // `IN` does not preserve order, and relevance is the whole point of ranking it.
+  if (rankedIds) {
+    const rank = new Map(rankedIds.map((id, index) => [id, index]));
+    products.sort((a, b) => (rank.get(a.id) ?? 0) - (rank.get(b.id) ?? 0));
+  }
+
   return (
     <Section className="pt-6 pb-0">
       <div className="flex flex-col gap-6">
@@ -101,7 +123,7 @@ export default async function AdminProductsPage({
         </div>
 
         {/* A plain GET form: no JavaScript needed, and the result is a shareable URL. */}
-        <form className="flex flex-col gap-3" action="/admin/products">
+        <form className="flex flex-col gap-4" action="/admin/products">
           <input
             type="search"
             name="q"
@@ -110,7 +132,7 @@ export default async function AdminProductsPage({
             aria-label="Search products"
             className="h-control w-full rounded-field bg-white px-4 text-body text-ink ring-1 ring-line ring-inset focus:ring-2 focus:ring-ink focus:outline-none"
           />
-          <div className="flex gap-3">
+          <div className="flex gap-2">
             <select
               name="category"
               defaultValue={categorySlug ?? ''}
@@ -145,7 +167,7 @@ export default async function AdminProductsPage({
             <p className="text-body text-muted">Nothing matches those filters.</p>
           </Card>
         ) : (
-          <ul className="flex flex-col gap-3">
+          <ul className="flex flex-col gap-4">
             {products.map((product) => {
               const price = priceOf(product, rates);
               return (

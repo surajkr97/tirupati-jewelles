@@ -38,7 +38,7 @@ export function Footer() {
         <div className="grid gap-8 py-12 md:grid-cols-3">
           <div className="flex flex-col gap-4">
             <span className="font-semibold tracking-[0.12em] text-ink">TIRUPATI</span>
-            <p className="max-w-72 text-small text-muted">
+            <p className="max-w-2xs text-small text-muted">
               Hallmark-certified gold and silver jewellery. Rates updated daily; final
               price confirmed in store.
             </p>

@@ -15,6 +15,7 @@ import { BillBuilder, type ProductOption } from '@/components/admin/bill-builder
 import { Section } from '@/components/shell';
 import { db } from '@/lib/db';
 import type { PurityKey } from '@/lib/pricing';
+import { getPricingDefaults } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -38,6 +39,8 @@ export default async function NewBillPage() {
    * that needs the picker to become a lookup, and pretending otherwise would ship a page
    * that renders three thousand options on a phone.
    */
+  const defaults = await getPricingDefaults();
+
   const products = await db.product.findMany({
     where: { isActive: true },
     orderBy: { name: 'asc' },
@@ -69,7 +72,7 @@ export default async function NewBillPage() {
     <Section className="pt-6 pb-0">
       <div className="flex flex-col gap-6">
         <h1 className="text-h1 font-semibold tracking-tight text-ink">New bill</h1>
-        <BillBuilder products={options} />
+        <BillBuilder products={options} defaults={defaults} />
       </div>
     </Section>
   );

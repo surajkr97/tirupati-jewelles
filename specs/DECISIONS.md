@@ -928,3 +928,120 @@ meaning anything; what makes it defensible here is that the measurement came fir
 attribution names every kilobyte, and the alternative was changing frameworks.
 
 The other five lines pass and were never in question.
+
+---
+
+## D-036 — the dashboard money tiles run full width below 640px, rather than shrinking or abbreviating the figure
+
+**Raised as:** DEBT-038 — `/admin` overflowed at 375px once the shop's figures passed ₹1
+crore. DEBUG diagnosed it to the element and left the remedy to DESIGN, naming three
+candidates: stack the tiles, drop a step on the §3 type scale, or abbreviate to `₹1.14 Cr`.
+
+**Measured first, because two of the three candidates fail on measurement.** A half-width
+tile at 375px is a 160px card with 24px padding, so the figure gets **112px**. Rendered text
+width in the tile's own font, from a `Range` around the text node:
+
+| Figure          |            | at 24px (`h2`, today) | at 20px (`h3`) | at 16px (`body`) |
+| :-------------- | :--------- | --------------------: | -------------: | ---------------: |
+| `₹99,999`       | ₹1 lakh    |               97.6 ✅ |        81.3 ✅ |          65.0 ✅ |
+| `₹9,99,999`     | ₹10 lakh   |              119.5 ❌ |        99.6 ✅ |          79.7 ✅ |
+| `₹99,99,999`    | ₹1 crore   |              135.1 ❌ |       112.6 ❌ |          90.0 ✅ |
+| `₹9,99,99,999`  | ₹10 crore  |              157.0 ❌ |       130.9 ❌ |         104.7 ✅ |
+| `₹99,99,99,999` | ₹100 crore |              172.6 ❌ |       143.8 ❌ |         115.0 ❌ |
+
+**The defect is older and larger than the ticket says.** At the current type step the widest
+figure that fits a half-width tile is `₹99,999`. The grid has therefore been too narrow since
+the shop's totals passed **₹1 lakh**, not ₹1 crore; a crore is merely where the overflow grew
+past the viewport and tripped the E2E assertion. The seeded average order — `₹2,47,796` — does
+not fit either, and never did.
+
+**Why not the type step.** One step down (`h2` → `h3`) still overflows at a crore, by 0.6px.
+Reaching a crore needs `body` — 16px — which is one pixel above the floor DESIGN's mandate
+sets, stops the figure being a headline at all, and still fails at ₹100 crore. It buys one
+order of magnitude for the whole visual hierarchy of the screen.
+
+**Why not abbreviation.** `₹1.39 Cr` fits comfortably, and it is what a consumer analytics
+dashboard would do. This is not one: it is the till. The owner opens `/admin` to see what the
+shop took, and `₹1.39 Cr` is not that number — it is a rounding of it that happens to look
+like a number. Every other money surface in this application shows exact rupees, and the one
+screen where the money is the owner's own is the wrong place to start rounding.
+
+**Chosen: give the figure the room.** The five money tiles span the full row below `sm`
+(640px) and pair up again above it; the two count tiles stay paired at every width, because a
+count is short and the measurement says so. The full-width inner box is **287px**, which holds
+`₹9,99,99,99,999` (₹1000 crore, 194.5px) with 92px to spare — so this does not need revisiting
+as the shop grows.
+
+It also follows DESIGN's own mandate in AGENTS.md, which had already answered the question:
+_"If a section feels tight, the fix is more padding, not smaller text."_ Nothing is lost —
+type scale unchanged, precision unchanged, `tabular` unchanged — and one thing is gained:
+five figures in a single column share a left edge, so they compare by eye, which the 2-up
+grid never allowed.
+
+**Cost, stated plainly:** about 180px more scrolling on the dashboard at 375px.
+
+**The regression test does not trust the data.** DEBT-038 hid inside an empty database for two
+phases, so `e2e/admin.spec.ts` substitutes a ₹1000-crore figure into every money tile and a
+five-digit count into every count tile, then measures. It fails against the pre-fix layout
+with `"Sold today" is 195px of figure in a 112px box`.
+
+---
+
+## D-037 — `defaultGstPct` is live pricing input; `defaultMakingPct` is only a prefill
+
+**Raised as:** DEBT-024 — Phase 7 §7.9 stored both figures and no pricing surface read either
+of them. Phase 8 wired `billPrefix` and the shop identity block onto the invoice, which left
+these two as the last write-only settings in the application.
+
+**Why it waited for Phase 9.** DEBT-001. Until the client's CA confirmed that making charges
+sit inside the taxable value, the GST _base_ was contested — and making the _rate_
+configurable while the base was unsettled would have produced invoices that were wrong in two
+independent ways at once, with no way to tell which. DEBT-001 closed, so the base is fixed and
+the rate is safe to move.
+
+**The two fields are not a pair, and treating them as one would be a bug.**
+
+| Setting            | Role                                                                      | Read by                                                                           |
+| :----------------- | :------------------------------------------------------------------------ | :-------------------------------------------------------------------------------- |
+| `defaultGstPct`    | **Live input.** Changing it changes what every customer sees, immediately | product cards, product page, search, calculator, bill lines with no explicit rate |
+| `defaultMakingPct` | **Prefill only.** Changing it must reprice nothing that already exists    | a new calculator line, a new bill line, a new product form                        |
+
+A product carries its own `makingPct` column and a bill line carries its own snapshot, so
+making is _per item_ and the setting is only the figure a blank form starts at. GST is not
+stored on a product at all — the price is a function of today's rate and today's rate of tax —
+so that one is genuinely live. `lib/settings.ts` keeps the two roles apart in its own docstring
+rather than exposing an undifferentiated "settings" object that invites a caller to use the
+wrong one.
+
+**Already-raised bills are untouched, and that is structural rather than careful.** §8.2
+snapshots `ratePerGram`, `makingPct` and `gstPct` onto every `OrderItem` inside the
+transaction. Whatever the default resolves to at the moment a bill is raised is frozen onto
+that bill, so an invoice reprints identically years later. Without that snapshot rule this
+setting could not have been made configurable at all.
+
+**Shape of the wiring.** `getPricingDefaults()` is cache-aside on Redis (300s, the same window
+as rates) and falls back to `SPEC_PRICING_DEFAULTS` — MASTER-SPEC §4's 3% and the commonest
+§5.4 making chip — when there is no row. It reads through `cached()`, which never throws, so a
+Redis outage degrades to a Postgres read.
+
+Three consequences worth stating:
+
+1. **`priceProduct(row, rates, gstPct)` takes the rate as a required parameter** rather than
+   reading settings itself. A page renders 24 cards; a lookup inside the pricer would be 24
+   lookups, and the function would have to become async and stop being unit-testable without
+   I/O. Required rather than defaulted, so a new call site is a compile error instead of a
+   silent 3% — which is the exact failure mode this decision closes.
+2. **The calculator reducer carries the defaults in its state.** `ADD_ITEM`, `CLEAR_ALL` and
+   the last `REMOVE_ITEM` all mint blank lines long after the component that knew the settings
+   was consulted, and a reducer that reached outside itself for them would stop being the pure
+   function of `(state, action)` that §5.3 chose `useReducer` to get. A restored draft keeps
+   its own per-item figures — a settings change applies to the next blank line, never to the
+   estimate someone is already looking at.
+3. **`/calculator` is now ISR 300 rather than prerendered once.** It reads the prefill
+   server-side, so it joins `SETTINGS_SURFACES` and refreshes on a settings change the way the
+   rate surfaces refresh on a rate change. It is still a static shell around a client island;
+   MASTER-SPEC §6's requirement is unchanged.
+
+**The invalidation follows `setRate`'s ordering exactly** — drop the cache, _then_ revalidate
+the pages. D-012 records why: a page regenerated first reads the stale value and re-caches it
+for its whole ISR window, which Phase 4 measured rather than guessed.

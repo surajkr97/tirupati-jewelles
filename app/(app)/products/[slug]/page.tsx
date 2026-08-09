@@ -111,7 +111,7 @@ export default async function ProductPage({ params }: { params: Params }) {
 
             <Card className="flex flex-col gap-4">
               <h2 className="text-h3 font-semibold text-ink">Specifications</h2>
-              <dl className="flex flex-col gap-3 text-body">
+              <dl className="flex flex-col gap-4 text-body">
                 <Spec label="Metal & purity" value={PURITY_LABEL[product.purity]} />
                 <Spec label="Gross weight" value={`${grams(product.weightMg)} g`} />
                 <Spec label="Making charge" value={`${product.makingPct}%`} />

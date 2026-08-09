@@ -60,6 +60,12 @@
   --spacing-px: 1px;
   --spacing-full: 100%;
 
+  /* Icon boxes. Not "spacing" in the design sense — the comment above says these get their
+     own token, and Phase 9 (DEBT-032) found 19 `size-5` classes that were emitting no CSS
+     at all because 5 is not on the scale. 20px is the size every lucide icon in this
+     codebase was already asking for. */
+  --spacing-icon: 20px;
+
   /* Control heights. 44px is the minimum tap target (MASTER-SPEC §3). */
   --spacing-tap: 44px;
   /* Single source of truth for the mobile bottom nav. BottomNav sets its height from

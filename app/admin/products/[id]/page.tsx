@@ -17,6 +17,7 @@ import { Card } from '@/components/ui';
 import { db } from '@/lib/db';
 import { PURITIES, type PurityKey } from '@/lib/pricing';
 import { getCurrentRates, toRatesByPurity } from '@/lib/rates';
+import { getPricingDefaults } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
 
@@ -29,7 +30,7 @@ export default async function EditProductPage({
 }) {
   const { id } = await params;
 
-  const [product, categories, rates, settings] = await Promise.all([
+  const [product, categories, rates, defaults] = await Promise.all([
     db.product.findUnique({
       where: { id },
       include: { images: { orderBy: { sortOrder: 'asc' } } },
@@ -39,7 +40,7 @@ export default async function EditProductPage({
       select: { id: true, name: true },
     }),
     getCurrentRates().then(toRatesByPurity),
-    db.settings.findUnique({ where: { id: 'singleton' } }),
+    getPricingDefaults(),
   ]);
 
   if (!product) notFound();
@@ -71,7 +72,8 @@ export default async function EditProductPage({
               PURITIES.map((purity) => [purity, rates[purity].toString()]),
             ) as Record<PurityKey, string>
           }
-          gstPct={Number(settings?.defaultGstPct ?? 3)}
+          gstPct={defaults.gstPct}
+          defaultMakingPct={defaults.makingPct}
           initial={{
             id: product.id,
             name: product.name,
@@ -98,7 +100,7 @@ export default async function EditProductPage({
           }))}
         />
 
-        <Card className="flex flex-col gap-3">
+        <Card className="flex flex-col gap-4">
           <h2 className="text-h3 font-semibold text-ink">Removing a piece</h2>
           {/*
             §7.4: "Delete is a soft delete (isActive = false). Hard-deleting a product

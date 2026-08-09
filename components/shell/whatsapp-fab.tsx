@@ -61,7 +61,7 @@ export function WhatsAppFab() {
         // Clears the mobile bottom nav, and sits at a normal inset on desktop where there
         // is none.
         'bottom-[calc(var(--spacing-bottom-nav)+env(safe-area-inset-bottom)+16px)] md:bottom-8',
-        'flex size-14 items-center justify-center rounded-pill',
+        'flex size-control-lg items-center justify-center rounded-pill',
         'bg-taupe-deep text-white shadow-lift',
         'transition-transform duration-fast ease-standard active:scale-[0.98]',
         'focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none',

@@ -14,17 +14,24 @@ import { useMemo } from 'react';
 
 import { Calculator } from '@/components/calculator/calculator';
 import { preloadedItemFromParams } from '@/lib/calculator/preload';
+import type { ItemDefaults } from '@/lib/calculator/types';
 
-export function CalculatorIsland() {
+export function CalculatorIsland({ defaults }: { defaults: ItemDefaults }) {
   const searchParams = useSearchParams();
 
   const preloaded = useMemo(
     // A fixed id: this item is created once, from the URL, and never needs to be
     // distinguished from another preloaded one.
     () =>
-      preloadedItemFromParams(new URLSearchParams(searchParams.toString()), 'preloaded'),
-    [searchParams],
+      preloadedItemFromParams(
+        new URLSearchParams(searchParams.toString()),
+        'preloaded',
+        defaults,
+      ),
+    [searchParams, defaults],
   );
 
-  return <Calculator initialItems={preloaded ? [preloaded] : undefined} />;
+  return (
+    <Calculator initialItems={preloaded ? [preloaded] : undefined} defaults={defaults} />
+  );
 }

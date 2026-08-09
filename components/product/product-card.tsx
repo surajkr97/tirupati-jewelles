@@ -36,7 +36,7 @@ export function ProductCard({
   return (
     <Link
       href={`/products/${product.slug}`}
-      className="group flex flex-col gap-3 rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
+      className="group flex flex-col gap-4 rounded-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ink"
       data-testid="product-card"
     >
       <ImageFrame

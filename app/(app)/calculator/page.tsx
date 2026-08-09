@@ -10,6 +10,12 @@
  * calls `useSearchParams` for the §5.6 preload, and without a boundary that would opt the
  * whole route out of prerendering — turning the static shell this section specifies into a
  * per-request render.
+ *
+ * Phase 9 (DEBT-024) made the page read the shop's §7.9 pricing defaults. That is a server
+ * read, so the shell now revalidates on the same 300s window as every other price surface
+ * rather than being prerendered once at build; `SETTINGS_SURFACES` in `lib/settings.ts`
+ * refreshes it immediately when the owner changes a default. The shell is still static HTML
+ * around a client island — the §6 requirement is unchanged.
  */
 import type { Metadata } from 'next';
 import { Suspense } from 'react';
@@ -17,6 +23,9 @@ import { Suspense } from 'react';
 import { CalculatorIsland } from '@/components/calculator/calculator-island';
 import { Section } from '@/components/shell';
 import { Skeleton } from '@/components/ui';
+import { getPricingDefaults } from '@/lib/settings';
+
+export const revalidate = 300;
 
 export const metadata: Metadata = {
   title: 'Price calculator',
@@ -24,7 +33,9 @@ export const metadata: Metadata = {
     'Price several pieces at once with today’s gold and silver rates, making charges and GST included.',
 };
 
-export default function CalculatorPage() {
+export default async function CalculatorPage() {
+  const defaults = await getPricingDefaults();
+
   return (
     <Section className="pt-8 pb-0 md:pt-12">
       <div className="flex flex-col gap-6">
@@ -38,7 +49,7 @@ export default function CalculatorPage() {
         </div>
 
         <Suspense fallback={<CalculatorSkeleton />}>
-          <CalculatorIsland />
+          <CalculatorIsland defaults={defaults} />
         </Suspense>
       </div>
     </Section>

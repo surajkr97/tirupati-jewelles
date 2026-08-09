@@ -123,7 +123,7 @@ export function MediaSlotCard({
           <h2 className="text-h3 font-semibold text-ink">{label}</h2>
           <p className="text-small text-muted">{where}</p>
         </div>
-        <p className="shrink-0 rounded-pill bg-taupe-lt/50 px-3 py-1 text-small text-ink tabular">
+        <p className="shrink-0 rounded-pill bg-taupe-lt/50 px-2 py-1 text-small text-ink tabular">
           {recommended}
         </p>
       </div>

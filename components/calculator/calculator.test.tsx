@@ -25,7 +25,7 @@ vi.mock('@/lib/env', () => ({
 import { Calculator } from '@/components/calculator/calculator';
 import { MAX_ITEMS } from '@/lib/calculator/reducer';
 import { STORAGE_KEY } from '@/lib/calculator/storage';
-import type { CalculatorItem } from '@/lib/calculator/types';
+import { SPEC_ITEM_DEFAULTS, type CalculatorItem } from '@/lib/calculator/types';
 
 const API_PAYLOAD = {
   gold22: {
@@ -106,14 +106,14 @@ async function settle() {
 
 describe('first paint', () => {
   it('starts with one item card — never an empty screen (§5.4)', async () => {
-    render(<Calculator />);
+    render(<Calculator defaults={SPEC_ITEM_DEFAULTS} />);
     await settle();
 
     expect(screen.getAllByTestId('item-card')).toHaveLength(1);
   });
 
   it('shows a skeleton total bar until rates arrive, then the real one', async () => {
-    render(<Calculator />);
+    render(<Calculator defaults={SPEC_ITEM_DEFAULTS} />);
 
     // §5.4: "Skeleton state matching final dimensions exactly — zero layout shift."
     expect(screen.queryByTestId('grand-total')).not.toBeInTheDocument();
@@ -124,7 +124,7 @@ describe('first paint', () => {
   });
 
   it('prices a preloaded item', async () => {
-    render(<Calculator initialItems={[ITEM]} />);
+    render(<Calculator defaults={SPEC_ITEM_DEFAULTS} initialItems={[ITEM]} />);
     await settle();
 
     expect(screen.getByTestId('grand-total')).toHaveTextContent('₹1,36,609');
@@ -134,7 +134,7 @@ describe('first paint', () => {
 describe('adding, duplicating and removing', () => {
   it('adds an item', async () => {
     const user = userEvent.setup();
-    render(<Calculator />);
+    render(<Calculator defaults={SPEC_ITEM_DEFAULTS} />);
     await settle();
 
     await user.click(screen.getByRole('button', { name: /Add another item/i }));
@@ -144,7 +144,7 @@ describe('adding, duplicating and removing', () => {
 
   it('duplicating copies the values and doubles the total', async () => {
     const user = userEvent.setup();
-    render(<Calculator initialItems={[ITEM]} />);
+    render(<Calculator defaults={SPEC_ITEM_DEFAULTS} initialItems={[ITEM]} />);
     await settle();
 
     await user.click(screen.getByRole('button', { name: /Duplicate Chain/i }));
@@ -157,7 +157,12 @@ describe('adding, duplicating and removing', () => {
 
   it('removing an item drops it from the total', async () => {
     const user = userEvent.setup();
-    render(<Calculator initialItems={[ITEM, { ...ITEM, id: 'b', label: 'Ring' }]} />);
+    render(
+      <Calculator
+        defaults={SPEC_ITEM_DEFAULTS}
+        initialItems={[ITEM, { ...ITEM, id: 'b', label: 'Ring' }]}
+      />,
+    );
     await settle();
 
     expect(screen.getByTestId('grand-total')).toHaveTextContent('₹2,73,218');
@@ -171,7 +176,7 @@ describe('adding, duplicating and removing', () => {
 
   it('removing the only item leaves a blank card rather than an empty screen', async () => {
     const user = userEvent.setup();
-    render(<Calculator initialItems={[ITEM]} />);
+    render(<Calculator defaults={SPEC_ITEM_DEFAULTS} initialItems={[ITEM]} />);
     await settle();
 
     await user.click(screen.getByRole('button', { name: /Clear Chain/i }));
@@ -186,6 +191,7 @@ describe(`the ${MAX_ITEMS}-item cap`, () => {
   it('stops adding and explains why, rather than a button that does nothing', async () => {
     render(
       <Calculator
+        defaults={SPEC_ITEM_DEFAULTS}
         initialItems={Array.from({ length: MAX_ITEMS }, (_, i) => ({
           ...ITEM,
           id: `i${i}`,
@@ -204,6 +210,7 @@ describe(`the ${MAX_ITEMS}-item cap`, () => {
   it(`totals ${MAX_ITEMS} items correctly`, async () => {
     render(
       <Calculator
+        defaults={SPEC_ITEM_DEFAULTS}
         initialItems={Array.from({ length: MAX_ITEMS }, (_, i) => ({
           ...ITEM,
           id: `i${i}`,
@@ -220,7 +227,12 @@ describe(`the ${MAX_ITEMS}-item cap`, () => {
 describe('typing', () => {
   it('recalculates after the debounce', async () => {
     const user = userEvent.setup();
-    render(<Calculator initialItems={[{ ...ITEM, weightGrams: '' }]} />);
+    render(
+      <Calculator
+        defaults={SPEC_ITEM_DEFAULTS}
+        initialItems={[{ ...ITEM, weightGrams: '' }]}
+      />,
+    );
     await settle();
 
     expect(screen.getByTestId('grand-total')).toHaveTextContent('₹0');
@@ -233,7 +245,12 @@ describe('typing', () => {
 
   it('shows a field error for text in a numeric field, and keeps other items totalling', async () => {
     const user = userEvent.setup();
-    render(<Calculator initialItems={[ITEM, { ...ITEM, id: 'b', weightGrams: '' }]} />);
+    render(
+      <Calculator
+        defaults={SPEC_ITEM_DEFAULTS}
+        initialItems={[ITEM, { ...ITEM, id: 'b', weightGrams: '' }]}
+      />,
+    );
     await settle();
 
     const secondCard = screen.getAllByTestId('item-card')[1]!;
@@ -251,7 +268,7 @@ describe('typing', () => {
 
   it('a making-charge chip sets the value', async () => {
     const user = userEvent.setup();
-    render(<Calculator initialItems={[ITEM]} />);
+    render(<Calculator defaults={SPEC_ITEM_DEFAULTS} initialItems={[ITEM]} />);
     await settle();
 
     await user.click(screen.getByRole('button', { name: '15%' }));
@@ -264,7 +281,7 @@ describe('typing', () => {
 
   it('switching purity reprices against the other metal', async () => {
     const user = userEvent.setup();
-    render(<Calculator initialItems={[ITEM]} />);
+    render(<Calculator defaults={SPEC_ITEM_DEFAULTS} initialItems={[ITEM]} />);
     await settle();
 
     await user.click(screen.getByRole('radio', { name: 'Silver' }));
@@ -278,7 +295,7 @@ describe('typing', () => {
 describe('sessionStorage — §5.3, an accidental refresh loses nothing', () => {
   it('persists items as they change', async () => {
     const user = userEvent.setup();
-    render(<Calculator />);
+    render(<Calculator defaults={SPEC_ITEM_DEFAULTS} />);
     await settle();
 
     await user.type(screen.getByLabelText('Weight'), '12.5');
@@ -297,7 +314,7 @@ describe('sessionStorage — §5.3, an accidental refresh loses nothing', () => 
     );
 
     // A fresh mount is what a refresh looks like to the component.
-    render(<Calculator />);
+    render(<Calculator defaults={SPEC_ITEM_DEFAULTS} />);
     await settle();
 
     expect(screen.getAllByTestId('item-card')).toHaveLength(2);
@@ -311,7 +328,12 @@ describe('sessionStorage — §5.3, an accidental refresh loses nothing', () => 
       JSON.stringify([{ ...ITEM, label: 'Old draft' }]),
     );
 
-    render(<Calculator initialItems={[{ ...ITEM, label: 'From the link' }]} />);
+    render(
+      <Calculator
+        defaults={SPEC_ITEM_DEFAULTS}
+        initialItems={[{ ...ITEM, label: 'From the link' }]}
+      />,
+    );
     await settle();
 
     // Opening someone's shared link must not silently swap in your own old draft.
@@ -321,7 +343,7 @@ describe('sessionStorage — §5.3, an accidental refresh loses nothing', () => 
 
   it('clear all wipes the stored draft too', async () => {
     const user = userEvent.setup();
-    render(<Calculator initialItems={undefined} />);
+    render(<Calculator defaults={SPEC_ITEM_DEFAULTS} initialItems={undefined} />);
     await settle();
 
     await user.type(screen.getByLabelText('Weight'), '10');
@@ -338,7 +360,7 @@ describe('sessionStorage — §5.3, an accidental refresh loses nothing', () => 
 describe('the breakdown', () => {
   it('expands to show every component, and they add up', async () => {
     const user = userEvent.setup();
-    render(<Calculator initialItems={[ITEM]} />);
+    render(<Calculator defaults={SPEC_ITEM_DEFAULTS} initialItems={[ITEM]} />);
     await settle();
 
     await user.click(screen.getByRole('button', { name: /Show breakdown/i }));

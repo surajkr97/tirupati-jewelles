@@ -193,10 +193,10 @@ export function ProductImages({
           No images yet — the site shows a branded placeholder until you add one.
         </p>
       ) : (
-        <ul className="flex flex-col gap-3">
+        <ul className="flex flex-col gap-4">
           {images.map((image, index) => (
-            <li key={image.id} className="flex items-center gap-3">
-              <div className="w-20 shrink-0">
+            <li key={image.id} className="flex items-center gap-2">
+              <div className="w-16 shrink-0">
                 <ImageFrame
                   src={image.url}
                   alt={image.alt}
@@ -216,14 +216,14 @@ export function ProductImages({
                   disabled={index === 0 || pending}
                   onClick={() => move(index, -1)}
                 >
-                  <ArrowUp className="size-5" aria-hidden="true" />
+                  <ArrowUp className="size-icon" aria-hidden="true" />
                 </IconButton>
                 <IconButton
                   label={`Move image ${index + 1} down`}
                   disabled={index === images.length - 1 || pending}
                   onClick={() => move(index, 1)}
                 >
-                  <ArrowDown className="size-5" aria-hidden="true" />
+                  <ArrowDown className="size-icon" aria-hidden="true" />
                 </IconButton>
                 <IconButton
                   label={`Remove image ${index + 1}`}
@@ -231,7 +231,7 @@ export function ProductImages({
                   disabled={pending}
                   onClick={() => remove(image.id)}
                 >
-                  <Trash2 className="size-5" aria-hidden="true" />
+                  <Trash2 className="size-icon" aria-hidden="true" />
                 </IconButton>
               </div>
             </li>
@@ -239,7 +239,7 @@ export function ProductImages({
         </ul>
       )}
 
-      <div className="flex flex-col gap-3 border-t border-line pt-4">
+      <div className="flex flex-col gap-4 border-t border-line pt-4">
         <Input
           label="Image URL"
           inputMode="url"

@@ -123,17 +123,17 @@ export function CategoryManager({ categories: initial }: { categories: CategoryR
       {error && (
         <p
           role="alert"
-          className="rounded-field bg-down/10 px-4 py-3 text-small text-down"
+          className="rounded-field bg-down/10 px-4 py-4 text-small text-down"
           data-testid="category-error"
         >
           {error}
         </p>
       )}
 
-      <ul className="flex flex-col gap-3">
+      <ul className="flex flex-col gap-4">
         {categories.map((row, index) => (
           <li key={row.id}>
-            <Card className="flex items-center gap-3">
+            <Card className="flex items-center gap-2">
               <div className="flex min-w-0 flex-1 flex-col gap-1">
                 <p className="truncate text-body font-medium text-ink">{row.name}</p>
                 <p className="text-small text-muted">
@@ -149,21 +149,21 @@ export function CategoryManager({ categories: initial }: { categories: CategoryR
                   disabled={index === 0 || pending}
                   onClick={() => move(index, -1)}
                 >
-                  <ArrowUp className="size-5" aria-hidden="true" />
+                  <ArrowUp className="size-icon" aria-hidden="true" />
                 </IconButton>
                 <IconButton
                   label={`Move ${row.name} down`}
                   disabled={index === categories.length - 1 || pending}
                   onClick={() => move(index, 1)}
                 >
-                  <ArrowDown className="size-5" aria-hidden="true" />
+                  <ArrowDown className="size-icon" aria-hidden="true" />
                 </IconButton>
                 <button
                   type="button"
                   onClick={() => toggle(row)}
                   disabled={pending}
                   aria-pressed={row.isActive}
-                  className="h-tap shrink-0 rounded-pill px-3 text-small font-semibold text-ink ring-1 ring-line ring-inset disabled:opacity-40"
+                  className="h-tap shrink-0 rounded-pill px-4 text-small font-semibold text-ink ring-1 ring-line ring-inset disabled:opacity-40"
                 >
                   {row.isActive ? 'On' : 'Off'}
                 </button>
@@ -173,7 +173,7 @@ export function CategoryManager({ categories: initial }: { categories: CategoryR
                   disabled={pending}
                   onClick={() => remove(row)}
                 >
-                  <Trash2 className="size-5" aria-hidden="true" />
+                  <Trash2 className="size-icon" aria-hidden="true" />
                 </IconButton>
               </div>
             </Card>
@@ -181,7 +181,7 @@ export function CategoryManager({ categories: initial }: { categories: CategoryR
         ))}
       </ul>
 
-      <Card className="flex flex-col gap-3">
+      <Card className="flex flex-col gap-4">
         <Input
           label="New collection"
           value={newName}

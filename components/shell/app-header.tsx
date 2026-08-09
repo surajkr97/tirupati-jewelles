@@ -55,14 +55,14 @@ export function AppHeader({ overlay = false }: AppHeaderProps) {
               aria-label="Search"
               className="grid size-tap place-items-center rounded-pill text-ink transition-colors duration-fast hover:bg-taupe-lt/40"
             >
-              <Search className="size-5" aria-hidden="true" />
+              <Search className="size-icon" aria-hidden="true" />
             </Link>
             <Link
               href="/account"
               aria-label="Account"
               className="grid size-tap place-items-center rounded-pill text-ink transition-colors duration-fast hover:bg-taupe-lt/40"
             >
-              <User className="size-5" aria-hidden="true" />
+              <User className="size-icon" aria-hidden="true" />
             </Link>
           </div>
         </div>

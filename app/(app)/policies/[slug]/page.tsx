@@ -92,7 +92,7 @@ export default async function PolicyPage({ params }: { params: Params }) {
         </div>
 
         <Card className="flex flex-col gap-4">
-          <ul className="flex list-disc flex-col gap-3 pl-5 text-body text-ink">
+          <ul className="flex list-disc flex-col gap-4 pl-6 text-body text-ink">
             {policy.points.map((point) => (
               <li key={point}>{point}</li>
             ))}

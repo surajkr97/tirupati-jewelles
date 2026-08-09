@@ -27,6 +27,7 @@ import {
 } from '@/lib/catalog/products';
 import { db } from '@/lib/db';
 import { getCurrentRates, toRatesByPurity } from '@/lib/rates';
+import { getPricingDefaults } from '@/lib/settings';
 import { cached } from '@/lib/redis';
 
 /** §6.4: "results cached in Redis 300s". */
@@ -120,12 +121,13 @@ export async function searchProducts(rawQuery: string): Promise<SearchResult> {
 
   if (ids.length === 0) return { products: [], query, tooShort: false };
 
-  const [rows, rates] = await Promise.all([
+  const [rows, rates, defaults] = await Promise.all([
     db.product.findMany({
       where: { id: { in: ids }, isActive: true },
       select: PRODUCT_CARD_SELECT,
     }),
     getCurrentRates().then(toRatesByPurity),
+    getPricingDefaults(),
   ]);
 
   // `IN` does not preserve order, and the ranking is the whole value of the search.
@@ -135,7 +137,7 @@ export async function searchProducts(rawQuery: string): Promise<SearchResult> {
   );
 
   return {
-    products: sorted.map((row) => priceProduct(row, rates)),
+    products: sorted.map((row) => priceProduct(row, rates, defaults.gstPct)),
     query,
     tooShort: false,
   };

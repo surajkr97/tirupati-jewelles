@@ -45,7 +45,7 @@ export function PriceBreakdown({
         announcing "Metal value, ₹61,540" is exactly right. `tabular` aligns the digits so
         the column reads as a column — §6 DESIGN asks for it to be scannable and aligned.
       */}
-      <dl className="flex flex-col gap-3 text-body">
+      <dl className="flex flex-col gap-4 text-body">
         <Row
           label="Metal value"
           detail={`${grams(weightMg)} g × ${formatINR(ratePerGram)}/g`}
@@ -55,7 +55,7 @@ export function PriceBreakdown({
         <Row label="Stone / other" value={price.stoneCharge} />
         <Row label={`GST (${gstPct}%)`} value={price.gstAmount} />
 
-        <div className="flex items-baseline justify-between gap-4 border-t border-line pt-3">
+        <div className="flex items-baseline justify-between gap-4 border-t border-line pt-4">
           <dt className="text-h3 font-semibold text-ink">Total</dt>
           <dd
             className="text-h2 font-semibold text-ink tabular"

@@ -82,7 +82,7 @@ export default async function AdminRatesPage() {
           {history.length === 0 ? (
             <p className="text-body text-muted">No rate changes recorded yet.</p>
           ) : (
-            <ul className="flex flex-col gap-3">
+            <ul className="flex flex-col gap-4">
               {history.map((entry) => {
                 const before = readRate(entry.before);
                 const after = readRate(entry.after);
@@ -94,7 +94,7 @@ export default async function AdminRatesPage() {
                 return (
                   <li
                     key={entry.id}
-                    className="flex flex-col gap-1 border-b border-line pb-3 last:border-0 last:pb-0"
+                    className="flex flex-col gap-1 border-b border-line pb-2 last:border-0 last:pb-0"
                   >
                     <p className="text-body text-ink">
                       <span className="font-medium">{face?.label ?? entry.entityId}</span>{' '}

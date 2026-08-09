@@ -33,7 +33,7 @@ export default function DesignPage() {
             Phase 2
           </span>
           <h1 className="text-h1 font-semibold text-ink">Design system</h1>
-          <p className="max-w-160 text-body text-muted">
+          <p className="max-w-[640px] text-body text-muted">
             Every primitive in every state. Audit at 375px first, then 768, then 1280. No
             hardcoded hex, no arbitrary radius, no off-scale spacing.
           </p>

@@ -11,19 +11,20 @@ import { Card } from '@/components/ui';
 import { db } from '@/lib/db';
 import { PURITIES } from '@/lib/pricing';
 import { getCurrentRates, toRatesByPurity } from '@/lib/rates';
+import { getPricingDefaults } from '@/lib/settings';
 
 export const dynamic = 'force-dynamic';
 
 export const metadata: Metadata = { title: 'Add a piece' };
 
 export default async function NewProductPage() {
-  const [categories, rates, settings] = await Promise.all([
+  const [categories, rates, defaults] = await Promise.all([
     db.category.findMany({
       orderBy: { sortOrder: 'asc' },
       select: { id: true, name: true },
     }),
     getCurrentRates().then(toRatesByPurity),
-    db.settings.findUnique({ where: { id: 'singleton' } }),
+    getPricingDefaults(),
   ]);
 
   if (categories.length === 0) {
@@ -64,7 +65,8 @@ export default async function NewProductPage() {
               PURITIES.map((purity) => [purity, rates[purity].toString()]),
             ) as Record<(typeof PURITIES)[number], string>
           }
-          gstPct={Number(settings?.defaultGstPct ?? 3)}
+          gstPct={defaults.gstPct}
+          defaultMakingPct={defaults.makingPct}
         />
       </div>
     </Section>

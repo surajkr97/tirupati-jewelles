@@ -12,6 +12,17 @@
  */
 import { expect, test, type Page } from '@playwright/test';
 
+/**
+ * Minimum tap target, with a sub-pixel tolerance.
+ *
+ * Chromium reports fractional geometry, and at `deviceScaleFactor: 2` a 44px control
+ * measured 43.99993896484375 under full-suite load while measuring exactly 44 when the file
+ * ran alone — 6e-5 of a pixel of float error, asserted against as though it were a design
+ * regression. The tolerance is 0.01px: far below anything a human or a layout can produce,
+ * and the next size down the scale is 40px, so a real miss still fails.
+ */
+const TAP_MIN = 44 - 0.01;
+
 const productCards = (page: Page) => page.getByTestId('product-card');
 
 /** Read the priced total from a product page as integer paise. */
@@ -488,7 +499,7 @@ test.describe('§6 DESIGN and §6.5 images', () => {
 
     for (let i = 0; i < count; i += 1) {
       const box = await chips.nth(i).boundingBox();
-      if (box) expect(box.height).toBeGreaterThanOrEqual(44);
+      if (box) expect(box.height).toBeGreaterThanOrEqual(TAP_MIN);
     }
   });
 });

@@ -56,18 +56,37 @@ export function metalForPurity(purity: PurityKey): MetalKey {
   return purity === 'SILVER_999' ? 'SILVER' : 'GOLD';
 }
 
-export function emptyItem(id: string): CalculatorItem {
+/**
+ * What a fresh line is prefilled with.
+ *
+ * Phase 5 hardcoded 12% making and MASTER-SPEC §4's 3% GST. Phase 9 (DEBT-024) makes both
+ * the shop's own §7.9 settings, so they arrive as data. The type is declared here rather
+ * than imported from `lib/settings.ts` because this module is client code and that one is
+ * `server-only` — the values cross the boundary as props, not as an import.
+ */
+export interface ItemDefaults {
+  gstPct: number;
+  makingPct: number;
+}
+
+/** Used when nothing supplies settings — MASTER-SPEC §4 GST, the commonest §5.4 chip. */
+export const SPEC_ITEM_DEFAULTS: ItemDefaults = {
+  gstPct: DEFAULT_GST_PCT,
+  makingPct: 12,
+};
+
+export function emptyItem(id: string, defaults: ItemDefaults): CalculatorItem {
   return {
     id,
     label: '',
     metal: 'GOLD',
     purity: 'K22_916',
     weightGrams: '',
-    // Pre-filled with the commonest of the §5.4 chips. An empty making field reads as
-    // "free labour" and every shop charges something.
-    makingPct: '12',
+    // Prefilled rather than blank: an empty making field reads as "free labour" and every
+    // shop charges something. The figure is the shop's own default (§7.9).
+    makingPct: String(defaults.makingPct),
     stoneCharge: '',
-    gstPct: String(DEFAULT_GST_PCT),
+    gstPct: String(defaults.gstPct),
   };
 }
 

@@ -45,7 +45,7 @@ the Celery infrastructure finally put to use.
 | INP               | < 200ms               |
 | TTFB              | < 400ms               |
 | JS bundle (route) | **< 290KB gzipped** ¹ |
-| Lighthouse mobile | ≥ 90 all categories   |
+| Lighthouse mobile | ≥ 90 all categories ² |
 
 ¹ **Amended from 180KB, with the owner's agreement, against a measurement — see D-035.**
 The original figure was not reachable on this stack: `next` (245KB) and `react-dom` (55KB)
@@ -54,6 +54,12 @@ is 278.6KB with no unjustified dependency to remove. Raising a budget to meet an
 implementation is normally how budgets stop meaning anything, so the reasoning is recorded
 rather than the number quietly edited — and 290KB is set deliberately close to the measured
 278.6KB so that a regression still trips it.
+
+² **Measured for the first time in Phase 9 (DEBT-020).** Four of the five key routes pass on
+all four categories, including `/products/[slug]` at 91 — the run §6 TEST asked for and could
+not have. **`/` scores 79** on performance alone, entirely on LCP, and the applied-throttling
+measurement of the same page disagrees with Lighthouse's simulated model by 3.3 seconds. The
+criterion is left unmet rather than adjusted; the choice is DEBT-039's. `pnpm lighthouse`.
 
 - [x] `@next/bundle-analyzer`; remove anything unjustified. — **nothing unjustified found.**
       Attribution in D-035; the budget is framework, not bloat. Tool needs `--webpack` (D-034).
@@ -83,6 +89,14 @@ rather than the number quietly edited — and 290KB is set deliberately close to
   produces a report on a **webpack** build; Turbopack, the Next 16 default, prints a
   compatibility warning and writes nothing. `pnpm build:analyze` pins `--webpack`. See D-034,
   including the `.next/types` trap that comes with the flag.
+- `lighthouse` + `chrome-launcher` (devDependencies) — §9.2's acceptance criterion 1 and §6
+  TEST both ask for Lighthouse **category scores**, which the direct Web Vitals measurement in
+  this section cannot produce. `pnpm lighthouse` boots `next start` on its own port, resolves a
+  product route that actually has images, and fails if any category is under 90. Added rather
+  than run through `dlx` so the number is reproducible and can gate CI. `chrome-launcher` is
+  Lighthouse's own launcher and has to be declared explicitly: pnpm's strict `node_modules`
+  does not expose a transitive dependency to the importer. Closes DEBT-020; the homepage's
+  score is DEBT-039.
 
 ---
 

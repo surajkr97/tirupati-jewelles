@@ -111,7 +111,7 @@ export function EnquiryBar({
           'transition-transform duration-fast ease-standard active:scale-[0.98]',
         )}
       >
-        <MessageCircle className="size-5" aria-hidden="true" />
+        <MessageCircle className="size-icon" aria-hidden="true" />
         Enquire on WhatsApp
       </a>
     </StickyBar>

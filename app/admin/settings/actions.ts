@@ -20,6 +20,7 @@ import { z } from 'zod';
 import { adminAction, type ActionResult } from '@/lib/admin/actions';
 import { verifyPassword } from '@/lib/auth/argon2';
 import { db } from '@/lib/db';
+import { applyPricingDefaultsChange } from '@/lib/settings';
 
 /**
  * The one settings row.
@@ -162,6 +163,16 @@ export async function saveSettings(input: unknown): Promise<ActionResult<undefin
 
     // The jitter toggle and the holiday notice both show on the storefront.
     revalidatePath('/');
+
+    /**
+     * DEBT-024: `defaultGstPct` is priced into every figure the storefront shows, so a
+     * change to it is a price change and must reach the ISR'd pages the way a rate change
+     * does — cache dropped first, then every surface revalidated. Called unconditionally
+     * rather than only when the percentages differ: the cost is a handful of regenerations
+     * on a screen the owner opens rarely, and a conditional here is one more place for the
+     * "stored but never read" defect this closes to come back.
+     */
+    await applyPricingDefaultsChange();
 
     return { ok: true, data: undefined };
   });
