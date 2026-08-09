@@ -2803,3 +2803,166 @@ any score from it is quoted again, or used to gate CI.
 **The work is committed as verified, not as claimed.** Four of the five items — DEBT-038,
 DEBT-024, DEBT-032 and DEBT-023 — are done, tested, and their headline claims reproduce.
 DEBT-020's script is done; its ≥90 conclusion is not, and the DEBT row now says so.
+
+### Phase 9 — DESIGN / TEST (§9.7 Accessibility)
+
+Status: **PASS on four of five items.** The screen-reader pass is `[~]` — the structures are
+asserted, the listening is not. See DEBT-042.
+
+Verified: `pnpm typecheck`, `pnpm lint`, `prettier --check` and `pnpm build` clean;
+**1,128 unit/integration tests** (up from 1,089); **E2E green across 375 / 768 / 1280**.
+
+Three new specs: `e2e/a11y.spec.ts` (axe, 22 routes × 3 viewports), `e2e/keyboard.spec.ts`,
+`e2e/screen-reader.spec.ts`.
+
+#### The headline: a merge helper had been deleting colours for seven phases
+
+`axe` reported the **accent button rendering `ink` on `taupe-deep` at 3.87:1** — the exact
+pairing D-007 created `taupeDeep` to prevent. The variant sets `text-white`; the rendered
+class list did not contain it, and no `.text-white` rule existed in any stylesheet.
+
+`tailwind-merge` distinguishes `text-<colour>` from `text-<size>` using a built-in list of
+**Tailwind's** font sizes. Phase 2 §2.1 replaced that scale with `--text-small … --text-h1-lg`
+and nothing told the merger, so it classified every one of them as a colour and dropped
+whichever `text-*` came first — silently, and in whichever direction the classes happened to
+be written:
+
+```
+cn('text-white', 'text-body')   → 'text-body'    the COLOUR is deleted
+cn('text-small', 'text-muted')  → 'text-muted'   the SIZE is deleted
+```
+
+It is DEBT-032's shape with a crueller twist: an off-scale spacing class emits nothing but is
+still _in the source_, so it can be grepped. This class is removed after the fact, so the
+source reads correctly and only the browser disagrees. Several contrast readings changed font
+size between the before and after runs — 16px figures that were meant to be 14px — which is
+the same defect showing up as typography.
+
+Fixed at the root in `lib/utils/cn.ts` with `extendTailwindMerge`, and `TEXT_SIZES` is parsed
+back out of `app/globals.css` by `lib/utils/cn.test.ts`, so a scale step added later and not
+declared fails a test rather than silently deleting a colour. **22 tests**, every one of which
+fails against the previous implementation.
+
+#### axe: 99 violation nodes, two rules, zero left
+
+WCAG 2.1 A/AA over 22 routes, including the states a page load never reaches — the open filter
+sheet, a populated calculator with a breakdown expanded, the product editor. `best-practice` is
+excluded deliberately, and the two rules from it that matter (heading order, one `h1`) are
+asserted explicitly in `e2e/screen-reader.spec.ts` instead, so the suite is honest about which
+standard it enforces.
+
+| Rule                          | Nodes | Outcome                                             |
+| :---------------------------- | ----: | :-------------------------------------------------- |
+| `color-contrast`              |    97 | four tokens moved, three call sites changed — D-038 |
+| `scrollable-region-focusable` |     2 | the product gallery was unreachable by keyboard     |
+
+#### Contrast: the palette was fine, the compositions were not
+
+Phase 2 verified nine pairs and they all still pass. The application renders more than nine:
+`text-muted` on a `bg-taupe-lt/50` track, `text-up` on a `bg-up/10` badge, a monogram at
+`text-taupe/60` over a tint of its own family. **Every failure was a composition nobody had
+enumerated**, and none of them exists until one thing is laid over another.
+
+Worst first: the empty `ImageFrame`'s monogram at **1.83:1**, `up` on its own badge at 3.01,
+`taupe` as a 14px eyebrow label at 3.30 (which D-007 had already ruled out in principle, on
+every section heading in the site), `muted/80` at 3.43, `muted` on the segmented track at 4.18,
+`taupeDeep` as link text at 4.35.
+
+Four tokens darkened on **lightness only** — hue and saturation untouched, D-007's method — each
+walked down until every surface it actually sits on clears 4.5:1, with the target at 4.6 so a
+sub-pixel blend cannot tip it. `taupeDeep` improves in both its jobs at once. `taupe` did not
+move: it is the brand accent, it cannot be text on any surface in this palette, and the three
+labels moved instead. Full table in **D-038**.
+
+The suite that missed all of this now cannot: `composite()` computes blended surfaces in Node,
+and the `tokens.ts` ↔ `globals.css` mirror gained its **missing direction** — it only ever
+checked that each token it knew about matched the stylesheet, so a colour added to
+`globals.css` and never mirrored was invisible to every contrast assertion in the file.
+
+#### The ticker satisfied §9.7's wording and failed its intent
+
+It already carried `aria-live="polite"`. It was still unusable, and for a reason worse than
+volume: `TICK_INTERVAL_MS` is 1000, so the queue gained an entry per second and never drained —
+and every entry would have been the **jittered** figure. A screen reader would have been the one
+surface in this application stating a fabricated rate as fact, aimed at the users least able to
+see the "indicative rate" disclaimer beside it. That is DEBT-002's exposure, not an annoyance.
+
+The shimmer is now `aria-hidden`; a visually hidden sibling carries the **true** rate and
+re-announces only when the shop changes it. Asserted by watching both channels for six seconds:
+the announced text takes one distinct value while the displayed text takes several — the second
+half being the positive control, without which the test would pass against a ticker that never
+started. **D-039.**
+
+#### Keyboard: one real barrier, and it was invisible in the source
+
+The product gallery is a horizontally scrolling `<ul>` with no focusable children and no
+`tabIndex`. **A keyboard user could reach a product page and never see image 2** — the images
+were not merely awkward to reach, they were unreachable. `tabIndex={0}` on the scroller, with a
+focus ring, and the regression test proves it by _moving_ it: reach it with Tab, press
+ArrowRight, assert `scrollLeft` increased. Checking for the attribute would pass on a scroller
+that cannot actually be driven.
+
+Everything else held. Every rendered control is reached by Tab on all six flagship routes, every
+focused element has a computed indicator, and nothing traps focus outside the modal — where
+Phase 2's trap correctly still traps.
+
+#### Two findings in the document spine
+
+**The homepage had no `h1` at all.** It opens with a hero image and the ticker, so there was
+never a headline to be one, and "navigate by heading" landed first on an `h2`. Now a `sr-only`
+`h1` — hidden rather than shown, because §4.5 makes "the ticker is above the fold at 375px" a
+measured acceptance criterion and a visible headline would push it down to satisfy one
+criterion at the cost of another.
+
+**Product cards were `h3` directly under an `h1`.** The grid sits under the collection name
+with nothing between, so the level skipped. Now `h2`.
+
+#### DEBT-038's carried obligation, discharged
+
+Its closure left one thing to §9.7 explicitly: the sibling screens had been **probed** against
+today's data rather than given the dashboard's worst-case treatment, and a probe expires the
+moment the database grows. `/admin`, `/admin/bills` and `/admin/products` now substitute a
+₹1000-crore figure into every rupee value on the page and assert the document does not scroll
+sideways at 375px. All three pass. Framed as WCAG 1.4.10 Reflow, which is what it actually is
+and the one criterion axe cannot check — it depends on data the page does not have yet.
+
+Mutation-checked with a deliberately absurd figure: `/admin` reports 426px of content in a
+375px viewport and `/admin/bills` 430px, so the assertion can fail. `/admin/products` holds
+even that, because its money column is already `shrink-0` beside a `min-w-0 truncate` label —
+which is the shape the other two should copy if they ever grow a longer figure.
+
+**`/account/orders` is still only a probe.** Inflating it needs an order fixture for a
+freshly created customer, which is more setup than the screen warrants today; it has no
+unbounded figure that the bills list does not also have.
+
+#### Two harness bugs of my own, found and fixed rather than worked around
+
+Both would have made this section's results a fiction, and both are the same lesson Phase 4
+recorded — a test that reports a failure it invented is worse than no test.
+
+1. **The keyboard reach test reported the site logo as having no focus indicator, on five
+   routes.** It does have one — the global `:focus-visible` outline, confirmed by probing the
+   real browser. The reporter did `rendered[Number(stamp)]` and `Number(null)` is **0**, so
+   every unstamped element focused during the run was attributed to index 0. It also blurred
+   and re-focused elements to measure their resting shadow, which destroys `:focus-visible`.
+   Both replaced: the resting shadow is captured once, before the run, into a data attribute.
+2. **It reported the segmented control's unselected options as unreachable.** They are
+   `tabindex="-1"` deliberately — a radiogroup is one tab stop and the arrow keys move within
+   it. The selector matched `button:not([disabled])` and ignored the tabindex. Fixed, and the
+   substitute is now asserted directly rather than assumed: reach the group with Tab, then
+   change the selection with ArrowRight/ArrowLeft.
+
+A third was the app's and not the harness's: the reach test stopped at the document boundary,
+which made everything above `/login`'s autofocused input look unreachable. It now tabs through
+the wrap-around.
+
+#### What §9.7 does NOT claim
+
+**Nobody has driven a screen reader over this site.** `e2e/screen-reader.spec.ts` asserts what
+a screen reader reads _from_ — accessible names on every field of every item card, the landmark
+on every route, the heading spine, the live regions, the enquiry link naming its destination.
+It cannot tell you whether the result is usable, and no automated tool can. The checklist item
+is `[~]`, not `[x]`, and the gap is **DEBT-042**.
+
+`@DESIGN:` §9.7 is complete apart from that. `@TEST:` DEBT-042 needs one manual pass on the
+three flagship flows with VoiceOver or NVDA before launch.

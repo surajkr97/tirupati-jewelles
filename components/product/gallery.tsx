@@ -96,8 +96,20 @@ export function Gallery({ images, name }: { images: GalleryImage[]; name: string
         ref={scrollerRef}
         // `snap-x snap-mandatory` gives the swipe; `overflow-x-auto` keeps it inside its
         // own box so the document never scrolls sideways.
-        className="flex snap-x snap-mandatory gap-2 overflow-x-auto rounded-card"
+        className="flex snap-x snap-mandatory gap-2 overflow-x-auto rounded-card focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none"
         aria-label={`${name} images`}
+        /*
+         * §9.7. The gallery scrolls, and until this it could only be scrolled by touch or
+         * by a mouse wheel — there was nothing focusable inside it and it was not focusable
+         * itself, so a keyboard user could reach the product page and never see image 2.
+         * axe calls this `scrollable-region-focusable`; it is WCAG 2.1.1 (Keyboard).
+         *
+         * `tabIndex={0}` on the scroller is the fix the rule asks for: the arrow keys then
+         * scroll it natively. The dot indicators below are buttons and were already
+         * reachable — but they move the scroll position rather than being the content, so
+         * they are navigation, not a substitute for reaching the images.
+         */
+        tabIndex={0}
       >
         {images.map((image, index) => (
           <li

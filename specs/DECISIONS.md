@@ -1045,3 +1045,101 @@ Three consequences worth stating:
 **The invalidation follows `setRate`'s ordering exactly** — drop the cache, _then_ revalidate
 the pages. D-012 records why: a page regenerated first reads the stale value and re-caches it
 for its whole ISR window, which Phase 4 measured rather than guessed.
+
+---
+
+## D-038 — four tokens darkened against measurements of the RENDERED palette, not the pair list
+
+**Raised as:** Phase 9 §9.7, "Contrast verified on the final palette." Phase 2 had already
+verified contrast and D-007 had already fixed the two failures it found, so this was expected
+to be a re-run. It was not.
+
+**What Phase 2 checked, and what it could not.** `lib/design/contrast.test.ts` asserts nine
+pairings — each token against cream, and white against the button backgrounds. Every one
+passed, and still passes. But an application does not render a token against a token. It
+renders `text-muted` on a `bg-taupe-lt/50` track, `text-up` on a `bg-up/10` badge, and a
+monogram at `text-taupe/60` over a tint of the same family. **`axe` measured the composited
+values and found 97 failing nodes across twelve distinct pairs**, none of which was on
+Phase 2's list, and none of which could have been: they do not exist until something is laid
+on top of something else.
+
+| Composition                        | Measured | Cause                                           |
+| :--------------------------------- | -------: | :---------------------------------------------- |
+| `taupe/60` on the frame's own tint |   1.83:1 | brand colour at 60% over a tint of itself       |
+| `up` on its own `bg-up/10` badge   |   3.01:1 | verified at 3:1 as "non-text", rendered as text |
+| `taupe` on cream (eyebrow labels)  |   3.30:1 | D-007 already said this; three labels did it    |
+| `muted/80` on a card               |   3.43:1 | alpha applied to a token verified at full       |
+| `muted` on the segmented track     |   4.18:1 | verified on cream, rendered on a tint           |
+| `taupeDeep` as text on cream       |   4.35:1 | verified as a background, used as a foreground  |
+
+**The fix is lightness only, on four tokens.** Hue and saturation are untouched in every
+case — the method D-007 used — so nothing shifts as a colour:
+
+| Token       | From      | To        | Worst pairing, after |
+| :---------- | :-------- | :-------- | -------------------: |
+| `taupeDeep` | `#9B694E` | `#96654B` |            4.62:1 ✅ |
+| `muted`     | `#756C66` | `#6E6560` |            4.64:1 ✅ |
+| `up`        | `#0E9F6E` | `#0A7551` |            4.66:1 ✅ |
+| `down`      | `#E02D3C` | `#C61D2B` |            4.63:1 ✅ |
+
+Each was found by walking lightness down until **every** surface that token actually sits on
+clears 4.5:1, with the target set at 4.6 so a sub-pixel blend cannot tip it back. Nothing
+regresses: `taupeDeep` as a button background improves from 4.64 to 4.93 at the same time,
+because both of its jobs want the same direction.
+
+**`taupe` did not move, and three labels did.** Plain `taupe` is 3.30:1 on cream and cannot
+be body text on any surface in this palette. That is D-007's finding restated; §9.7 found the
+section eyebrow doing it on every heading in the site. The token is the brand accent and stays
+exactly as it is — the LABELS moved to `taupeDeep`.
+
+**The monogram was the worst pair and could not be solved with a colour.** At 1.83:1 the "TJ"
+in an empty `ImageFrame` was the least legible text in the application. Its wrapper is already
+`aria-hidden`, and axe still flags it — correctly, because contrast is about what a sighted
+low-vision user can see, and marking something decorative does not make a smudge legible.
+No taupe reaches 4.5:1 on that tint (`taupeDeep` manages 4.13), a stronger tint makes it
+_worse_, and a fourth taupe token for a placeholder is disproportionate. It is `muted` now:
+4.76:1 at any frame size, with the tile's brand signal — the taupe tint — untouched.
+
+**The suite that missed this now cannot.** `composite()` computes the blended surfaces in
+`lib/design/tokens.ts` so an alpha changed in a component and not thought about is a test
+failure; the mirror check gained its missing direction, so a colour ADDED to `globals.css`
+and never mirrored fails rather than going unchecked; and `e2e/a11y.spec.ts` measures the
+real thing in a browser, which is what proves the Node-side list is complete.
+
+---
+
+## D-039 — the ticker's live region carries the true rate, and the shimmer is hidden from assistive technology
+
+**Raised as:** Phase 9 §9.7, "Ticker changes announced via `aria-live="polite"` — polite, not
+assertive. A per-second assertive region is unusable with a screen reader."
+
+**The checklist item was already satisfied, and the requirement was not.** The figure carried
+`aria-live="polite"` and `aria-atomic="true"`, exactly as written. It was still unusable, for
+two reasons:
+
+1. **Politeness governs interruption, not volume.** `TICK_INTERVAL_MS` is 1000, so the region
+   gained a queued announcement every second. Polite means the reader waits for a pause before
+   speaking; it does not mean it speaks less. A queue that gains an entry per second never
+   drains, so the practical result is a screen reader that reads a rupee figure forever and
+   never gets to the rest of the page. The spec's word for an assertive version of this —
+   "unusable" — applies to the polite version too.
+
+2. **Every announcement would have been a number that is not the price.** The jitter is a
+   cosmetic shimmer (MASTER-SPEC §8); the calculator and every bill use `truth`, and D-002
+   records the consumer-protection reasoning behind that separation. Reading the jittered
+   figure aloud would have made a screen reader **the one surface in the application that
+   states a fabricated rate as fact** — not merely annoying, but the exposure DEBT-002 exists
+   to contain, aimed at the users least able to see the "indicative rate" disclaimer sitting
+   next to it.
+
+**Chosen: split the visual channel from the announced one.** The displayed figure is
+`aria-hidden="true"` — it is decoration, and it says so. A visually hidden sibling carries
+`{metal}: {true rate} {unit}` in a polite atomic region, so a screen reader announces the real
+price and re-announces it only when the shop changes it (at most once per 5-minute SWR
+refresh). Sighted users see exactly what they saw before.
+
+**Tested by the thing that would regress.** `e2e/screen-reader.spec.ts` watches both channels
+over six seconds and asserts the announced text takes **one** distinct value while the
+displayed text takes more than one. The second half is the positive control: without it the
+assertion would pass just as green against a ticker that never started, which is the failure
+mode Phase 4 TEST recorded and guarded against for the same component.

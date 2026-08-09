@@ -15,23 +15,43 @@
 @theme {
   /* ── Colour ─────────────────────────────────────────────────────────────
      Contrast verified by lib/design/contrast.test.ts, which fails the build
-     if any pair drops below its WCAG AA threshold. Two values differ from
-     the spec's first draft — both because they measured as failures:
+     if any pair drops below its WCAG AA threshold. Two values differed from
+     the spec's first draft in Phase 2 — both because they measured as failures:
 
        muted     #8A817C → #756C66   3.57:1 → 4.81:1 on cream (§2.1 predicted this)
        taupeDeep (new)   #9B694E     white on #B07D62 was 3.53:1, needs 4.5:1
 
-     `taupe` is unchanged and still the brand accent. `taupeDeep` exists only
-     where white text sits on top of it. See DECISIONS.md D-007. */
+     Four more moved in Phase 9 §9.7, when `axe` measured the palette AS RENDERED
+     rather than as pairs. Phase 2 checked nine pairings it chose; the application
+     composes more than that, and every failure was a composition nobody had
+     enumerated — a token on a TINTED surface, a token at reduced ALPHA, or a
+     "non-text" accent used as text and so held to 4.5:1 rather than 3:1:
+
+       taupeDeep #9B694E → #96654B  4.35 → 4.62 as TEXT on cream (it was only ever
+                                    checked as a background for white; white on it
+                                    improves too, 4.64 → 4.93)
+       muted     #756C66 → #6E6560  4.18 → 4.64 on the segmented control's tint
+                                    (5.33 on cream, so no surface regresses)
+       up        #0E9F6E → #0A7551  3.17 → 5.35 on cream; it renders as 14px TEXT
+                                    in the rate history and as a badge on its own
+                                    bg-up/10 tint, where it measured 3.01
+       down      #E02D3C → #C61D2B  4.26 → 5.45 on cream, same reason
+
+     Every one is a LIGHTNESS change only — hue and saturation are untouched, the
+     same method D-007 used for taupeDeep, so nothing shifts as a colour.
+
+     `taupe` is unchanged and still the brand accent. It cannot be text on any
+     light surface in this palette (3.30 on cream) — that is D-007's finding, and
+     §9.7 found three eyebrow labels that were doing it anyway. See D-038. */
   --color-cream: #faf7f4;
   --color-ink: #1a1613;
   --color-taupe: #b07d62;
-  --color-taupe-deep: #9b694e;
+  --color-taupe-deep: #96654b;
   --color-taupe-lt: #e8d5c9;
   --color-line: #efe9e3;
-  --color-muted: #756c66;
-  --color-up: #0e9f6e;
-  --color-down: #e02d3c;
+  --color-muted: #6e6560;
+  --color-up: #0a7551;
+  --color-down: #c61d2b;
 
   /* ── Radius ───────────────────────────────────────────────────────────── */
   --radius-card: 24px;

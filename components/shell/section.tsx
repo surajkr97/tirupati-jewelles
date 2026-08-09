@@ -37,7 +37,10 @@ export function Section({
     <div className="mb-6 flex items-end justify-between gap-4">
       <div className="flex flex-col gap-1">
         {eyebrow && (
-          <span className="text-small font-medium tracking-[0.08em] text-taupe uppercase">
+          // `taupe-deep`, not `taupe`: this is 14px text, so it needs 4.5:1 and `taupe`
+          // gives 3.30 on cream. D-007 already says plain taupe cannot carry text; §9.7's
+          // axe pass found this eyebrow doing it on every section heading in the site.
+          <span className="text-small font-medium tracking-[0.08em] text-taupe-deep uppercase">
             {eyebrow}
           </span>
         )}

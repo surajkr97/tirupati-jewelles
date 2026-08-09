@@ -51,9 +51,15 @@ export function ProductCard({
       />
 
       <div className="flex flex-col gap-1">
-        <h3 className="text-body font-medium text-ink group-hover:underline">
+        {/*
+          `h2`, not `h3` (§9.7). A product grid sits directly under the page's `h1` — the
+          collection name on /collections/[slug], the query on /search — with nothing between,
+          so `h3` skipped a level. A screen-reader user navigating by heading hears a gap and
+          has to wonder what section they missed.
+        */}
+        <h2 className="text-body font-medium text-ink group-hover:underline">
           {product.name}
-        </h3>
+        </h2>
         <p className="text-small text-muted">
           {PURITY_LABEL[product.purity]} · {grams(product.weightMg)} g
         </p>

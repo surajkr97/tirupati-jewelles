@@ -94,7 +94,11 @@ function Row({
         {detail && (
           // The working, not just the answer. This is the part §6.2 calls the
           // differentiator — anyone can check 8.500 × ₹11,842 themselves.
-          <span className="block text-small text-muted/80 tabular">{detail}</span>
+          //
+          // Full-strength `muted`, not `/80`: the alpha took it to 3.43:1 on the card's
+          // white (§9.7). §6.2's whole argument is that a customer can CHECK this line, so
+          // it is the last text in the application that should be hard to read.
+          <span className="block text-small text-muted tabular">{detail}</span>
         )}
       </dt>
       {/*

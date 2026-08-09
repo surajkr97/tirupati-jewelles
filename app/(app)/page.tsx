@@ -75,6 +75,19 @@ export default async function HomePage() {
 
   return (
     <>
+      {/*
+        The homepage had NO `h1` at all (§9.7). It opens with a hero image and the ticker, so
+        there was never a headline to be one — and a screen-reader user landing here got a
+        document with no title above `h2`, which is the first thing "navigate by heading"
+        lands on.
+
+        Visually hidden rather than shown, because §4.5 makes "the ticker is above the fold at
+        375px" an acceptance criterion that Phase 4 measured; a visible headline would push it
+        down to satisfy a different criterion. `sr-only` gives the document its spine without
+        moving a pixel.
+      */}
+      <h1 className="sr-only">Tirupati Jewelles — today’s gold and silver rates</h1>
+
       {/* Hero — MediaSlot HERO_BANNER, or a branded placeholder while it is empty (§2.2). */}
       <Section className="pt-6 pb-0 md:pt-8">
         <ImageFrame

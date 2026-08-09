@@ -176,26 +176,51 @@ export function RateTicker({
             pulse && (direction === 'up' ? 'bg-up/10' : 'bg-down/10'),
           )}
         >
+          {/*
+            Phase 9 §9.7. This figure is HIDDEN from assistive technology, and the live
+            region below carries the true rate instead.
+
+            §9.7 asks for `aria-live="polite"`, "polite, not assertive — a per-second
+            assertive region is unusable with a screen reader". This element was polite and
+            still unusable: `TICK_INTERVAL_MS` is 1000, so it queued an announcement EVERY
+            SECOND, and politeness only decides whether the reader interrupts itself, not
+            how much it has to say. A queue that gains an entry per second never drains.
+
+            And every one of those announcements would have been a number that is not the
+            price. The jitter is a cosmetic shimmer (MASTER-SPEC §8, D-002); the calculator
+            and every bill use `truth`. Reading the jittered figure aloud would make a
+            screen reader the one surface in the application that states a fabricated rate
+            as fact — which is the consumer-protection exposure DEBT-002 is about, not
+            merely an annoyance.
+          */}
           <p
+            aria-hidden="true"
             className={cn(
               'text-display font-semibold tabular tracking-tight',
               direction === 'up' && 'text-up',
               direction === 'down' && 'text-down',
               direction === 'flat' && 'text-ink',
             )}
-            /**
-             * Announced politely, never assertively (Phase 9 §9.7). A per-second
-             * assertive region interrupts a screen reader continuously and makes the
-             * page unusable.
-             */
-            aria-live="polite"
-            aria-atomic="true"
             data-testid="ticker-value"
           >
             {formatINR(displayed)}
           </p>
-          <p className="text-small text-muted" data-testid="ticker-unit">
+          <p
+            className="text-small text-muted"
+            aria-hidden="true"
+            data-testid="ticker-unit"
+          >
             {current.unit}
+          </p>
+
+          {/*
+            What a screen reader actually gets: the TRUE rate, announced only when it
+            changes — which is when the shop changes it, at most once per SWR refresh
+            (5 minutes), not once per second.
+          */}
+          <p className="sr-only" aria-live="polite" aria-atomic="true">
+            {OPTIONS.find((option) => option.value === face)?.label ?? face}:{' '}
+            {formatINR(truth)} {current.unit}
           </p>
         </div>
 

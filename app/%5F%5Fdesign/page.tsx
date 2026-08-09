@@ -29,7 +29,7 @@ export default function DesignPage() {
     <div className="min-h-dvh bg-cream py-12">
       <Container>
         <header className="mb-12 flex flex-col gap-2">
-          <span className="text-small font-medium tracking-[0.08em] text-taupe uppercase">
+          <span className="text-small font-medium tracking-[0.08em] text-taupe-deep uppercase">
             Phase 2
           </span>
           <h1 className="text-h1 font-semibold text-ink">Design system</h1>

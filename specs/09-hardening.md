@@ -157,12 +157,32 @@ The dormant infrastructure from Phase 1 now earns its keep.
 
 ## 9.7 Accessibility
 
-- [ ] `axe` clean on every route.
-- [ ] Full keyboard navigation.
-- [ ] Screen-reader pass on the three flagship flows.
-- [ ] Ticker changes announced via `aria-live="polite"` — **polite, not assertive.** A
-      per-second assertive region is unusable with a screen reader.
-- [ ] Contrast verified on the final palette.
+- [x] `axe` clean on every route. — WCAG 2.1 A/AA over **22 routes × 3 viewports**, including
+      the interactive states a page load never reaches (open filter sheet, populated
+      calculator, product editor). **99 violation nodes found and fixed**; `e2e/a11y.spec.ts`.
+- [x] Full keyboard navigation. — every rendered control reached by Tab, a visible focus
+      indicator on each, no trap outside the modal, and the product gallery made operable
+      (it was not). `e2e/keyboard.spec.ts`.
+- [~] Screen-reader pass on the three flagship flows. — **the structures are asserted, the
+  listening is not.** Names, landmarks, the heading spine and the live regions are tested
+  in `e2e/screen-reader.spec.ts`; nobody has driven VoiceOver or NVDA over the site.
+  DEBT-042.
+- [x] Ticker changes announced via `aria-live="polite"` — **polite, not assertive.** A
+      per-second assertive region is unusable with a screen reader. — it was already polite
+      and was still unusable: at `TICK_INTERVAL_MS` 1000 the queue never drained, and every
+      announcement was the **jittered** figure rather than the price. The shimmer is now
+      `aria-hidden` and the live region carries the true rate. See D-039.
+- [x] Contrast verified on the final palette. — **the palette was fine; the compositions were
+      not.** Four tokens moved on measurement (D-038).
+
+## 9.7 — Dependencies added
+
+- `@axe-core/playwright` (devDependency) — §9.7's first checklist item names `axe`. Run
+  in-browser against the real rendered page rather than over markup, because the two failures
+  it actually found (composited colour, an unreachable scroll region) are both invisible in
+  source. WCAG 2.1 A/AA only; axe's `best-practice` tag is excluded and the rules from it
+  that matter here — heading order, one `h1` — are asserted explicitly in
+  `e2e/screen-reader.spec.ts` instead.
 
 ---
 
