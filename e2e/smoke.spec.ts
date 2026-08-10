@@ -46,6 +46,23 @@ test('no horizontal scroll', async ({ page }) => {
 test('health endpoint reports database and redis', async ({ request }) => {
   const response = await request.get('/api/health');
 
+  /**
+   * 200 and `database: 'ok'` is the health question. `status` is NOT asserted to be `ok`
+   * any more, and that is a correction rather than a loosening (§9.4).
+   *
+   * The field used to mean "Postgres answered". It now summarises four checks, one of which
+   * is "has anyone set a rate in the last 24 hours" — a business signal, deliberately, since
+   * no uptime service can see it. On a development database whose rates are a few days old
+   * the honest answer is `degraded`, and asserting `ok` would have made this test fail with
+   * the clock rather than with the code. That is DEBT-040's exact pattern, avoided here by
+   * asserting the thing the test is named for.
+   *
+   * `checks.database` is what tells a load balancer to pull the instance; `status` is what
+   * an alert rule reads.
+   */
   expect(response.status()).toBe(200);
-  expect(await response.json()).toMatchObject({ status: 'ok', database: 'ok' });
+  expect(await response.json()).toMatchObject({
+    database: 'ok',
+    checks: { database: { status: 'ok' } },
+  });
 });

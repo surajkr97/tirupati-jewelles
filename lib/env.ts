@@ -108,6 +108,24 @@ const serverSchema = z.object({
    * `clientIpFromHeaders` refuses to treat a private or link-local address as an identity.
    */
   TRUSTED_PROXY_HOPS: z.coerce.number().int().min(1).max(10).default(1),
+
+  /**
+   * Sentry (Phase 9 §9.4). Optional, and its absence is a supported state.
+   *
+   * Without a DSN the SDK is never initialised and the application behaves exactly as it
+   * did before — which is what development and CI want, and what a deploy that has not yet
+   * been given a project gets. §9.4 says PII scrubbing must be configured "before launch";
+   * `lib/monitoring/sentry.ts` does that unconditionally, so it cannot be forgotten in the
+   * gap between adding the DSN and remembering the scrubber.
+   */
+  SENTRY_DSN: z.string().url().optional(),
+  /** `production` / `staging`. Defaults to NODE_ENV so a staging error is distinguishable. */
+  SENTRY_ENVIRONMENT: z.string().optional(),
+  /**
+   * Fraction of transactions traced, 0–1. Default 0: §9.4 asks for ERROR monitoring, and
+   * tracing every request on a small shop's plan burns the quota that errors need.
+   */
+  SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0),
 });
 
 /**

@@ -3203,3 +3203,86 @@ restart accumulating duplicate timers.
 `queue.unavailable.ran_inline` — it means the broker is down and work is happening on the
 request path — and `worker.job.failed` where `attempt` equals `of`, which is the dead-letter
 case rather than a retry in progress.
+
+### Phase 9 — DEV (§9.4 Monitoring)
+
+Status: **PASS on two of four, one `[~]`, one blocked on an owner decision.**
+
+New: `lib/monitoring/sentry.ts`, `instrumentation.ts`, `lib/monitoring/monitoring.test.ts`
+(7), plus `/api/health` rebuilt into the endpoint the alerts read. One dependency:
+`@sentry/nextjs`.
+
+#### The scrubber is set in the same call as the DSN
+
+§9.4 says "PII scrubbing configured **before** launch", and the word _before_ is doing the
+work: a tracker wired up now and scrubbed later spends the gap shipping customer phone
+numbers to a third party, and those events are retained. There is no rollback for that, so
+there is no window here — `beforeSend` is set in the same `Sentry.init` that sets the DSN.
+
+It reuses `redact()` rather than defining a second rule. DEBT-036 closed by exporting it
+"for §9.4's Sentry `beforeSend` so the two cannot disagree"; this is that, and the reason
+matters — a second scrubbing rule drifts from the first and the failure is silent until a
+support ticket quotes a customer's number back from an error report.
+
+**7 tests, built from the event shapes this application actually produces**: a Prisma
+unique-constraint error quoting an email (the leak DEBT-036 measured in logs, through a
+different pipe), an OTP breadcrumb, a `POST /api/auth/login` request body. Cookies and
+headers are _deleted_ rather than scrubbed, because a session id is a credential (SEC-013),
+and `user` keeps only our opaque id. There is a negative control: an event with nothing
+sensitive must come out intact, or a scrubber that empties everything would pass the other
+six and make the tracker worthless.
+
+`SENTRY_DSN` absent is a supported state — no init, no behaviour change — which is what
+development, CI and a not-yet-provisioned deploy all get. That is also why the tests drive
+`scrubEvent` directly: the production path must not be the only one nobody has executed.
+
+#### `/api/health` is now what the alerts read
+
+§9.4 asks for alerts on DB failures, Redis down, queue depth and **rates not updated in 24h**.
+Three are infrastructure; the fourth is not, and the spec says so — "a stale gold rate is a
+business incident, not a technical one". No uptime service can see it, because it is a fact
+about this shop's data. So all four are answered in one response and an external checker
+needs one rule instead of four integrations.
+
+Measured, not assumed: the development database reports
+`rates: warn, "last set 76h ago"` — the alert firing on real data.
+
+**Only Postgres returns 503.** A stale rate, a deep queue and a dead Redis are `warn` with a
+200, because a 503 tells a load balancer to pull the instance and none of those is fixed by
+that — it would turn "the owner forgot to update the gold rate" into "the site is offline".
+`checks[].status` is for the alert rule; the HTTP code is for the load balancer. DEBT-047
+records the trap that follows: a rule watching only the status code misses the business alert
+§9.4 cares most about.
+
+`instrumentation.ts` starts it once per runtime, before anything serves a request — an error
+thrown while the server boots is precisely the one an init inside a layout would miss — and
+exports `onRequestError`, without which Next swallows a failed data read inside a Server
+Component into an error boundary and the most common server error in an App Router
+application never reaches the tracker.
+
+#### One test assertion corrected, not loosened
+
+`e2e/smoke.spec.ts` asserted `status: 'ok'`. That field used to mean "Postgres answered"; it
+now summarises four checks including the 24-hour rate signal, so on a development database
+whose rates are three days old the honest answer is `degraded`. Left alone, the test would
+have begun failing **with the clock rather than with the code** — DEBT-040's exact pattern,
+three days after raising it. It now asserts 200 and `checks.database.status`, which is what
+the test is named for.
+
+#### Analytics is not built, and it is not a drop-in — DEBT-046
+
+Vercel Analytics needs Vercel; the target is Render. Plausible needs an account that does not
+exist. Phase 7 declined to build against an unavailable provider for exactly this reason
+(DEBT-022): "code that has never run is worse than an honest gap".
+
+It is also **not** a one-line addition when the owner does choose one. §9.1 signed off a CSP
+with no third-party script origin at all, and §9.6's privacy page — shipped two commits ago —
+states there is no analytics service on this site, which is why no cookie banner is shown.
+Adding a tracker means changing the CSP and that sentence in the same commit, and if the tool
+is not genuinely cookieless it means a consent banner too. Recorded so whoever adds it does
+not create a contradiction with a page that makes a promise to customers.
+
+`@OWNER:` **DEBT-047 is the launch blocker of the two.** Sentry captures nothing until a DSN
+exists, and the scrubber — though unit-tested — has never been exercised against the real
+transport. One deliberate error after wiring it, checked for a redacted phone number, closes
+that.

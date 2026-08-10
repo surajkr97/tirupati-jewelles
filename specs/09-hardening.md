@@ -153,12 +153,43 @@ The dormant infrastructure from Phase 1 now earns its keep.
 
 ## 9.4 Monitoring
 
-- [ ] Sentry for errors, with PII scrubbing configured **before** launch.
-- [ ] Uptime checks on `/`, `/api/health`, `/api/rates`.
-- [ ] Alerts: error rate spike, DB connection failures, Redis down, Celery queue depth,
+- [x] Sentry for errors, with PII scrubbing configured **before** launch. — the scrubber is
+      set in the same call as the DSN, so there is no window in which one exists without the
+      other. It reuses `redact()` from DEBT-036 rather than defining a second rule, which
+      that ticket closed by exporting it "for §9.4's Sentry `beforeSend` so the two cannot
+      disagree". **7 tests** drive real event shapes — a Prisma unique-constraint error, an
+      OTP breadcrumb, a login request body — and assert the phone number, the email and the
+      session id are gone, with a negative control so a scrubber that empties every event
+      would fail. `SENTRY_DSN` absent is a supported state: no init, no behaviour change.
+      **Owner action: create the project and set the DSN.** DEBT-047.
+- [~] Uptime checks on `/`, `/api/health`, `/api/rates`. — the application half is done and is
+  the harder half: `/api/health` now answers all four alert conditions in one response,
+  so an external checker needs one rule rather than four integrations. **Registering the
+  checks with a provider is an ops action.** DEBT-047.
+- [x] Alerts: error rate spike, DB connection failures, Redis down, Celery queue depth,
       **rates not updated in 24h** (a stale gold rate is a business incident, not a technical
-      one).
-- [ ] Vercel Analytics or Plausible — privacy-friendly, no cookie banner needed.
+      one). — every condition is exposed at `/api/health` as `checks.<name>.status`. The
+      stale-rate one is the reason it lives in the application rather than in a monitoring
+      config: no uptime service can see it, because it is a fact about this shop's data.
+      Measured working — the development database reports `rates: warn, "last set 76h ago"`.
+      Only Postgres returns 503; a stale rate must not take the site out of rotation.
+- [ ] Vercel Analytics or Plausible — privacy-friendly, no cookie banner needed. **Not built,
+      and it needs an owner decision first.** Vercel Analytics requires Vercel and the deploy
+      target is Render (D-011); Plausible requires an account or a self-hosted instance, and
+      neither exists. Building against a service that cannot be exercised is what Phase 7
+      declined to do for uploads (DEBT-022) — "code that has never run is worse than an
+      honest gap". **It also contradicts something already shipped:** §9.6's privacy page
+      states there is no analytics service on this site, which is why no cookie banner is
+      shown. Adding one means changing that page and the CSP in the same commit. DEBT-046.
+
+## 9.4 — Dependencies added
+
+- `@sentry/nextjs` — §9.4's first item names Sentry. Wired through `instrumentation.ts` so it
+  starts once per runtime, before anything serves a request: an error thrown while the server
+  boots is exactly the one an init inside a layout would miss. `onRequestError` is exported
+  too, because Next otherwise swallows a failed data read inside a Server Component into an
+  error boundary and the tracker never sees the most common server error in an App Router
+  application.
 
 ---
 
