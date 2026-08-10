@@ -447,11 +447,12 @@ decision (D-033), so no nonce is needed and none is invented.
 - [x] Admin trained — record a short screen capture of the bill flow. — **owner-confirmed,
       11 Aug.** Recorded on their instruction; a screen capture is not an artefact this repository
       can see.
-- [~] Owner WhatsApp number verified working end to end. — **the number is set, it lives
-  where the owner can change it, and every link on the site uses it; the "a message actually
-  arrives" half is yours.** Supplied 11 Aug. It is in the **`Settings` row** — the field
-  §7.9 gave the owner — with `.env` as the fallback for a shop that has never opened that
-  screen. Neither value is in the repository; `.env.example` keeps its placeholder.
+- [x] Owner WhatsApp number verified working end to end. — **owner-confirmed 11 Aug: a test
+      message was sent and arrived.** The number is set, it lives
+      where the owner can change it, and every link on the site uses it; the "a message actually
+      arrives" half is yours.** Supplied 11 Aug. It is in the **`Settings` row** — the field
+      §7.9 gave the owner — with `.env` as the fallback for a shop that has never opened that
+      screen. Neither value is in the repository; `.env.example` keeps its placeholder.
 
   Verified in the SERVED HTML rather than in the config, and with the fallback made a
   **decoy** so the result discriminates: `Settings` holding the real number, `.env` holding
@@ -466,10 +467,10 @@ decision (D-033), so no nonce is needed and none is invented.
   have changed their number, watched it save, and had every customer keep messaging the old
   one. That is now the mechanism, not a decoration.
 
-  **What remains is one thumb:** tap a link on a phone and confirm the message reaches the
-  shop. Setting `NEXT_PUBLIC_OWNER_WA` in Render is now belt-and-braces rather than the
-  mechanism — worth doing so the fallback is right, and noting it is inlined at BUILD time,
-  so it needs a redeploy rather than a restart.
+  **The thumb has now been applied** — the owner confirms a message sent from the site
+  reached the shop, which is the half no assertion in this repository could ever make.
+  Setting `NEXT_PUBLIC_OWNER_WA` in Render remains worth doing so the _fallback_ is also
+  right, noting it is inlined at BUILD time and so needs a redeploy rather than a restart.
 
 - [x] Test the full journey on a **real budget Android phone on real 4G.** Not a simulator.
       This is where the 95% of users actually are. — **owner-confirmed, 11 Aug.** The criterion
