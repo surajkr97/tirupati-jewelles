@@ -22,10 +22,14 @@ the Celery infrastructure finally put to use.
 - [x] Every API route confirmed Zod-validated. **Write a test that enumerates route files and
       fails if one lacks a schema import** — a checklist item decays, a test does not.
 - [x] `pnpm audit` clean; enable Dependabot.
-- [~] Secrets rotated before launch. No secret ever committed. — no secret is committed
-  (zero tracked `.env` files, history re-scanned). **`SEED_ADMIN_PASSWORD` is still to be
-  rotated**; it was exposed in a working transcript. The stored hash is Argon2id, so the
-  database is unaffected — the `.env` value is the exposure. Owner action.
+- [x] Secrets rotated before launch. No secret ever committed. — no secret is committed
+      (zero tracked `.env` files, history re-scanned), and **the owner confirms
+      `SEED_ADMIN_PASSWORD` has been rotated** (11 Aug). It was exposed in a working
+      transcript; the stored hash is Argon2id, so the database was never the exposure — the
+      `.env` value was. Recorded on the owner's instruction: a rotation happens in an
+      environment this repository cannot read, so nothing here can assert it. What CAN be
+      asserted is asserted and still holds — the value is not the `CHANGE_ME` placeholder, and
+      `lib/env.ts` refuses to boot in production if it ever is.
 - [x] DB user has least privilege — no DDL rights at runtime.
 - [x] Redis password-protected, not publicly bound.
 - [x] Error responses leak no stack traces in production.
@@ -178,10 +182,14 @@ The dormant infrastructure from Phase 1 now earns its keep.
       closed the half unit tests could not reach: `scrubEvent` was known correct, and
       nothing proved `beforeSend` was installed. **Still owner action: the DSN on Render.**
       DEBT-047.
-- [~] Uptime checks on `/`, `/api/health`, `/api/rates`. — the application half is done and is
-  the harder half: `/api/health` now answers all four alert conditions in one response,
-  so an external checker needs one rule rather than four integrations. **Registering the
-  checks with a provider is an ops action.** DEBT-047.
+- [x] Uptime checks on `/`, `/api/health`, `/api/rates`. — the application half was the harder
+      half and is done: `/api/health` answers all four alert conditions in one response, so an
+      external checker needs one rule rather than four integrations. **The owner confirms the
+      checks are registered** (11 Aug) — an ops action, recorded on their instruction. DEBT-047
+      is closed with one thing to re-check the first time an alert should have fired: the rule
+      must assert the response BODY carries `"status":"ok"`, because this endpoint returns 200
+      while degraded by design and a status-code-only rule sits green through the stale-rate
+      alert §9.4 cares most about.
 - [x] Alerts: error rate spike, DB connection failures, Redis down, Celery queue depth,
       **rates not updated in 24h** (a stale gold rate is a business incident, not a technical
       one). — every condition is exposed at `/api/health` as `checks.<name>.status`. The
@@ -209,16 +217,18 @@ The dormant infrastructure from Phase 1 now earns its keep.
 
 ## 9.5 Reliability
 
-- [~] Automated daily Postgres backups, 30-day retention. — **the mechanism is built and run,
-  the schedule is an ops action.** `pnpm backup` takes a `pg_dump --format=custom`, writes it
-  0600 into a 0700 `backups/`, records a SHA-256 beside it, prunes by mtime at 30 days and
-  **refuses to call an implausibly small file a backup** — a green cron job producing 3 kB of
-  header is the failure mode this item exists to prevent. Measured: 465.5 kB from an 11 MB
-  database in 0.7s. It dumps as the **owner** role, not the runtime one, because SEC-029's
-  least-privilege role would produce a dump that succeeds and silently omits what it cannot
-  read. `pnpm backup --help` prints the cron line; on Render the same command is a Cron Job
-  service. **What is owed is off-box: a copy that survives the machine, encrypted at rest —
-  DEBT-049.**
+- [x] Automated daily Postgres backups, 30-day retention. — **the mechanism is built and
+      proven here; the owner confirms the schedule and an off-box copy** (11 Aug, recorded on
+      their instruction — both live outside this repository). `pnpm backup` takes a `pg_dump --format=custom`, writes it
+      0600 into a 0700 `backups/`, records a SHA-256 beside it, prunes by mtime at 30 days and
+      **refuses to call an implausibly small file a backup** — a green cron job producing 3 kB of
+      header is the failure mode this item exists to prevent. Measured: 465.5 kB from an 11 MB
+      database in 0.7s. It dumps as the **owner** role, not the runtime one, because SEC-029's
+      least-privilege role would produce a dump that succeeds and silently omits what it cannot
+      read. `pnpm backup --help` prints the cron line; on Render the same command is a Cron Job
+      service. **One test still owed and not counted as done: the restore has only ever been run
+      against a dump on this disk, never against one pulled back FROM the off-box destination —
+      which is the version that proves the whole chain rather than the dump format.**
 - [x] **Restore tested.** An untested backup is a hope, not a backup. — `pnpm verify:restore`
       restores into a scratch database and compares it to the source on five properties, then
       drops it. **91 invoice PDFs came back byte-identical** (`bytea` digested server-side with
@@ -356,13 +366,16 @@ decision (D-033), so no nonce is needed and none is invented.
 - [ ] All 9 phases signed off in `SIGNOFF.md`.
 - [ ] `DEBT.md` reviewed; nothing CRITICAL outstanding.
 - [ ] Staging mirrors production.
-- [ ] Real data seeded: actual products, real images, real rates.
+- [x] Real data seeded: actual products, real images, real rates. — 46 active pieces, 25 of
+      them with photography, verified against the database.
 - [ ] Admin trained — record a short screen capture of the bill flow.
 - [ ] Owner WhatsApp number verified working end to end.
 - [ ] Test the full journey on a **real budget Android phone on real 4G.** Not a simulator.
       This is where the 95% of users actually are.
 - [ ] Rollback plan documented.
-- [ ] **`NEXT_PUBLIC_SITE_URL` set to the real origin.** §9.6 made it the source of every
+- [x] **`NEXT_PUBLIC_SITE_URL` set to the real origin** — owner-confirmed (11 Aug) in the
+      Render environment. Note the local `.env` correctly still reads `http://localhost:3000`;
+      that is the development value and must stay. Original: §9.6 made it the source of every
       canonical, every `<loc>` in `sitemap.xml`, the `Sitemap:` line in `robots.txt` and the
       `url` in both JSON-LD blocks. It is `http://localhost:3000` in development and the
       generated artefacts say so — a deploy that forgets it publishes a sitemap of localhost
