@@ -409,9 +409,27 @@ decision (D-033), so no nonce is needed and none is invented.
       on invoices), 031 (backup retention reconciliation), 034 (IGST when the shop ships out
       of state), 042 (the screen-reader pass) — none of which blocks a launch, and each names
       the condition that would make it urgent.
-- [ ] Staging mirrors production.
-- [x] Real data seeded: actual products, real images, real rates. — 46 active pieces, 25 of
-      them with photography, verified against the database.
+- [ ] Staging mirrors production. — **the only §9.8 item left, and it is a Render setup
+      task.** "Mirrors" means, concretely: Node 24 LTS (`.nvmrc`), **Postgres 16** and **Redis 7**
+      to match `docker-compose.yml`, the same build and start commands, and the same env var
+      _names_ from `lib/env.ts` — which throws at boot on a missing one, so a short staging
+      environment fails loudly rather than serving broken pages. `SENTRY_ENVIRONMENT=staging`, so
+      its errors are distinguishable from production's.
+
+  **Trap one — its own Postgres AND its own Redis.** Not a second database on the same Redis
+  instance; a separate instance. DEBT-030 recorded this exact class of bug at the test level:
+  `DATABASE_URL` was pointed at the test database and `REDIS_URL` was not, so integration
+  tests wrote `rates:current` and the running dev app served it — `/api/rates` reporting gold
+  18K at ₹0 on a machine whose Postgres was fine. Staging sharing production's Redis is that
+  same bug with **sessions** in it.
+
+  **Trap two — do not restore a production dump into staging.** DEBT-031: a dump holds every
+  customer invoice — 91 of them, 521 kB, names, phone numbers and purchase histories in a
+  directly readable format. Staging is by definition less guarded and more widely accessible.
+  Either seed it with `pnpm seed` plus generated products, or anonymise on restore. Copying
+  real customer data into a lower environment is the commonest way a small shop has a breach
+  without ever being attacked.
+
 - [ ] Admin trained — record a short screen capture of the bill flow.
 - [~] Owner WhatsApp number verified working end to end. — **the number is set, it lives
   where the owner can change it, and every link on the site uses it; the "a message actually
@@ -439,7 +457,17 @@ decision (D-033), so no nonce is needed and none is invented.
 
 - [ ] Test the full journey on a **real budget Android phone on real 4G.** Not a simulator.
       This is where the 95% of users actually are.
-- [ ] Rollback plan documented.
+- [x] Rollback plan documented. — **`specs/ROLLBACK.md`**, written against this system rather
+      than as a generic runbook. Its load-bearing point: a deploy is **three** things that roll
+      back at different speeds — code (a Render button, ~2 min), schema (**forward-only**,
+      Prisma has no down migrations) and data (never). Rolling back code does not undo a
+      migration, so the plan is mostly a decision taken **before** shipping: classify the
+      migration, and use expand/contract for anything that is not additive. All 10 migrations
+      to date are additive. It also records the traps peculiar to this shop — `BillSequence`
+      cannot give an invoice number back and SEC-029 makes the runtime role unable to delete
+      one (void and reissue instead, §8.5); `NEXT_PUBLIC_*` is baked in at build time so a
+      rollback reverts those values and a dashboard change needs a rebuild; Redis down is not
+      an outage but signing in stops; Postgres down IS one and the ISR cache will disguise it.
 - [x] **`NEXT_PUBLIC_SITE_URL` set to the real origin** — owner-confirmed (11 Aug) in the
       Render environment. Note the local `.env` correctly still reads `http://localhost:3000`;
       that is the development value and must stay. Original: §9.6 made it the source of every
