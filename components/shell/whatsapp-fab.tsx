@@ -21,16 +21,22 @@ import { cn } from '@/lib/utils/cn';
 const SUPPRESSED = ['/products/'];
 
 /**
- * Constant, so it is computed once at module load rather than per render — and identical
- * on the server and the client, because `NEXT_PUBLIC_SITE_URL` is inlined at build time.
+ * The number is a PROP, not module config — DEBT-050.
+ *
+ * It used to be a module-level constant built from `NEXT_PUBLIC_OWNER_WA`, which made the
+ * link a build-time fact and meant the §7.9 settings field could never change it. The
+ * layout now reads `getShopContact()` and passes it down, so the owner's saved number wins
+ * and the env value is only the fallback. The message half is still build-time config:
+ * `NEXT_PUBLIC_SITE_URL` is identical on the server and the client, so the href is correct
+ * in the first byte of HTML rather than corrected after hydration.
  */
-const HREF = buildWhatsAppUrl(
-  clientEnv.NEXT_PUBLIC_OWNER_WA,
-  buildGeneralMessage(clientEnv.NEXT_PUBLIC_SITE_URL),
-);
-
-export function WhatsAppFab() {
+export function WhatsAppFab({ ownerWhatsApp }: { ownerWhatsApp: string }) {
   const pathname = usePathname();
+
+  const HREF = buildWhatsAppUrl(
+    ownerWhatsApp,
+    buildGeneralMessage(clientEnv.NEXT_PUBLIC_SITE_URL),
+  );
 
   if (SUPPRESSED.some((prefix) => pathname.startsWith(prefix))) return null;
 

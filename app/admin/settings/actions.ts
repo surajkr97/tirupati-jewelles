@@ -20,7 +20,7 @@ import { z } from 'zod';
 import { adminAction, type ActionResult } from '@/lib/admin/actions';
 import { verifyPassword } from '@/lib/auth/argon2';
 import { db } from '@/lib/db';
-import { applyPricingDefaultsChange } from '@/lib/settings';
+import { applyPricingDefaultsChange, applyShopContactChange } from '@/lib/settings';
 
 /**
  * The one settings row.
@@ -173,6 +173,18 @@ export async function saveSettings(input: unknown): Promise<ActionResult<undefin
      * "stored but never read" defect this closes to come back.
      */
     await applyPricingDefaultsChange();
+
+    /**
+     * DEBT-050: `ownerWhatsApp` is now read by every `wa.me` link on the storefront, so a
+     * change to it has to reach the ISR'd pages the same way a price change does.
+     *
+     * Separate from the call above because the SURFACE is different, not because the timing
+     * is: the pricing defaults touch a curated list of routes, the number touches the whole
+     * storefront layout — the footer and the floating button are on every page in the group.
+     * Folding the two together would mean either revalidating everything on a GST change or
+     * missing `/policies/*` on a number change.
+     */
+    await applyShopContactChange();
 
     return { ok: true, data: undefined };
   });

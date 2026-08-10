@@ -10,6 +10,7 @@ import { AppHeader, BottomNav, BottomNavSpacer, Footer } from '@/components/shel
 import { WhatsAppFab } from '@/components/shell/whatsapp-fab';
 import { db } from '@/lib/db';
 import { localBusinessJsonLd } from '@/lib/seo';
+import { getShopContact } from '@/lib/settings';
 
 /**
  * §9.6's `LocalBusiness` structured data, on the storefront only.
@@ -34,6 +35,12 @@ async function shopIdentity() {
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const shop = await shopIdentity();
+  /**
+   * DEBT-050. Read once here and passed to both surfaces that render a WhatsApp link in
+   * this layout, rather than each reading it — one Redis round trip per page instead of
+   * two, and one place to look when the number is wrong.
+   */
+  const { ownerWhatsApp } = await getShopContact();
 
   return (
     /**
@@ -50,13 +57,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <JsonLd data={localBusinessJsonLd(shop)} />
       <AppHeader />
       <main className="flex-1">{children}</main>
-      <Footer />
+      <Footer ownerWhatsApp={ownerWhatsApp} />
       {/* Reserves the fixed nav's height so the footer is never hidden behind it. */}
       <BottomNavSpacer />
       <BottomNav />
       {/* §6.3 — site-wide, and hides itself on the product page where the sticky enquiry
           bar already offers a better version of the same action. */}
-      <WhatsAppFab />
+      <WhatsAppFab ownerWhatsApp={ownerWhatsApp} />
     </div>
   );
 }

@@ -10,7 +10,6 @@ import { BadgeCheck, MessageCircle, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 
 import { Container } from '@/components/shell/container';
-import { clientEnv } from '@/lib/env';
 
 const SHOP_LINKS = [
   { href: '/collections', label: 'Collections' },
@@ -42,7 +41,7 @@ const TRUST = [
   { icon: MessageCircle, label: 'Buyback & exchange' },
 ] as const;
 
-export function Footer() {
+export function Footer({ ownerWhatsApp }: { ownerWhatsApp: string }) {
   return (
     <footer className="mt-12 border-t border-line bg-white/50">
       <Container>
@@ -54,7 +53,7 @@ export function Footer() {
               price confirmed in store.
             </p>
             <a
-              href={`https://wa.me/${clientEnv.NEXT_PUBLIC_OWNER_WA}`}
+              href={`https://wa.me/${ownerWhatsApp}`}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex h-control w-fit items-center gap-2 rounded-pill bg-taupe-deep px-6 text-small font-semibold text-white"

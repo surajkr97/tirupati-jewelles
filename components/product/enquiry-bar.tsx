@@ -32,9 +32,12 @@ import { cn } from '@/lib/utils/cn';
 export function EnquiryBar({
   product,
   productId,
+  ownerWhatsApp,
 }: {
   product: EnquiryProduct;
   productId: string;
+  /** DEBT-050: the shop's saved number, from `getShopContact()` on the server. */
+  ownerWhatsApp: string;
 }) {
   /**
    * Computed during render, from build-time config.
@@ -47,10 +50,10 @@ export function EnquiryBar({
   const href = useMemo(
     () =>
       buildWhatsAppUrl(
-        clientEnv.NEXT_PUBLIC_OWNER_WA,
+        ownerWhatsApp,
         buildEnquiryMessage(product, clientEnv.NEXT_PUBLIC_SITE_URL),
       ),
-    [product],
+    [product, ownerWhatsApp],
   );
 
   const logEnquiry = useCallback(() => {

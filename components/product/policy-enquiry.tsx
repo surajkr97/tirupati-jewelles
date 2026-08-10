@@ -14,13 +14,18 @@
 import { MessageCircle } from 'lucide-react';
 
 import { buildWhatsAppUrl } from '@/lib/catalog/whatsapp';
-import { clientEnv } from '@/lib/env';
 
-export function PolicyEnquiry({ policy }: { policy: string }) {
+export function PolicyEnquiry({
+  policy,
+  ownerWhatsApp,
+}: {
+  policy: string;
+  ownerWhatsApp: string;
+}) {
   // Encoded by `buildWhatsAppUrl`; the policy name is ours, but it goes through the same
   // one function every other message does rather than being special-cased.
   const href = buildWhatsAppUrl(
-    clientEnv.NEXT_PUBLIC_OWNER_WA,
+    ownerWhatsApp,
     `Hi! I have a question about your ${policy.toLowerCase()}.`,
   );
 

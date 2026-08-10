@@ -369,18 +369,30 @@ decision (D-033), so no nonce is needed and none is invented.
 - [x] Real data seeded: actual products, real images, real rates. — 46 active pieces, 25 of
       them with photography, verified against the database.
 - [ ] Admin trained — record a short screen capture of the bill flow.
-- [~] Owner WhatsApp number verified working end to end. — **the number is set and the links
-  are correct; the "message actually arrives" half is yours.** The owner supplied it on
-  11 Aug and it is in `.env` (never in the repository — `.env.example` keeps its
-  placeholder). Verified in the SERVED HTML rather than in the config: `/`,
-  `/policies/buyback` and `/products/classic-solitaire-ring` carry 3, 4 and 3 `wa.me`
-  links respectively on the real number, and **zero** on the old placeholder. One live
-  client chunk still contains the placeholder string and it is benign — it is the example
-  inside `lib/env.ts`'s Zod error message, which ships to the browser because client
-  components import `clientEnv`. **Two things remain:** tap one of those links on a phone
-  and confirm a message reaches the shop, and set `NEXT_PUBLIC_OWNER_WA` in Render —
-  noting it is inlined at BUILD time, so it needs a redeploy, not a restart. See DEBT-050
-  for why the admin panel's own field cannot do this job yet.
+- [~] Owner WhatsApp number verified working end to end. — **the number is set, it lives
+  where the owner can change it, and every link on the site uses it; the "a message actually
+  arrives" half is yours.** Supplied 11 Aug. It is in the **`Settings` row** — the field
+  §7.9 gave the owner — with `.env` as the fallback for a shop that has never opened that
+  screen. Neither value is in the repository; `.env.example` keeps its placeholder.
+
+  Verified in the SERVED HTML rather than in the config, and with the fallback made a
+  **decoy** so the result discriminates: `Settings` holding the real number, `.env` holding
+  `910000000000`, and `/`, `/policies/buyback`, `/products/classic-solitaire-ring` and
+  `/collections` carrying **13 links on the Settings value and zero on the decoy**. One live
+  client chunk contains a placeholder-looking number and it is benign — chased rather than
+  assumed: it is the example inside `lib/env.ts`'s Zod error message, which reaches the
+  browser because client components import `clientEnv`.
+
+  **This item found and closed DEBT-050 on the way.** The `ownerWhatsApp` field had been
+  write-only since §7.9 — stored, displayed back, and read by nothing — so the owner could
+  have changed their number, watched it save, and had every customer keep messaging the old
+  one. That is now the mechanism, not a decoration.
+
+  **What remains is one thumb:** tap a link on a phone and confirm the message reaches the
+  shop. Setting `NEXT_PUBLIC_OWNER_WA` in Render is now belt-and-braces rather than the
+  mechanism — worth doing so the fallback is right, and noting it is inlined at BUILD time,
+  so it needs a redeploy rather than a restart.
+
 - [ ] Test the full journey on a **real budget Android phone on real 4G.** Not a simulator.
       This is where the 95% of users actually are.
 - [ ] Rollback plan documented.

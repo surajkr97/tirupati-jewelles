@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 
 import { EnquiryBar } from '@/components/product/enquiry-bar';
+import { getShopContact } from '@/lib/settings';
 import { Gallery } from '@/components/product/gallery';
 import { PriceBreakdown } from '@/components/product/price-breakdown';
 import { ProductCard, ProductGrid } from '@/components/product/product-card';
@@ -92,6 +93,9 @@ export default async function ProductPage({ params }: { params: Params }) {
   if (!product) notFound();
 
   const related = await getRelatedProducts(product.categorySlug, product.slug);
+  // DEBT-050: the enquiry bar is a Client Component, so the shop's saved number has to be
+  // handed to it rather than imported.
+  const { ownerWhatsApp } = await getShopContact();
 
   /**
    * §9.6's `Product` structured data.
@@ -221,6 +225,7 @@ export default async function ProductPage({ params }: { params: Params }) {
       )}
 
       <EnquiryBar
+        ownerWhatsApp={ownerWhatsApp}
         productId={product.id}
         product={{
           name: product.name,

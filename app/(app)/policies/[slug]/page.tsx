@@ -45,6 +45,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 
 import { PolicyEnquiry } from '@/components/product/policy-enquiry';
+import { getShopContact } from '@/lib/settings';
 import { Section } from '@/components/shell';
 import { Card } from '@/components/ui';
 import { canonical } from '@/lib/seo';
@@ -259,6 +260,8 @@ export default async function PolicyPage({ params }: { params: Params }) {
   if (!isPolicySlug(slug)) notFound();
 
   const policy = POLICIES[slug]!;
+  // DEBT-050 — `PolicyEnquiry` is a Client Component and cannot read the setting itself.
+  const { ownerWhatsApp } = await getShopContact();
 
   return (
     <Section className="pt-8 md:pt-12">
@@ -290,7 +293,9 @@ export default async function PolicyPage({ params }: { params: Params }) {
         */}
         {policy.footnote && <p className="text-small text-muted">{policy.footnote}</p>}
 
-        {policy.enquiry && <PolicyEnquiry policy={policy.title} />}
+        {policy.enquiry && (
+          <PolicyEnquiry policy={policy.title} ownerWhatsApp={ownerWhatsApp} />
+        )}
       </div>
     </Section>
   );

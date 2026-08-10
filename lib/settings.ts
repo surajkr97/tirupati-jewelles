@@ -26,6 +26,7 @@ import 'server-only';
 import { revalidatePath } from 'next/cache';
 
 import { db } from '@/lib/db';
+import { clientEnv } from '@/lib/env';
 import { RATE_SURFACES, RATE_SURFACE_PATTERNS } from '@/lib/rates';
 import { cached, invalidate } from '@/lib/redis';
 
@@ -131,4 +132,91 @@ export async function applyPricingDefaultsChange(): Promise<void> {
 function clampPercent(value: number, fallback: number): number {
   if (!Number.isFinite(value) || value < 0 || value > 100) return fallback;
   return value;
+}
+
+// ───────────────────────────────────────────────────── the shop's contact number
+
+/**
+ * The number every `wa.me` link on the site points at. Phase 9 (DEBT-050).
+ *
+ * ── The defect this closes ──
+ * §7.9 gave the owner an `ownerWhatsApp` field. The server action validated it, stored it,
+ * and the settings screen read it back — and **not one surface that builds a WhatsApp link
+ * ever looked at it.** The footer, the floating button, the product enquiry bar and the
+ * policy enquiry button all read `NEXT_PUBLIC_OWNER_WA` straight from the environment. The
+ * owner could change their number, watch it save, and every customer would keep messaging
+ * the old one.
+ *
+ * That is DEBT-024's shape exactly, in the field that ticket did not sweep — and worse in
+ * one respect: `NEXT_PUBLIC_*` is inlined at BUILD time, so the environment value cannot be
+ * corrected by an env change alone. It needs a redeploy. Which is precisely the situation
+ * §7.9 introduced the settings row to avoid.
+ *
+ * ── The env value stays as the fallback, deliberately ──
+ * Not as a legacy path but as the answer for a shop that has never opened the settings
+ * screen: `Settings` is a singleton that may not exist yet, and a missing row must not mean
+ * a missing WhatsApp link on every page of the site.
+ */
+export interface ShopContact {
+  /** Digits only, e.g. `919876543210` — the form `wa.me/{number}` requires. */
+  ownerWhatsApp: string;
+}
+
+export const SHOP_CONTACT_KEY = 'settings:contact';
+
+/**
+ * The same rule `lib/env.ts` applies to `NEXT_PUBLIC_OWNER_WA`, applied to the stored value.
+ *
+ * The admin action strips non-digits (`replace(/\D/g, '')`) but does not check the LENGTH,
+ * so `ownerWhatsApp: "12"` is a value the database will happily hold. Without this the
+ * storefront would render `wa.me/12` on every page — a link that fails silently in
+ * WhatsApp rather than erroring anywhere a developer would see. A malformed row falls back
+ * to the environment, the same way a malformed percentage falls back in `clampPercent`.
+ */
+const WHATSAPP_DIGITS = /^\d{10,15}$/;
+
+/**
+ * The shop's WhatsApp number, cache-aside on Redis.
+ *
+ * Read on every page — the footer and the floating button are in the storefront layout —
+ * so it is cached for the same reason the pricing defaults are, and `cached()` never throws:
+ * a Redis outage degrades to one Postgres read.
+ */
+export async function getShopContact(): Promise<ShopContact> {
+  return cached(SHOP_CONTACT_KEY, TTL_SECONDS, async () => {
+    const row = await db.settings.findUnique({
+      where: { id: 'singleton' },
+      select: { ownerWhatsApp: true },
+    });
+
+    const stored = row?.ownerWhatsApp ?? '';
+    return {
+      ownerWhatsApp: WHATSAPP_DIGITS.test(stored)
+        ? stored
+        : clientEnv.NEXT_PUBLIC_OWNER_WA,
+    };
+  });
+}
+
+/** Drop the cached contact. Call BEFORE revalidating, for D-012's reason. */
+export async function invalidateShopContact(): Promise<void> {
+  await invalidate(SHOP_CONTACT_KEY);
+}
+
+/**
+ * Bust the cache and refresh every page that renders the number.
+ *
+ * `revalidatePath('/', 'layout')` rather than a `SETTINGS_SURFACES`-style list, and the
+ * difference matters: the footer and the floating button live in the storefront LAYOUT, so
+ * the number is on every page in the group — including `/policies/*` and every product,
+ * which no curated list would have remembered to include. Next's own documentation is
+ * explicit that a layout path "invalidates the layout, all nested layouts beneath it, and
+ * all pages beneath them", which is the whole storefront in one call.
+ *
+ * Broad on purpose. A number change is rare and a missed page is a customer messaging a
+ * number the shop no longer answers.
+ */
+export async function applyShopContactChange(): Promise<void> {
+  await invalidateShopContact();
+  revalidatePath('/', 'layout');
 }

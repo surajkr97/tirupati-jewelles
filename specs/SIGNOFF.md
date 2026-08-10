@@ -3480,3 +3480,72 @@ them must be kept six years (DEBT-026), and nobody has written down how those me
 
 `@OWNER:` DEBT-049 joins DEBT-047 as an ops action before launch. Both are "the code is proven,
 the deployment has not been told about it".
+
+### Phase 9 — DEV / TEST (DEBT-050, the WhatsApp number the settings screen could not change)
+
+Status: **PASS.** Found while wiring the owner's real number in, not by a review of §7.9.
+
+New: `getShopContact()` / `invalidateShopContact()` / `applyShopContactChange()` in
+`lib/settings.ts`, `lib/shop-contact.test.ts` (12). Changed: the four surfaces that build a
+`wa.me` link, their three server parents, and the settings action. No dependencies added.
+
+Verified: `pnpm build` zero TypeScript errors, `pnpm lint` and `pnpm format:check` clean,
+**1183 unit/integration tests** (up from 1171), 63 E2E on the routes that render the link.
+
+#### The defect
+
+§7.9 gave the owner an `ownerWhatsApp` input. `app/admin/settings/actions.ts` validated it,
+stored it and audited it; `app/admin/settings/page.tsx` pre-filled the form from it. And
+every surface that actually builds a link — `components/shell/footer.tsx`,
+`components/shell/whatsapp-fab.tsx`, `components/product/enquiry-bar.tsx`,
+`components/product/policy-enquiry.tsx` — read `clientEnv.NEXT_PUBLIC_OWNER_WA` instead.
+
+So the settings screen made a promise the application did not keep, and it failed in the
+worst direction: **the owner sees their new number saved, and every customer keeps messaging
+the old one.** Nothing errors. This is DEBT-024's shape in the field that ticket did not
+sweep, and worse in one respect — `NEXT_PUBLIC_*` is inlined at BUILD time, so the env value
+cannot be corrected by an environment change alone. It needs a redeploy, which is exactly
+the situation §7.9 added the settings row to avoid.
+
+#### Three things the fix had to get right
+
+**The fallback is not legacy.** `Settings` is a singleton that may not exist, so a shop that
+has never opened the settings screen must still have working links. No row, a null column,
+or a malformed one all fall back to the environment.
+
+**"Malformed" needed defining, and the admin form does not do it.** The action strips
+non-digits (`replace(/\D/g, '')`) but never checks the LENGTH, so `ownerWhatsApp: "12"` is a
+value the database will hold happily. `wa.me/12` is a link that fails _inside WhatsApp_ —
+nowhere a developer would ever see it. `getShopContact` applies the same `^\d{10,15}$` rule
+`lib/env.ts` applies to the env var, and a row that fails it loses to the fallback.
+
+**Invalidation is `revalidatePath('/', 'layout')`, not a surface list.** The footer and the
+floating button are in the storefront layout, so the number is on _every_ page in the group.
+Next's documentation is explicit that a layout path invalidates "the layout, all nested
+layouts beneath it, and all pages beneath them" — read before writing it, per AGENTS.md.
+A curated `SETTINGS_SURFACES`-style list would have quietly missed `/policies/*`, which is
+the DEBT-014 failure mode all over again.
+
+#### Proven with the fallback turned into a decoy
+
+A test where both values are the same string proves nothing — and the first draft of this
+suite made exactly that mistake, asserting the stored number "is not the env value" while
+the fixture had been set to the number that was by then also in `.env`. So the end-to-end
+run puts the real number in `Settings` and `910000000000` in `.env`, and counts what the
+server actually sends: **13 links on the Settings value across `/`, `/policies/buyback`,
+`/products/classic-solitaire-ring` and `/collections`, and zero on the decoy.**
+
+#### The test that matters is the structural one
+
+Twelve tests: the row wins, three fallback cases, three malformed-value cases, a change
+taking effect, and a stale-cache case that shows what `applyShopContactChange` prevents.
+
+But the one that stops this coming back reads the four component **sources** and fails if
+any of them reaches for `NEXT_PUBLIC_OWNER_WA` again — comments stripped first, since these
+files now discuss the variable by name. Mutation-checked: all four fail against the pre-fix
+components. A behavioural test cannot see a _fifth_ surface added later that imports the
+config, because that surface has no test yet; this one can.
+
+`@DEV:` any new surface that renders a WhatsApp link takes `ownerWhatsApp` as a prop and is
+added to `SURFACES` in `lib/shop-contact.test.ts`. Reading the env var directly now fails a
+test rather than a customer.
