@@ -1457,3 +1457,39 @@ never gets one. They can retry. The alternative leaks the customer list, which t
 It does not add SMS. When a provider is finally wired, the channel choice comes back — and the
 generic-response guarantee must survive it, which is what the provider-outage test in
 `app/api/auth/password/forgot/route.test.ts` is there to hold.
+
+---
+
+## D-053 — §9.2's dynamic-import item is closed by measurement, not by splitting something
+
+§9.2 asks to "dynamic-import heavy client components (bill builder, charts, PDF viewer)".
+Measured before deciding, in a real browser counting `encodedDataLength` on script responses
+— the method D-035 established:
+
+| Route                                 | First-load JS |
+| :------------------------------------ | ------------: |
+| `/` storefront home                   |      271.8 kB |
+| `/calculator`                         |      271.4 kB |
+| `/products/[slug]`                    |      265.1 kB |
+| `/admin/bills/new` — the bill builder |      203.9 kB |
+| `/admin` — the 30-day chart           |  **196.5 kB** |
+
+**All three named components are on admin routes, and those routes are already the lightest
+in the application** — 68–75 kB below the storefront and about 90 kB under the 290 kB budget.
+Dynamic-importing them would shave bytes off the pages furthest under the limit, for the one
+person who ever opens them, while the storefront is untouched.
+
+There is also **no PDF viewer to split**. A bill is served as a PDF (`/bills/{key}`) and the
+browser opens it; nothing in this application renders one in the page.
+
+And the storefront's own floor is not app code. D-035 attributes it: `next` 245 kB and
+`react-dom` 55 kB before this application contributes a byte, with no unjustified dependency
+to remove. The one storefront split actually attempted — deferring `sonner` behind
+`next/dynamic` — measured **worse** (278.6 → 281.0 kB), because `<Toaster />` mounts in the
+root layout so the lazy chunk is requested on load anyway and the wrapper is pure overhead.
+
+So the item is marked done with the measurement recorded rather than satisfied by a split
+that improves nothing. The precedent is D-035's: state the measurement, do not quietly edit
+the spec — and equally, do not perform the letter of a checklist item when the measurement
+says it buys nothing. If the admin bundle ever matters, the same three components are still
+the candidates and the numbers above are the baseline.

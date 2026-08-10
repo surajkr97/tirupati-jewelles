@@ -78,8 +78,18 @@ survives this decision. `pnpm lighthouse`.
 
 - [x] `@next/bundle-analyzer`; remove anything unjustified. — **nothing unjustified found.**
       Attribution in D-035; the budget is framework, not bloat. Tool needs `--webpack` (D-034).
-- [ ] Dynamic-import heavy client components (bill builder, charts, PDF viewer).
-      One attempt (`sonner`) measured _worse_ and was reverted — see D-035.
+- [x] Dynamic-import heavy client components (bill builder, charts, PDF viewer).
+      **Not warranted, and the reason is a measurement rather than an opinion — D-053.** All
+      three components this line names live on **admin** routes, and those routes are already
+      the lightest in the application: the dashboard with its 30-day chart is **196.5 kB**,
+      the bill builder **203.9 kB**, against a storefront calculator at **271.4 kB** and a
+      290 kB budget. Splitting them would shave bytes off the pages that are furthest under
+      the limit, for the one person who ever opens them. There is also no PDF viewer — a bill
+      is served as a PDF and the browser opens it. The earlier `sonner` attempt on the
+      storefront measured _worse_ (278.6 → 281.0 kB) and was reverted; D-035 already
+      attributes the storefront floor to framework code with nothing unjustified to remove.
+      Left as `[x]` with the measurement recorded, not as a cosmetic split that would let the
+      checklist claim work nobody benefits from.
 - [x] Verify ISR is actually serving cached HTML — `x-nextjs-cache: HIT` measured on every
       route, under throttling, with the full CSP attached.
 - [x] Fonts: `next/font`, subset, `display: swap`, preloaded. — verified in the served HTML:
@@ -93,8 +103,34 @@ survives this decision. `pnpm lighthouse`.
       foreign-key indexes found and added** (`ProductImage.productId`, `OrderItem.orderId`).
       Found by index-coverage audit, not by EXPLAIN: at 25 products a seq scan is the correct
       plan, so EXPLAIN on development data would have shown nothing wrong.
-- [ ] Redis hit rate > 80% on rates and products; instrument and confirm.
-- [ ] Enable compression and a CDN for static assets.
+- [x] Redis hit rate > 80% on rates and products; instrument and confirm. — **instrumented
+      in `cached()` itself and confirmed at 91.7%.** `pnpm cache:stats --drive` resets the
+      counters, **drops `rates:current` so the run starts cold**, drives 60 requests and
+      reports: `rates` **11 hits / 1 miss / 0 faults = 91.7%**, the single miss being the cold
+      start. An earlier version left the key warm and reported a flattering 100% with zero
+      misses — a run that never sees a miss has not exercised the miss counter and cannot
+      tell a working instrument from one that only counts hits.
+      **Three outcomes, not two:** `hit`, `miss` and `fault`, because a Redis outage is not a
+      cache miss and folding them together makes a dead Redis read as 0% — pointing whoever
+      sees that number at the cache logic instead of at the box that is down. **14 tests**,
+      the discriminating one failing `get` alone so the counter write still lands;
+      mutation-checked, and folding `fault` into `miss` fails exactly that one test.
+      **"and products" names something that is not in Redis:** a product page is ISR'd HTML
+      and a product card is priced from the rate, so the product cache is Next's. Its hit
+      rate is `x-nextjs-cache`, measured **100% of 36 cacheable responses** in the same run
+      and reported alongside rather than quietly dropped.
+- [~] Enable compression and a CDN for static assets. — **compression is on and now
+  measured; the CDN is an ops action.** Verified over the wire by `pnpm cache:stats --drive`,
+  which checks the edge layer alongside the two cache layers because all three are silent
+  when they are wrong: HTML gzipped (74.4 kB → **11.8 kB**), static JS gzipped, static JS
+  carrying `public, max-age=31536000, immutable`, and `Vary: Accept-Encoding` so no proxy can
+  hand gzip to a client that cannot read it. `/api/rates` is served uncompressed at 406 bytes
+  — correct, not a gap: gzip framing costs more than it saves at that size.
+  **What is left is genuinely not in this repository.** Next compresses with gzip only;
+  Brotli is ~27% smaller again on this HTML (11.8 kB → **8.6 kB**, measured) and comes from
+  the edge. And a CDN on Render is a platform setting or a proxy in front, not a config line
+  here. What the application can do it does: the assets are _cacheable by_ a CDN, which is
+  the precondition — a CDN in front of assets that forbid caching buys nothing. **DEBT-051.**
 
 ---
 

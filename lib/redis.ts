@@ -154,6 +154,139 @@ function logCacheFault(op: string, err: unknown): void {
   }
 }
 
+// ──────────────────────────────────────────────────── hit-rate instrumentation
+
+/**
+ * §9.2: "Redis hit rate > 80% on rates and products; instrument and confirm."
+ *
+ * ── Three outcomes, not two ──
+ * `hit` and `miss` are the ratio the budget is about. `fault` is Redis being unreachable,
+ * and it is counted separately on purpose: a fault is not a caching problem, it is an
+ * outage, and folding the two together makes a dead Redis read as a 0% hit rate — which
+ * points an investigation at the cache logic rather than at the box that is down.
+ *
+ * ── Fire-and-forget, and it must stay that way ──
+ * Never awaited. This runs on the render path of every product card and every page that
+ * shows a rate, and measuring a cache is not worth making the cache slower. The `.catch`
+ * is not decoration: an unhandled promise rejection from a floating `incr` would take the
+ * process down, which is the exact failure `lib/redis.ts` exists to prevent.
+ *
+ * ── Grouped by namespace, not by key ──
+ * `search:gold ring` and `search:jhumka` are the same cache with different arguments; one
+ * counter per query would be thousands of keys measuring nothing. The namespace is the
+ * segment before the first colon, which is the shape MASTER-SPEC §7's key map already uses.
+ */
+export const CACHE_METRICS_PREFIX = 'metrics:cache';
+
+export type CacheOutcome = 'hit' | 'miss' | 'fault';
+
+export function cacheNamespace(key: string): string {
+  return key.split(':')[0] || 'other';
+}
+
+/**
+ * Writes still in flight, so a test can wait for them instead of sleeping.
+ *
+ * The counters are deliberately not awaited on the request path, which makes them a race
+ * for anything that wants to assert on them. AGENTS.md rejects "add a `setTimeout` to fix a
+ * race condition" as a fix, and it would be one here — so the pending promises are tracked
+ * and `flushCacheMetrics()` awaits them. Production never calls it.
+ */
+const pending = new Set<Promise<unknown>>();
+
+function record(key: string, outcome: CacheOutcome): void {
+  const field = `${CACHE_METRICS_PREFIX}:${cacheNamespace(key)}`;
+
+  const write = redis
+    .hincrby(field, outcome, 1)
+    // `since` is written once and left alone, so a rate can be quoted with a window rather
+    // than as a bare percentage of an unknown period.
+    .then(() => redis.hsetnx(field, 'since', String(Date.now())))
+    .catch(() => {
+      // Instrumentation must never be the reason a request fails, and a fault here is
+      // already the thing being measured.
+    })
+    .finally(() => pending.delete(write));
+
+  pending.add(write);
+}
+
+/** Await the in-flight counter writes. For tests and for `pnpm cache:stats`. */
+export async function flushCacheMetrics(): Promise<void> {
+  await Promise.all([...pending]);
+}
+
+export interface CacheStats {
+  namespace: string;
+  hit: number;
+  miss: number;
+  fault: number;
+  /** Hits as a fraction of hits + misses. `null` when nothing has been read yet. */
+  hitRate: number | null;
+  since: Date | null;
+}
+
+/** Read the counters. For `pnpm cache:stats` and the §9.2 confirmation. */
+export async function readCacheStats(): Promise<CacheStats[]> {
+  await ensureReady();
+
+  const keys: string[] = [];
+  let cursor = '0';
+  do {
+    const [next, batch] = await redis.scan(
+      cursor,
+      'MATCH',
+      `${CACHE_METRICS_PREFIX}:*`,
+      'COUNT',
+      100,
+    );
+    cursor = next;
+    keys.push(...batch);
+  } while (cursor !== '0');
+
+  const stats = await Promise.all(
+    keys.sort().map(async (key): Promise<CacheStats> => {
+      const raw = await redis.hgetall(key);
+      const hit = Number(raw.hit ?? 0);
+      const miss = Number(raw.miss ?? 0);
+      const reads = hit + miss;
+
+      return {
+        namespace: key.slice(`${CACHE_METRICS_PREFIX}:`.length),
+        hit,
+        miss,
+        fault: Number(raw.fault ?? 0),
+        hitRate: reads > 0 ? hit / reads : null,
+        since: raw.since ? new Date(Number(raw.since)) : null,
+      };
+    }),
+  );
+
+  return stats;
+}
+
+/** Zero the counters, so a measurement run starts from a known point. */
+export async function resetCacheStats(): Promise<number> {
+  await ensureReady();
+
+  const keys: string[] = [];
+  let cursor = '0';
+  do {
+    const [next, batch] = await redis.scan(
+      cursor,
+      'MATCH',
+      `${CACHE_METRICS_PREFIX}:*`,
+      'COUNT',
+      100,
+    );
+    cursor = next;
+    keys.push(...batch);
+  } while (cursor !== '0');
+
+  if (keys.length) await redis.del(...keys);
+  return keys.length;
+}
+
 /**
  * Cache-aside read.
  *
@@ -175,9 +308,17 @@ export async function cached<T>(
 
   try {
     const hit = await redis.get(key);
-    if (hit !== null) return deserialise<T>(hit);
+    if (hit !== null) {
+      record(key, 'hit');
+      return deserialise<T>(hit);
+    }
+    record(key, 'miss');
   } catch (err) {
     logCacheFault(`get ${key}`, err);
+    // NOT counted as a miss — see `record`. A fault is Redis being unreachable, which is a
+    // different fact from the key not being there, and averaging them together is how an
+    // outage reads as a caching problem.
+    record(key, 'fault');
     missed = true;
   }
 

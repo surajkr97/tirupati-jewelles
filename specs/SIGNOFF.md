@@ -3549,3 +3549,77 @@ config, because that surface has no test yet; this one can.
 `@DEV:` any new surface that renders a WhatsApp link takes `ownerWhatsApp` as a prop and is
 added to `SURFACES` in `lib/shop-contact.test.ts`. Reading the env var directly now fails a
 test rather than a customer.
+
+### Phase 9 — DEV / TEST (§9.2, the last three performance items)
+
+Status: **PASS on two, one `[~]` on an ops action.** §9.2 is now complete except for a CDN,
+which cannot be turned on from inside this repository.
+
+New: hit-rate instrumentation in `lib/redis.ts`, `scripts/cache-stats.mts`
+(`pnpm cache:stats`), `lib/cache-metrics.test.ts` (14). No dependencies added.
+
+Verified: `pnpm build` zero TypeScript errors, `pnpm lint` and `pnpm format:check` clean,
+**1197 unit/integration tests** (up from 1183).
+
+#### The hit rate is 91.7%, and the first version of the measurement was flattering
+
+`cached()` now records three outcomes per namespace. `pnpm cache:stats --drive` resets the
+counters, drops `rates:current`, drives 60 requests and reports.
+
+The first run said **100%, with zero misses** — and that is the weakest possible result, not
+the best. It had reset only the counters, leaving the cache warm from earlier browsing, so
+the miss counter was never exercised: the run could not distinguish a working instrument from
+one that only ever increments `hit`. Starting cold gives **11 hits / 1 miss / 0 faults =
+91.7%**, where the single miss is the cold start — which is also the honest shape of the
+question, since a deploy restarts with an empty cache and the budget has to survive that.
+
+**Three outcomes, not two**, and this is the design decision in the ticket. `fault` — Redis
+unreachable — is counted separately from `miss`. Folding them together is the easy
+implementation and it makes a dead Redis report as a 0% hit rate, which sends whoever reads
+that number to the cache logic instead of to the box that is down.
+
+The test for it had to be built carefully. Against a genuinely dead Redis the counter write
+fails too, so "nothing was recorded" passes whether the code says `fault` or `miss` — it
+proves the degradation contract and nothing about the instrument. The discriminating test
+fails `get` alone, so the read fails while the counter still lands. Mutation-checked:
+changing `record(key, 'fault')` to `record(key, 'miss')` fails exactly that test and nothing
+else.
+
+The counters are fire-and-forget — never awaited on a render path — which makes them a race
+for anything asserting on them. `flushCacheMetrics()` awaits the in-flight writes rather than
+a `setTimeout`, which AGENTS.md rejects as a fix for exactly this.
+
+#### "and products" names a cache that does not exist in Redis
+
+§9.2 asks for the hit rate "on rates and products". Rates are cache-aside on Redis. **Products
+are not in Redis at all** — a product page is ISR'd HTML and a product card is priced from the
+rate, so the product cache is Next's. Its hit rate is `x-nextjs-cache`, and the same run
+reports it: **100% of 36 cacheable responses.** Reported alongside rather than dropped,
+because half a criterion silently omitted is how a checklist stops meaning anything.
+
+#### Compression was already on; nobody had ever measured it
+
+Checked over the wire, in the same command, because Redis caching, ISR and edge caching are
+three layers of one question and all three are silent when wrong: HTML gzipped **74.4 kB →
+11.8 kB**, static JS gzipped, static JS carrying `public, max-age=31536000, immutable`, and
+`Vary: Accept-Encoding` present. `/api/rates` is uncompressed at 406 bytes, which is correct
+— gzip framing costs more than it saves there.
+
+What is left is not a code change. Next compresses with gzip only, and **Brotli is 27%
+smaller again on this HTML — 11.8 kB → 8.6 kB, measured** — but it comes from the edge. A CDN
+on Render is a platform setting or a proxy in front. `assetPrefix` was considered and
+deliberately not added: a config path nobody exercises until a CDN exists is what Phase 7 and
+§9.4 both declined to build (DEBT-022, DEBT-046). DEBT-051.
+
+#### The dynamic-import item is closed by measuring, not by splitting
+
+All three components §9.2 names are on **admin** routes, and those are already the lightest
+in the application: the dashboard with its chart at **196.5 kB**, the bill builder at
+**203.9 kB**, against `/calculator` at 271.4 kB and a 290 kB budget. Splitting them would
+take bytes off the pages furthest under the limit, for the one person who opens them. There
+is no PDF viewer at all — a bill is served as a PDF and the browser opens it. D-053 records
+the table.
+
+`@DEV:` `pnpm cache:stats` is the command to re-run after any caching change. It gates
+`rates` at 80% and exits non-zero below it, so it can go in CI whenever a staging origin
+exists to point it at.

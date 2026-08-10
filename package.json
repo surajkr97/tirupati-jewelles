@@ -30,7 +30,8 @@
     "worker": "tsx --import ./scripts/loaders/register-server-only.mjs scripts/worker.mts",
     "backup": "tsx scripts/backup.mts",
     "verify:restore": "tsx scripts/verify-restore.mts",
-    "verify:degradation": "tsx --import ./scripts/loaders/register-server-only.mjs scripts/verify-degradation.mts"
+    "verify:degradation": "tsx --import ./scripts/loaders/register-server-only.mjs scripts/verify-degradation.mts",
+    "cache:stats": "tsx --import ./scripts/loaders/register-server-only.mjs scripts/cache-stats.mts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"
