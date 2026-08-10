@@ -369,7 +369,18 @@ decision (D-033), so no nonce is needed and none is invented.
 - [x] Real data seeded: actual products, real images, real rates. — 46 active pieces, 25 of
       them with photography, verified against the database.
 - [ ] Admin trained — record a short screen capture of the bill flow.
-- [ ] Owner WhatsApp number verified working end to end.
+- [~] Owner WhatsApp number verified working end to end. — **the number is set and the links
+  are correct; the "message actually arrives" half is yours.** The owner supplied it on
+  11 Aug and it is in `.env` (never in the repository — `.env.example` keeps its
+  placeholder). Verified in the SERVED HTML rather than in the config: `/`,
+  `/policies/buyback` and `/products/classic-solitaire-ring` carry 3, 4 and 3 `wa.me`
+  links respectively on the real number, and **zero** on the old placeholder. One live
+  client chunk still contains the placeholder string and it is benign — it is the example
+  inside `lib/env.ts`'s Zod error message, which ships to the browser because client
+  components import `clientEnv`. **Two things remain:** tap one of those links on a phone
+  and confirm a message reaches the shop, and set `NEXT_PUBLIC_OWNER_WA` in Render —
+  noting it is inlined at BUILD time, so it needs a redeploy, not a restart. See DEBT-050
+  for why the admin panel's own field cannot do this job yet.
 - [ ] Test the full journey on a **real budget Android phone on real 4G.** Not a simulator.
       This is where the 95% of users actually are.
 - [ ] Rollback plan documented.
