@@ -75,7 +75,10 @@ export async function proxy(request: NextRequest) {
    * Rewritten to a non-existent path so it yields the app's own 404 with no redirect and
    * no hint that the route exists.
    */
-  if (pathname.startsWith('/__design') && process.env.NODE_ENV === 'production') {
+  if (
+    (pathname.startsWith('/__design') || pathname.startsWith('/__sentry-check')) &&
+    process.env.NODE_ENV === 'production'
+  ) {
     return NextResponse.rewrite(new URL('/__not-found', request.url));
   }
 

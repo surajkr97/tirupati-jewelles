@@ -24,6 +24,7 @@
     "test:e2e": "playwright test",
     "lighthouse": "tsx scripts/lighthouse.mts",
     "verify:upload": "tsx scripts/verify-upload.mts",
+    "verify:sentry": "tsx --import ./scripts/loaders/register-server-only.mjs scripts/verify-sentry.mts",
     "verify:bill": "tsx --import ./scripts/loaders/register-server-only.mjs scripts/verify-bill.mts",
     "build:analyze": "ANALYZE=true next build --webpack",
     "worker": "tsx --import ./scripts/loaders/register-server-only.mjs scripts/worker.mts"
