@@ -399,8 +399,16 @@ decision (D-033), so no nonce is needed and none is invented.
 
 ## 9.8 Launch checklist
 
-- [ ] All 9 phases signed off in `SIGNOFF.md`.
-- [ ] `DEBT.md` reviewed; nothing CRITICAL outstanding.
+- [~] All 9 phases signed off in `SIGNOFF.md`. — **Phases 1–8 and §9.1–§9.7 are signed off.**
+  Phase 9's block records what is deliberately unbuilt (DEBT-044, 045, 051) and the two
+  acceptance criteria that cannot be met from inside the repository — the screen-reader pass
+  and the real-device run.
+- [x] `DEBT.md` reviewed; nothing CRITICAL outstanding. — **21 open: zero CRITICAL, zero
+      HIGH, 7 MEDIUM, 13 LOW, 1 INFO, against 29 closed.** The MEDIUMs are DEBT-009 (the ops
+      half of the proxy-hop confirmation), 026 (invoice retention policy), 027 (Indic script
+      on invoices), 031 (backup retention reconciliation), 034 (IGST when the shop ships out
+      of state), 042 (the screen-reader pass) — none of which blocks a launch, and each names
+      the condition that would make it urgent.
 - [ ] Staging mirrors production.
 - [x] Real data seeded: actual products, real images, real rates. — 46 active pieces, 25 of
       them with photography, verified against the database.

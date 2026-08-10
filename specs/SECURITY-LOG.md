@@ -1829,3 +1829,88 @@ the pre-fix route. The two that pass against it do so because `@/lib/notify` is 
 is the finding, restated: a unit test with the failing dependency stubbed out cannot see a fault
 whose nature is that the dependency is unavailable. `pnpm verify:degradation` is what catches
 this class, and it now asserts both halves against a running server.
+
+---
+
+# Phase 9 — SECURITY (§9.2–§9.7, the sections after §9.1's sign-off)
+
+§9.1 was reviewed and signed off separately (SEC-029..039). This covers everything since:
+the performance work, the queue, monitoring, reliability, SEO and accessibility. Two findings,
+both LOW, both fixed here rather than logged — they are three-line changes and leaving them
+open would have cost more to track than to close.
+
+## SEC-040 · HIGH · fixed — recorded above, under §9.5
+
+The password-reset account-existence oracle. Listed here because it is the phase's most
+serious finding and it was found by §9.5's degradation run rather than by this review.
+
+## SEC-041 · LOW · fixed — `/api/health` told a stranger how the shop was doing
+
+The endpoint §9.4 built answers four alert conditions in one unauthenticated response. Three
+of the four `detail` strings are specifics rather than statuses:
+
+- `last set 81h ago` — how long since the shop touched its gold rate
+- `cleanup.expire_shares has 143 waiting` — internal queue names and depth
+- `4 in the dead-letter set` — that jobs are failing
+
+None is catastrophic and all of it was public. Fixed by returning `detail` only to an ADMIN
+session; the per-check `status` fields stay public because §9.4's whole design is that one
+external uptime rule can watch all four, and DEBT-047's registered check reads exactly those.
+
+**The sharper edge is deliberately NOT fixed, and the trade is recorded rather than made
+quietly.** `checks.redis.status` remains public, and the global rate limiter
+(`lib/security/global-limit.ts`) **fails open** — so `redis: down` announces the window in
+which per-IP limits are not being enforced, turning "retry and hope" into "poll and pounce".
+Three things argue for leaving it: it is the field §9.4's alert exists for, the same fact is
+inferable by observing that limits stopped applying, and the owner has now registered a check
+against it (DEBT-047). A concrete good against a weak, inferable signal. If this shop ever
+becomes a target worth polling, the answer is an authenticated checker, not a coarser body.
+
+Regression: two E2E cases in `e2e/smoke.spec.ts` — anonymous gets statuses and no `detail`,
+an admin still gets `detail`. Both halves, because "no detail for anybody" would pass the
+first while removing what whoever is on call actually needs.
+
+## SEC-042 · LOW · fixed — the degradation script's "do not point this at production" was a comment
+
+`scripts/verify-degradation.mts` stops Postgres and Redis. Its header has carried
+"⚠ DEVELOPMENT ONLY. It stops your database. Never point it at production" since it was
+written, and that is precisely the class of guardrail Phase 1 SECURITY refused to take on
+trust: _"a rule that silently fails to fire is worse than no rule."_ One
+`VERIFY_ORIGIN=https://…` in the wrong shell and the checklist takes the shop offline while
+measuring how gracefully it degrades. `scripts/verify-bill.mts` has the same shape — prose
+only — and it consumes invoice numbers that §8.2's counter cannot give back (noted, not
+changed here).
+
+Now two independent runtime conditions: the target must be loopback **and** `NODE_ENV` must
+not be `production`. No `--i-know` escape hatch — there is no legitimate reason to run this
+against a live shop, and an escape hatch is how one gets used.
+
+**Tested rather than trusted, and the test found a defect in the fix.** The guard was first
+placed inside `main()`, which runs _after_ the module's top-level imports — and `lib/redis.ts`
+opens a socket at import time. So the refusal path had already connected to the thing it was
+refusing to touch, then returned without reaching the `finally` that disconnects: it printed
+the refusal and **hung**. Moved above the imports. Both conditions now verified to refuse, to
+exit immediately, and to leave every container running.
+
+## What was checked and found correct
+
+| Area                                   | Result                                                                              |
+| :------------------------------------- | :---------------------------------------------------------------------------------- |
+| Job payloads across the queue boundary | Zod-parsed on the way IN to every handler — a queue is a §9.1 boundary              |
+| Cache metrics keys                     | Namespace only. `search:{query}` records `search`; no customer's query is stored    |
+| Backup files (DEBT-031)                | `0600` in a `0700` directory, `backups/` gitignored — verified on disk              |
+| `pg_dump` connection                   | `PGPASSWORD` + flags, never a URL in argv where `ps` reads it                       |
+| Restore scratch database               | Name derived (`<db>_restore_check`); the drop cannot target the source              |
+| §9.1's six headers                     | All six still on a live response — CSP, HSTS, nosniff, frame, referrer, permissions |
+| Zod on every route + Server Action     | 37 tests, still green with the new health branch                                    |
+| Sitemap after §9.6                     | Zero `/admin`, `/bills`, `/account`, `/claim`, `/calculator/s` entries              |
+| `pnpm audit`                           | "No known vulnerabilities found"                                                    |
+
+One near-miss worth recording: the first pass of this review reported HSTS, `nosniff` and
+`X-Frame-Options` as missing. They were not — the grep pattern was `x-frame:`, which cannot
+match `X-Frame-Options:`. Checked against the raw response before writing it down.
+
+## Verdict
+
+**Zero CRITICAL. Zero HIGH outstanding** — SEC-040 was HIGH and is fixed with 5 regression
+tests. SEC-041 and SEC-042 are LOW and fixed. Nothing is carried into DEBT from this review.

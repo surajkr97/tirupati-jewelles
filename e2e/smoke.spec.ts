@@ -7,6 +7,8 @@
  */
 import { expect, test } from '@playwright/test';
 
+import { ADMIN_STATE } from './admin-state';
+
 test('homepage renders the rate ticker', async ({ page }) => {
   await page.goto('/');
 
@@ -65,4 +67,55 @@ test('health endpoint reports database and redis', async ({ request }) => {
     database: 'ok',
     checks: { database: { status: 'ok' } },
   });
+});
+
+/**
+ * SEC-041 — the health endpoint tells a stranger less than it tells an admin.
+ *
+ * The per-check `status` fields stay public: §9.4 built this so one external uptime rule can
+ * watch all four alert conditions, and DEBT-047's registered check reads exactly those. The
+ * free-text `detail` does not — `last set 81h ago` and `cleanup.expire_shares has 143
+ * waiting` describe how the shop is doing and what its internals are called, and buy an
+ * uptime checker nothing.
+ *
+ * Both halves are asserted, because "no detail for anyone" would pass the anonymous test
+ * while silently removing the field whoever is on call actually needs.
+ */
+test('SEC-041 — an anonymous caller gets statuses but no diagnostic detail', async ({
+  request,
+}) => {
+  const body = await (await request.get('/api/health')).json();
+
+  const checks = Object.entries(body.checks as Record<string, Record<string, unknown>>);
+  expect(checks.length).toBeGreaterThan(0);
+
+  for (const [name, check] of checks) {
+    // The alert rule's field is still there …
+    expect(check.status, `${name} must still report a status`).toBeTruthy();
+    // … and the free text is not.
+    expect(
+      check,
+      `${name} must not leak detail to an anonymous caller`,
+    ).not.toHaveProperty('detail');
+  }
+});
+
+test('SEC-041 — an admin still sees the detail', async ({ browser }) => {
+  const context = await browser.newContext({ storageState: ADMIN_STATE });
+  try {
+    const body = await (await context.request.get('/api/health')).json();
+    const checks = Object.values(body.checks as Record<string, Record<string, unknown>>);
+
+    /**
+     * At least one check carries detail on any real database — `rates` reports how long ago
+     * a rate was set whether it is stale or fresh. Asserting "some" rather than a specific
+     * one keeps this from failing with the clock, which is DEBT-040's pattern.
+     */
+    expect(
+      checks.some((check) => typeof check.detail === 'string'),
+      'an admin session must see the diagnostic detail',
+    ).toBe(true);
+  } finally {
+    await context.close();
+  }
 });

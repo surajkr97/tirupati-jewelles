@@ -3623,3 +3623,85 @@ the table.
 `@DEV:` `pnpm cache:stats` is the command to re-run after any caching change. It gates
 `rates` at 80% and exits non-zero below it, so it can go in CI whenever a staging origin
 exists to point it at.
+
+### Phase 9 — SECURITY (§9.2–§9.7, the sections after §9.1's sign-off)
+
+Status: **PASS** — zero CRITICAL, zero HIGH outstanding.
+
+Full review in `SECURITY-LOG.md`. Two findings, both LOW, both fixed here rather than logged
+to DEBT: each was a three-line change and tracking them would have cost more than closing
+them.
+
+**SEC-041** — `/api/health` returned its diagnostic `detail` to anyone: how long since the
+shop touched its gold rate, internal queue names and depths, how many jobs are in the
+dead-letter set. Now admin-only. The per-check `status` fields stay public because §9.4's
+design is that one external rule watches all four conditions and DEBT-047's registered check
+reads exactly those. **The sharper edge is deliberately left and recorded rather than traded
+away quietly:** `checks.redis.status` stays public, and the global limiter fails _open_, so
+that field announces the window in which per-IP limits are not enforced. It is also the field
+the alert exists for, and the same fact is inferable by watching limits stop applying.
+
+**SEC-042** — `scripts/verify-degradation.mts` stops Postgres and Redis, and its "never point
+this at production" was a **comment**. Phase 1 SECURITY's standard applies: "a rule that
+silently fails to fire is worse than no rule." Now two runtime conditions — loopback origin
+AND `NODE_ENV !== 'production'` — with no escape hatch. **Testing the guard found a defect in
+the guard:** placed inside `main()` it ran after the top-level imports, so `lib/redis.ts` had
+already opened a socket and the refusal path returned without disconnecting — it printed its
+refusal and hung. Moved above the imports.
+
+Checked and correct: job payloads Zod-parsed across the queue boundary; cache metrics store
+the namespace only, so no customer's search query is retained; backups `0600` in a `0700`
+directory and gitignored; `pg_dump` takes `PGPASSWORD` rather than a URL in argv; the restore
+scratch database name is derived so the drop cannot target the source; all six §9.1 headers
+still on a live response; 37 route/action validation tests green; the sitemap carries zero
+private routes; `pnpm audit` clean.
+
+---
+
+## Phase 9 — SIGNED OFF (§9.1–§9.7)
+
+DEV **PASS** · TEST **PASS** · DESIGN **PASS** · SECURITY **PASS**.
+
+Verified on the final build: `pnpm build` zero TypeScript errors, `pnpm lint`,
+`pnpm typecheck` and `pnpm format:check` clean, **1197 unit/integration tests** and
+**571 E2E** across 375 / 768 / 1280 — the full E2E suite green with no failures and no
+retries. `pnpm verify:degradation` 25/25, `pnpm verify:restore` 6/6, `pnpm cache:stats`
+91.7%, `pnpm verify:sentry` and `pnpm verify:upload` both proven against live accounts.
+
+**Debt: 21 open — zero CRITICAL, zero HIGH.** Seven MEDIUM, thirteen LOW, one INFO, against
+29 closed. §9.8's "nothing CRITICAL outstanding" therefore already holds.
+
+### What is deliberately NOT built, and is not a gap
+
+Three §9.3 items and one §9.2 item are `[ ]`/`[~]` on purpose, each with a measurement or a
+decision behind it rather than an omission:
+
+- **`rates.rollup_history` and `media.process_image`** — the first needs a candle table and a
+  migration for a sparkline that is already fast; the second duplicates
+  `scripts/generate-blur.mts`, which generated all 92 placeholders. DEBT-045.
+- **The queue dashboard** — §9.3 names _Flower_, a Celery tool, and there is no Celery work to
+  watch (D-042). Bull Board behind `requireAdmin()` is the equivalent and is the one of the
+  three genuinely worth doing first. DEBT-045.
+- **`bills.generate_pdf` stays synchronous** — §8.3 gates the move on "if it becomes a
+  bottleneck", and DEBT-029 measured it well under a second. The queue, handler and worker
+  all exist; moving it is one call site plus a poll UI, the day anyone reports it slow.
+  DEBT-044.
+- **Compression and a CDN** — compression is on and measured; Brotli and the CDN come from the
+  edge, not from `next.config.ts`. DEBT-051.
+
+### The two acceptance criteria this phase could not meet from inside the repository
+
+1. **Screen-reader pass (§9.7).** The structures are asserted across 22 routes; nobody has
+   listened. One hour with VoiceOver or NVDA over the three flagship flows. DEBT-042.
+2. **Real-device test (§9.8).** A budget Android on real 4G. Not a simulator.
+
+### What §9.8 still holds
+
+The launch checklist is the gate, not phase work, and it is mostly the owner's: staging
+mirroring production, the admin-training capture, the WhatsApp number confirmed by an actual
+message, the real-device run, and a written rollback plan. Five of its items were confirmed by
+the owner on 11 Aug and are recorded as such — a confirmation, not a measurement, because each
+happens in an environment this repository cannot read.
+
+`@OWNER:` the shortest path to launch is the four manual items above. Nothing in the codebase
+blocks them.

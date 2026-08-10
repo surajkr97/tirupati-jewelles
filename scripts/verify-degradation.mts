@@ -31,12 +31,64 @@ import { config } from 'dotenv';
 
 config({ path: '.env', quiet: true });
 
+const ORIGIN = process.env.VERIFY_ORIGIN ?? 'http://localhost:3000';
+
+/**
+ * SEC-042. A comment is not a control.
+ *
+ * This script stops Postgres and Redis. The header has said "⚠ DEVELOPMENT ONLY. Never point
+ * it at production" since it was written, and that is exactly the kind of guardrail Phase 1
+ * SECURITY refused to accept on trust — "a rule that silently fails to fire is worse than no
+ * rule". One `VERIFY_ORIGIN=https://…` in the wrong shell and the checklist takes the shop
+ * offline while it measures how gracefully it degrades.
+ *
+ * Two independent conditions, because either one alone is escapable: the target has to be
+ * loopback, AND this process must not be running as production. `--i-know` is deliberately
+ * NOT offered — there is no legitimate reason to run this against a live shop, and an escape
+ * hatch is how one gets used.
+ */
+function refuseIfNotLocal(): string | null {
+  if (process.env.NODE_ENV === 'production') {
+    return 'NODE_ENV is production. This script stops the database; it does not run here.';
+  }
+
+  let host: string;
+  try {
+    host = new URL(ORIGIN).hostname;
+  } catch {
+    return `VERIFY_ORIGIN is not a URL: ${ORIGIN}`;
+  }
+
+  if (!['localhost', '127.0.0.1', '::1', '[::1]'].includes(host)) {
+    return (
+      `VERIFY_ORIGIN points at ${host}, which is not this machine.\n` +
+      `This script STOPS Postgres and Redis — running it against anything but a local\n` +
+      `stack is an outage, not a test.`
+    );
+  }
+
+  return null;
+}
+
+/**
+ * Checked BEFORE the imports below, and that ordering is the fix to the first version.
+ *
+ * `lib/redis.ts` opens a socket at import time and `lib/db.ts` builds a Prisma client, so a
+ * guard placed inside `main()` had already connected to whatever it was refusing to touch —
+ * and the refusal path then returned without reaching the `finally` that disconnects, so the
+ * process printed its refusal and HUNG on the open handle. Refusing early means nothing is
+ * constructed at all.
+ */
+const refusal = refuseIfNotLocal();
+if (refusal) {
+  console.error(`Refusing to run.\n\n${refusal}`);
+  process.exit(1);
+}
+
 const { QUEUE, enqueueOrRun, queueFor, closeQueues } =
   await import('../lib/queue/index.ts');
 const { db } = await import('../lib/db.ts');
 const { redis } = await import('../lib/redis.ts');
-
-const ORIGIN = process.env.VERIFY_ORIGIN ?? 'http://localhost:3000';
 
 /**
  * The address the auth probes claim to come from.

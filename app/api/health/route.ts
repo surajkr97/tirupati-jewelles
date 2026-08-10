@@ -22,8 +22,10 @@
  * into "the site is offline", which is a strictly worse outcome than the thing being alerted
  * on. `checks[].status` is what an alert rule reads; the HTTP code is for the load balancer.
  */
+import { Role } from '@prisma/client';
 import { NextResponse } from 'next/server';
 
+import { getCurrentUser } from '@/lib/auth/guard';
 import { db } from '@/lib/db';
 import { QUEUE, queueFor } from '@/lib/queue';
 import { redisHealthy } from '@/lib/redis';
@@ -123,17 +125,65 @@ async function checkQueues(): Promise<Check> {
   }
 }
 
+/**
+ * SEC-041. The free-text `detail` is for whoever is on call, not for the internet.
+ *
+ * An anonymous caller needs exactly one thing from this endpoint: is the service up, and is
+ * any check unhealthy. That is `status` and `checks.<name>.status`, and both stay public
+ * because §9.4 built this so an external uptime service needs ONE rule, and DEBT-047's
+ * registered check reads exactly those fields.
+ *
+ * `detail` is different. It carries specifics — `last set 81h ago`, `cleanup.expire_shares
+ * has 143 waiting`, `4 in the dead-letter set` — which tell a stranger how this shop is
+ * doing and what its internals are called, and buy an uptime checker nothing. Admin sessions
+ * still see it, which is when anyone actually wants it.
+ *
+ * ── What is deliberately still public, and the trade it makes ──
+ * `checks.redis.status` stays visible, and it is the sharpest item here: the GLOBAL rate
+ * limiter fails OPEN (`lib/security/global-limit.ts`), so `redis: down` announces the window
+ * in which per-IP limits are not being enforced. Removing it would be defence in depth —
+ * but it is the field §9.4's alert exists for, an attacker can infer the same fact by
+ * observing that limits stopped applying, and the alert being registered against it now is a
+ * concrete good against a weak, inferable signal. Recorded as SEC-041 rather than traded
+ * away quietly; if the shop is ever a target worth polling, the answer is an authenticated
+ * checker, not a coarser body.
+ */
+async function canSeeDetail(): Promise<boolean> {
+  try {
+    const user = await getCurrentUser();
+    return user?.role === Role.ADMIN;
+  } catch {
+    // An unreadable session is not an admin, and a health check must not fail because the
+    // session store is the thing that is down.
+    return false;
+  }
+}
+
+function publicise(check: Check, withDetail: boolean): Check {
+  return withDetail ? check : { status: check.status };
+}
+
 export async function GET() {
-  const [database, redis, rates, queues] = await Promise.all([
+  const [database, redis, rates, queues, detailed] = await Promise.all([
     checkDatabase(),
     checkRedis(),
     checkRates(),
     checkQueues(),
+    canSeeDetail(),
   ]);
 
-  const checks = { database, redis, rates, queues };
+  const checks = {
+    database: publicise(database, detailed),
+    redis: publicise(redis, detailed),
+    rates: publicise(rates, detailed),
+    queues: publicise(queues, detailed),
+  };
+  // Computed from the RAW checks, not the publicised copy — the HTTP code and the summary
+  // must not depend on who is asking.
   const healthy = database.status === 'ok';
-  const degraded = Object.values(checks).some((check) => check.status !== 'ok');
+  const degraded = [database, redis, rates, queues].some(
+    (check) => check.status !== 'ok',
+  );
 
   return NextResponse.json(
     {
