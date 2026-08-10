@@ -104,18 +104,50 @@ criterion is left unmet rather than adjusted; the choice is DEBT-039's. `pnpm li
 
 The dormant infrastructure from Phase 1 now earns its keep.
 
-- [ ] `bills.generate_pdf` — move PDF rendering off the request path. The admin gets an
-      immediate response; the PDF arrives via a status poll.
+> **The jobs run in Node, not Celery — D-042.** Three of the five tasks below render React,
+> post to Resend, or drive Cloudinary: TypeScript by nature. Putting `bills.generate_pdf` in
+> Python means a **second invoice implementation**, which §8 forbids outright. The queue is
+> `lib/queue/` on BullMQ against the same Redis; the worker is `pnpm worker`.
+> `backend/celery_app/` is untouched, still in compose, still connected, still undeletable
+> (MASTER-SPEC §2, AGENTS.md).
+
+- [~] `bills.generate_pdf` — the handler and the queue exist and the worker serves them.
+  **The default path is still synchronous**, because §8.3 gates the move on a condition
+  that is not met: _"Generate synchronously for now (it takes ~1s). Phase 9 moves it to
+  Celery if it becomes a bottleneck."_ DEBT-029 measured it well under a second and
+  nothing has reported it slow. The status-poll UI that the async path needs is not
+  built. **DEBT-044.**
 - [ ] `rates.rollup_history` — nightly aggregation of rate history into daily candles for the
-      sparkline.
-- [ ] `media.process_image` — resize, convert, generate blur placeholders.
-- [ ] `notify.retry_failed` — retry queue for failed SMS/email.
-- [ ] `cleanup.expire_shares` — remove expired calculator share links.
-- [ ] Celery Beat schedule for the periodic ones.
-- [ ] Flower for monitoring, admin-auth protected.
-- [ ] Every task idempotent with bounded retries and a dead-letter queue.
-- [ ] **Each task must degrade gracefully if the worker is down.** PDF generation falls back
-      to synchronous rendering. A dead worker must not mean a dead billing feature.
+      sparkline. **Not built:** it needs a table to roll up _into_, which is a new model and a
+      migration. DEBT-045.
+- [ ] `media.process_image` — resize, convert, generate blur placeholders. **Not built:**
+      §9.2 already generates blur placeholders via `scripts/generate-blur.mts`, so this is a
+      move rather than a gap. DEBT-045.
+- [x] `notify.retry_failed` — retry queue for failed SMS/email. The send IS the job: three
+      attempts with exponential backoff, and an exhausted one stays in the failed set.
+- [x] `cleanup.expire_shares` — remove expired calculator share links. **Closes DEBT-015**,
+      open since Phase 5. Scheduled 03:15 IST.
+- [x] Celery Beat schedule for the periodic ones. — `upsertJobScheduler`, keyed so a restart
+      updates rather than duplicates. The first attempt used the older `add({ repeat })` form
+      and fired immediately on boot; caught in the boot log, not assumed.
+- [ ] Flower for monitoring, admin-auth protected. **Not built** — Flower is a Celery tool and
+      there is no Celery work to watch. The equivalent for this queue is a Bull Board mounted
+      behind `requireAdmin()`. DEBT-045.
+- [x] Every task idempotent with bounded retries and a dead-letter queue. — 3 attempts,
+      exponential backoff, `removeOnFail: false` so an exhausted job stays inspectable.
+      BullMQ's default discards it, and a retry policy whose final state is "gone" is not one.
+      Each handler states how it is idempotent rather than claiming it.
+- [x] **Each task must degrade gracefully if the worker is down.** PDF generation falls back
+      to synchronous rendering. A dead worker must not mean a dead billing feature. —
+      structural: `enqueueOrRun`'s fallback is a **required** parameter, so there is no API
+      that enqueues without one, and it is the same function the worker calls. **The first
+      implementation of this did not work and the test caught it** — see D-042.
+
+## 9.3 — Dependencies added
+
+- `bullmq` — the queue. Against the same Redis the cache uses, so no new backing service.
+  Chosen over speaking Celery's wire protocol from Node, which would have made the message
+  format an undocumented contract between two languages. See D-042.
 
 ---
 

@@ -70,6 +70,35 @@ services:
       redis:
         condition: service_healthy
 
+  # Phase 9 §9.3. The Node job worker — see D-042 for why the jobs run here and not in
+  # `worker` above, which stays dormant and must not be deleted.
+  #
+  # Not built from a Dockerfile: there is no production image for the Next app in this repo
+  # (Render builds it), so this runs the same `pnpm worker` a developer runs, against the
+  # same compose network. It is here so `docker compose up` gives a complete local system.
+  jobs:
+    container_name: tirupati-jobs
+    image: node:24-alpine
+    restart: unless-stopped
+    working_dir: /app
+    command:
+      ['sh', '-c', 'corepack enable && pnpm install --frozen-lockfile && pnpm worker']
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      DATABASE_URL: ${DATABASE_URL}
+    volumes:
+      - ..:/app
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+    profiles:
+      # Off by default. `pnpm worker` on the host is the normal development path; this
+      # service exists for "does the whole system come up from nothing" and would otherwise
+      # reinstall node_modules into a bind mount on every `docker compose up`.
+      - jobs
+
 volumes:
   pgdata:
   redisdata:

@@ -26,7 +26,9 @@
 const EMPTY = 'data:text/javascript,export%20%7B%7D';
 
 export function resolve(specifier, context, nextResolve) {
-  if (specifier === 'server-only') {
+  // The bare specifier, and an already-resolved path into the package — see the matching
+  // note in register-server-only.mjs for why the second form appears at all.
+  if (specifier === 'server-only' || /[\\/]server-only[\\/]/.test(specifier)) {
     return { url: EMPTY, shortCircuit: true, format: 'module' };
   }
   return nextResolve(specifier, context);

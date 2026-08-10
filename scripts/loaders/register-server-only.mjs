@@ -13,9 +13,24 @@ import { register } from 'node:module';
 
 const originalLoad = Module._load;
 
+/**
+ * Matches the bare specifier AND an already-resolved path to the package.
+ *
+ * Phase 8 only needed the bare form. `scripts/worker.mts` (§9.3) pulls in `bullmq`, which is
+ * ESM-only, and a mixed ESM/CJS graph reaches `Module._load` with `server-only` ALREADY
+ * resolved to its absolute `index.js` — so an equality check on the specifier missed it and
+ * the package threw its "cannot be imported from a Client Component" guard inside a plain
+ * Node process. Broadened rather than special-cased: any request that resolves into the
+ * package is the package.
+ */
+function isServerOnly(request) {
+  if (request === 'server-only') return true;
+  return typeof request === 'string' && /[\\/]server-only[\\/]/.test(request);
+}
+
 Module._load = function patchedLoad(request, ...rest) {
   // `server-only` exports nothing. An empty object is exactly what Next substitutes.
-  if (request === 'server-only') return {};
+  if (isServerOnly(request)) return {};
   return originalLoad.call(this, request, ...rest);
 };
 

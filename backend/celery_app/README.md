@@ -26,7 +26,32 @@ writing the first real task, is how async infrastructure gets shipped broken.
 | `celery.py`       | The Celery app: Redis broker + result backend, `Asia/Kolkata` timezone, an empty beat schedule. |
 | `tasks/health.py` | One task, `health.ping`, which returns `"pong"`. That is the whole of it.                       |
 
-## What will go in it — Phase 9, not before
+## Phase 9 did NOT activate it, and that is a decision — D-042
+
+§9.3 was reached and the jobs were built. **They run in Node, not here**, and this package is
+still dormant on purpose. Read D-042 before "finishing" the migration below; the short
+version:
+
+Three of §9.3's five tasks are TypeScript by their nature, not by accident.
+`bills.generate_pdf` renders through `@react-pdf/renderer` — React components,
+`lib/pricing.ts`, Prisma — so a Python worker would need a **second invoice implementation**,
+which §8 forbids outright ("Three implementations of GST rounding is three different totals
+on the same purchase, and the customer will find it"). `notify.retry_failed` posts to Resend
+from `lib/notify/`. `media.process_image` drives Cloudinary from TypeScript. The remaining
+two are pure SQL and Python could do them — but this container has only `REDIS_URL`, no
+database access at all, and splitting five jobs across two queue technologies to use both
+would be worse than either.
+
+So the queue is `lib/queue/` on BullMQ, against the same Redis, and the worker is
+`pnpm worker` (`scripts/worker.mts`).
+
+**This package stays exactly as it is.** MASTER-SPEC §2 and AGENTS.md both forbid deleting
+it, the compose service still runs, and `health.ping` still proves the broker wiring. If a
+job ever appears that is genuinely Python-shaped — an ML model, a PDF toolchain with no Node
+equivalent — the infrastructure is still here and still connected, which was the original
+argument for keeping it.
+
+## What was originally planned for it — superseded by D-042
 
 `specs/09-hardening.md` §9.3 activates it:
 

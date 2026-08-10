@@ -3107,3 +3107,99 @@ code, which is the only evidence that the assertion is worth having.
 JSON-LD `url`. It is `http://localhost:3000` in development and the generated artefacts say
 so. **Setting it to the real origin is a launch step**, not a nice-to-have — §9.8 should
 carry it.
+
+### Phase 9 — DEV (§9.3, the queue that is not Celery)
+
+Status: **PARTIAL, and marked as such.** Five of nine checklist items done, one `[~]`, three
+not built with reasons. `backend/celery_app/` is untouched.
+
+New: `lib/queue/index.ts`, `lib/queue/jobs.ts`, `scripts/worker.mts` (`pnpm worker`),
+`lib/queue/queue.test.ts`. One dependency: `bullmq`.
+
+#### The spec asked for something that cannot be built — D-042
+
+§9.3 and MASTER-SPEC §2 both put these jobs in Celery. **Three of the five are TypeScript by
+nature.** `bills.generate_pdf` runs `@react-pdf/renderer` over React components,
+`lib/pricing.ts` and Prisma; `notify.retry_failed` posts to Resend; `media.process_image`
+drives Cloudinary. Putting the first in Python means **a second invoice implementation**,
+which §8 forbids in as many words — _"Three implementations of GST rounding is three
+different totals on the same purchase, and the customer will find it"_ — and would duplicate
+DEBT-027's unfinished font work into a renderer nobody would remember to fix twice.
+
+The other two are pure SQL and Python could do them. Using Celery for only those means two
+queue technologies, two schedulers and two dead-letter queues in a shop with 25 products,
+and the worker container has **no database access at all** today. Worse than either option.
+
+So the queue is BullMQ on the same Redis and the worker is `pnpm worker`. Celery stays
+dormant, in compose, connected, running `health.ping`, undeletable — and its README now
+carries the reasoning, so the next reader does not "finish" a migration that was decided
+against. D-035's standard applied: state the measurement, do not quietly edit the spec.
+
+#### The degradation is structural, and my first version of it did not work
+
+§9.3's load-bearing bullet is _"a dead worker must not mean a dead billing feature."_
+`enqueueOrRun(queue, name, payload, run)` takes the fallback as a **required** parameter, so
+there is no API that enqueues without saying what to do instead, and the fallback is by
+construction the same function the worker calls rather than a second path that only runs
+during an incident.
+
+**It hung.** The first version awaited `queue.add()` in a `try`; against a dead broker it
+never rejected, so the `catch` was never reached. BullMQ constructs its own ioredis client
+and forces `maxRetriesPerRequest: null` — retry forever — because its blocking commands
+require it, and `enableOfflineQueue: false` on the passed options does not survive that.
+`lib/queue/queue.test.ts` caught it against `redis://127.0.0.1:1`: both degradation cases
+timed out at 20s instead of falling back in milliseconds.
+
+**This is SEC-008's shape, one layer out.** Phase 4 measured `enableOfflineQueue: true` at
+13.4s per call against a dead Redis and rejected it as "a setting that turns _Redis is down_
+into _the site is down_". Same failure, same conclusion, four phases later.
+
+Fixed with a **1-second deadline** rather than a connection flag — the stronger control,
+because it bounds the request path regardless of _why_ the broker is slow: down, wedged,
+failing over or saturated, where a flag only covers "refused". The suite went from 40s to
+2.8s, which is the fix being visible rather than asserted.
+
+The cost is stated rather than hidden: a push landing after the deadline runs the job twice.
+That is exactly why §9.3 requires idempotency, and each handler says how it achieves it —
+a duplicate render overwrites the same PDF key, a duplicate sweep deletes nothing.
+
+#### What is done, and what is honestly not
+
+**Done.** `cleanup.expire_shares` (**closes DEBT-015**, open since Phase 5 — 03:15 IST),
+`notify.retry_failed` (the send _is_ the job; three attempts, exponential backoff, exhausted
+ones stay in the failed set), the beat schedule via `upsertJobScheduler`, bounded retries
+with a real dead-letter queue (`removeOnFail: false` — BullMQ's default discards a failed
+job, and a retry policy whose final state is "gone" is not one), and the degradation above.
+
+**`bills.generate_pdf` is `[~]`.** The handler, the queue and the worker all exist and work.
+The default path is **still synchronous**, because §8.3 gates the move on a condition that is
+not met: _"Generate synchronously for now (it takes ~1s). Phase 9 moves it to Celery if it
+becomes a bottleneck."_ DEBT-029 measured it well under a second and nobody has reported it
+slow. Moving it now buys a polling UI and a window where a bill exists with no PDF, in
+exchange for a saving nobody asked for. DEBT-044, with the infrastructure already in place.
+
+**Three not built:** `rates.rollup_history` needs a candle table and a migration;
+`media.process_image` duplicates `scripts/generate-blur.mts` from §9.2; and "Flower,
+admin-auth protected" names a **Celery** tool with no Celery work to watch — the equivalent
+is Bull Board behind `requireAdmin()`, which is the one of the three genuinely worth doing
+first. DEBT-045. The two unimplemented queues throw a named error rather than silently
+accepting a job that would never run.
+
+#### Two smaller things
+
+The `server-only` loader (Phase 8) matched only the bare specifier. `bullmq` is ESM-only, and
+in the resulting mixed graph the request reaches `Module._load` **already resolved to an
+absolute path**, so the package threw its "cannot be imported from a Client Component" guard
+inside a plain Node process. Broadened to match any request resolving into the package,
+rather than special-casing the worker.
+
+The beat schedule's first implementation used `add(name, data, { repeat, jobId })` — the
+older form — and fired the sweep immediately on boot rather than at 03:15. Harmless, since
+the sweep is idempotent, but it is not what "nightly" means. Caught in the boot log rather
+than assumed, and replaced with `upsertJobScheduler`, whose upsert is also what stops a
+restart accumulating duplicate timers.
+
+`@DEV:` §9.4's queue-depth alert has something to watch now. The line to page on is
+`queue.unavailable.ran_inline` — it means the broker is down and work is happening on the
+request path — and `worker.job.failed` where `attempt` equals `of`, which is the dead-letter
+case rather than a retry in progress.

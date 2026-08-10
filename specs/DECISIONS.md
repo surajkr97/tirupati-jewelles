@@ -1219,3 +1219,68 @@ is **DEBT-043** rather than a sentence written on their behalf.
 owner in SIGNOFF: _"We do not sell your details, and we do not share them with anyone for
 marketing"_ and _"We do not ship."_ Both are true of what has been built. Only the owner can
 ratify them as policy.
+
+---
+
+## D-042 — the §9.3 jobs run in Node, and `backend/celery_app/` stays dormant
+
+**Raised as:** Phase 9 §9.3, "Activating Celery — the dormant infrastructure from Phase 1 now
+earns its keep." MASTER-SPEC §2 names Celery for backend jobs and lists PDF generation as one
+of them. AGENTS.md makes deleting the package a hard rule violation.
+
+**The obstacle is not preference; it is that three of the five tasks are TypeScript.**
+
+| §9.3 task               | What it would have to call                                                                |
+| :---------------------- | :---------------------------------------------------------------------------------------- |
+| `bills.generate_pdf`    | `lib/bills/render.ts` → `@react-pdf/renderer`, React components, `lib/pricing.ts`, Prisma |
+| `notify.retry_failed`   | `lib/notify/` → Resend over HTTPS (D-011)                                                 |
+| `media.process_image`   | Cloudinary transforms driven from TypeScript (§9.2)                                       |
+| `rates.rollup_history`  | SQL only — Python could                                                                   |
+| `cleanup.expire_shares` | SQL only — Python could                                                                   |
+
+Putting the first one in Python means **a second implementation of the invoice**. §8 forbids
+that in as many words — _"Three implementations of GST rounding is three different totals on
+the same purchase, and the customer will find it"_ — and it would duplicate DEBT-027's
+unfinished Indic-font work into a second renderer nobody would remember to fix twice.
+
+The last two are genuinely Python-shaped, and using Celery for only those would mean **two
+queue technologies, two schedulers and two dead-letter queues** in a shop with 25 products.
+That is worse than either option alone. Note also that the worker container has only
+`REDIS_URL` — it has no database access at all today, so even the "easy" two are not free.
+
+**Chosen: `lib/queue/` on BullMQ, against the same Redis, worked by `pnpm worker`.** Every
+job calls the existing, tested function. The Celery package is untouched: still in
+`docker-compose`, still connected, still running `health.ping`, still undeletable. Its README
+now carries this reasoning so the next reader does not "finish" a migration that was decided
+against.
+
+D-035 set the standard for departing from something the spec wrote down — state the
+measurement, state the reasoning, do not quietly edit the spec — and this follows it.
+
+### The bug this design had, and how the test found it
+
+`enqueueOrRun(queue, name, payload, run)` makes §9.3's "degrade gracefully if the worker is
+down" structural: `run` is a **required** parameter, so there is no API that enqueues without
+saying what to do instead, and the fallback is by construction the same function the worker
+would have called.
+
+The first version awaited `queue.add()` inside a `try`. Against a dead broker it did not fall
+back — **it hung**. BullMQ builds its own ioredis client and forces `maxRetriesPerRequest:
+null` (retry forever), because its blocking commands require that; `enableOfflineQueue: false`
+on the passed options does not survive it. So `add()` never rejects and the `catch` is never
+reached. `lib/queue/queue.test.ts` caught it against `redis://127.0.0.1:1` — both degradation
+cases timed out at 20 seconds instead of falling back in milliseconds.
+
+**This is SEC-008's shape, one layer out.** Phase 4 found `enableOfflineQueue: true` measuring
+13.4s per call against a dead Redis and rejected it as "a setting that turns _Redis is down_
+into _the site is down_". Same failure, same conclusion.
+
+Fixed with a **1-second deadline** rather than a connection flag, which is the stronger
+control: it bounds the request path regardless of _why_ the broker is slow — down, wedged,
+failing over, saturated — where a flag only covers "refused". The file now runs in 2.8s
+instead of 40.
+
+The cost is stated rather than hidden: a push that lands after the deadline runs the job
+twice, once inline and once on the worker. That is precisely why §9.3 requires every task to
+be idempotent, and each handler in `lib/queue/jobs.ts` says how it achieves it — a duplicate
+render overwrites the same PDF key, a duplicate sweep deletes nothing.
