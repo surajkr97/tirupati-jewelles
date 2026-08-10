@@ -26,25 +26,48 @@
 \set ON_ERROR_STOP on
 
 -- ── The runtime role ────────────────────────────────────────────────────────
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'tirupati_app') THEN
-    EXECUTE format('CREATE ROLE tirupati_app WITH LOGIN PASSWORD %L', :'app_password');
-  ELSE
-    EXECUTE format('ALTER ROLE tirupati_app WITH LOGIN PASSWORD %L', :'app_password');
-  END IF;
-END
-$$;
+--
+-- psql's `\if`, not a `DO $$ … $$` block, and the difference is not stylistic.
+--
+-- This was written as a DO block calling `format(…, :'app_password')`, and **psql does not
+-- interpolate `:'var'` inside dollar-quoted text** — it is passed through literally, and the
+-- server answers `syntax error at or near ":"`. So the documented invocation could never
+-- have worked; the role on the development machine was created some other way, and the
+-- procedure for the one place it matters most — production — was untested. Verified
+-- empirically before rewriting: the same `:'probe'` interpolates fine outside a DO block and
+-- errors inside one.
+--
+-- `\gset` puts the answer in a psql variable, and `\if` branches on it, so the password
+-- interpolation happens in ordinary SQL where psql will substitute it. Still idempotent.
+SELECT NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'tirupati_app') AS role_missing
+\gset
+
+\if :role_missing
+CREATE ROLE tirupati_app WITH LOGIN PASSWORD :'app_password';
+\else
+ALTER ROLE tirupati_app WITH LOGIN PASSWORD :'app_password';
+\endif
 
 -- Explicitly NOT a superuser, and cannot create roles or databases.
 ALTER ROLE tirupati_app NOSUPERUSER NOCREATEDB NOCREATEROLE NOBYPASSRLS;
 
 -- ── Connect and see the schema, but not add to it ───────────────────────────
-GRANT CONNECT ON DATABASE tirupati TO tirupati_app;
-GRANT USAGE ON SCHEMA public TO tirupati_app;
+-- `current_database()`, not a hardcoded name.
+--
+-- These two lines named `tirupati` literally, which is correct on the development machine
+-- and wrong everywhere else: a managed Postgres (Render) generates its own database name,
+-- so the statements failed with `database "tirupati" does not exist` and — with
+-- ON_ERROR_STOP set — aborted the whole script. Least privilege would then simply not be
+-- applied in production, which is the one place it matters most. Loud rather than silent,
+-- but still a setup step that could not succeed where it was needed.
+DO $$
+BEGIN
+  EXECUTE format('GRANT CONNECT ON DATABASE %I TO tirupati_app', current_database());
+  EXECUTE format('REVOKE CREATE ON DATABASE %I FROM tirupati_app', current_database());
+END $$;
 
+GRANT USAGE ON SCHEMA public TO tirupati_app;
 REVOKE CREATE ON SCHEMA public FROM tirupati_app;
-REVOKE CREATE ON DATABASE tirupati FROM tirupati_app;
 
 -- ── Row-level work on the tables that exist now ─────────────────────────────
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO tirupati_app;

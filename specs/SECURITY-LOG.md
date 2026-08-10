@@ -1914,3 +1914,41 @@ match `X-Frame-Options:`. Checked against the raw response before writing it dow
 
 **Zero CRITICAL. Zero HIGH outstanding** — SEC-040 was HIGH and is fixed with 5 regression
 tests. SEC-041 and SEC-042 are LOW and fixed. Nothing is carried into DEBT from this review.
+
+## SEC-043 · MEDIUM · fixed — SEC-029's role script could never have run as documented
+
+Found while writing the production deploy steps, by running it rather than reading it.
+
+`scripts/db-roles.sql` is the setup procedure for SEC-029's least-privilege split — the control
+that makes DEBT-026's invoice-retention guarantee real by removing `DELETE` on `Order`,
+`OrderItem` and `BillPdf` from the runtime role. Two defects, both of which only appear away
+from the machine it was written on:
+
+1. **The password never reached the server.** The role was created inside a `DO $$ … $$` block
+   calling `format(…, :'app_password')`, and **psql does not interpolate `:'var'` inside
+   dollar-quoted text**. It is passed through literally and the server answers
+   `syntax error at or near ":"`. Verified empirically both ways before rewriting: the same
+   `:'probe'` interpolates outside a DO block and errors inside one. Rewritten with `\gset`
+   and `\if`, so the interpolation happens in ordinary SQL. Still idempotent.
+
+2. **The database name was hardcoded.** `GRANT CONNECT ON DATABASE tirupati` and
+   `REVOKE CREATE ON DATABASE tirupati` name the development database literally. A managed
+   Postgres generates its own name, so both statements fail with
+   `database "tirupati" does not exist` and, with `ON_ERROR_STOP` set, abort the script. Now
+   `current_database()` inside a DO block — which needs no psql variable, so it is unaffected
+   by (1).
+
+**What this means about the control.** The privileges ARE in force on the development database
+— proven again just now: `DELETE FROM "Order"` is refused, `has_schema_privilege(… 'CREATE')`
+is false, and the three invoice tables show `INSERT, SELECT, UPDATE` and no `DELETE`. So
+SEC-029's finding stands and the runtime role is genuinely restricted here. What was wrong is
+the **procedure for reproducing it elsewhere**, and "elsewhere" is production.
+
+The class of defect is one this project keeps meeting: a control that is correct where it was
+built and has an untested path to where it matters. DEBT-047 (a scrubber never exercised
+against the real transport), SEC-042 (a warning comment standing in for a guard), and now a
+setup script that had never been run against a database it did not already know the name of.
+
+Re-run end to end against a deliberately differently-named database, then against the real
+migrated one, twice. Note the ordering it exposed: **migrations must run before this script**,
+because the `REVOKE DELETE` needs the tables to exist.
