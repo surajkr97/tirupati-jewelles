@@ -429,9 +429,20 @@ decision (D-033), so no nonce is needed and none is invented.
   **Trap two — do not restore a production dump into staging.** DEBT-031: a dump holds every
   customer invoice — 91 of them, 521 kB, names, phone numbers and purchase histories in a
   directly readable format. Staging is by definition less guarded and more widely accessible.
-  Either seed it with `pnpm seed` plus generated products, or anonymise on restore. Copying
-  real customer data into a lower environment is the commonest way a small shop has a breach
-  without ever being attacked.
+  Copying real customer data into a lower environment is the commonest way a small shop has a
+  breach without ever being attacked.
+
+  **`pnpm db:anonymise` exists so this is not a choice between safe and useful.** Seeding
+  staging with invented data is safe and loses the point — you cannot find a defect that only
+  appears at 46 products and 91 orders against a database holding three of each. The script
+  keeps the shape and destroys the people: restore the dump into staging, run it, and every
+  name, number and email is a reserved-range stand-in. Replacements are **deterministic**, so
+  the same number maps identically in `User.phone`, `Order.customerPhone` and
+  `ClaimToken.phone` — proven on a real restored dump, **44 of 44 claimed orders still match
+  their owning user**, so §8's flagship claim flow still works in staging. Invoice PDFs, OTPs,
+  the audit log and calculator shares are **deleted** rather than rewritten, because a
+  half-scrubbed PDF is worse than none. It refuses to run without an explicit
+  `ANONYMISE_DATABASE_URL`, and refuses again if that URL is this project's own database.
 
 - [x] Admin trained — record a short screen capture of the bill flow. — **owner-confirmed,
       11 Aug.** Recorded on their instruction; a screen capture is not an artefact this repository
