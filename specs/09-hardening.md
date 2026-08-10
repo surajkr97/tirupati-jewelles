@@ -412,12 +412,21 @@ decision (D-033), so no nonce is needed and none is invented.
       script on invoices), 031 (reconciling 30-day dump retention with six-year invoice
       retention) and 034 (IGST the first time the shop ships out of state). None blocks a
       launch, and each names the condition that would make it urgent.
-- [ ] Staging mirrors production. — **the only §9.8 item left, and it is a Render setup
-      task.** "Mirrors" means, concretely: Node 24 LTS (`.nvmrc`), **Postgres 16** and **Redis 7**
-      to match `docker-compose.yml`, the same build and start commands, and the same env var
-      _names_ from `lib/env.ts` — which throws at boot on a missing one, so a short staging
-      environment fails loudly rather than serving broken pages. `SENTRY_ENVIRONMENT=staging`, so
-      its errors are distinguishable from production's.
+- [~] Staging mirrors production. — **deliberately deferred, with a trigger and a
+  replacement — D-054.** Not built and not ticked: at launch the production database has no
+  customers, so a first deploy that goes wrong costs a redeploy and nobody notices, while
+  1197 unit tests, 571 E2E, a local production build and a two-minute documented rollback
+  already cover what staging would catch. **The trigger is written down rather than a date:
+  build it before the first non-additive migration, or before any deploy that changes how
+  money is calculated.** DEBT-009's ops half stays owed with it. What stands in for it is
+  `assertLocalDatabase()` — staging guards against bad code, and the failure that actually
+  costs a restore is a destructive command pointed at the wrong database.
+
+  **When you do build it**, "mirrors" means, concretely: Node 24 LTS (`.nvmrc`), **Postgres 16** and **Redis 7**
+  to match `docker-compose.yml`, the same build and start commands, and the same env var
+  _names_ from `lib/env.ts` — which throws at boot on a missing one, so a short staging
+  environment fails loudly rather than serving broken pages. `SENTRY_ENVIRONMENT=staging`, so
+  its errors are distinguishable from production's.
 
   **Trap one — its own Postgres AND its own Redis.** Not a second database on the same Redis
   instance; a separate instance. DEBT-030 recorded this exact class of bug at the test level:

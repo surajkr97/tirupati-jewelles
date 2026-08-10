@@ -10,7 +10,10 @@
 import { Metal, PrismaClient, Purity, Role } from '@prisma/client';
 
 import { hashPassword } from '../lib/auth/argon2';
-import { env } from '../lib/env';
+import { assertLocalDatabase, env } from '../lib/env';
+
+// D-054: a seed against production would overwrite the shop's own settings row and admin.
+assertLocalDatabase(env.DATABASE_URL, 'pnpm seed');
 
 const db = new PrismaClient();
 

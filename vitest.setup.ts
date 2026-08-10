@@ -35,6 +35,36 @@ const TEST_ENV: Record<string, string> = {
   NEXT_PUBLIC_TICKER_JITTER: 'true',
 };
 
+/**
+ * D-054 — refuse to run the suite against a database that is not on this machine.
+ *
+ * The integration suites `TRUNCATE` shared tables between files. Pointed at a remote
+ * database — a `TEST_DATABASE_URL` copied from somewhere for one debugging session and left
+ * there — that is not a failing test, it is an emptied database.
+ *
+ * Checked here rather than through `lib/env.ts`'s helper because this file runs BEFORE any
+ * module under test is imported, which is the whole point of it: `lib/env.ts` throws at
+ * import time and the suite has to build a complete environment first.
+ */
+const testHost = (() => {
+  try {
+    return new URL(TEST_ENV.DATABASE_URL!).hostname;
+  } catch {
+    return 'localhost';
+  }
+})();
+
+if (
+  process.env.ALLOW_REMOTE_DB !== '1' &&
+  !['localhost', '127.0.0.1', '::1', '[::1]', 'db', 'postgres'].includes(testHost)
+) {
+  throw new Error(
+    `TEST_DATABASE_URL points at ${testHost}, which is not this machine.\n` +
+      `The integration suites TRUNCATE tables. Refusing.\n` +
+      `If you mean it: ALLOW_REMOTE_DB=1 pnpm test`,
+  );
+}
+
 // The DB URL must be the test one even if .env already set a development value.
 process.env.DATABASE_URL = TEST_ENV.DATABASE_URL;
 

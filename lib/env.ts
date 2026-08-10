@@ -205,3 +205,58 @@ export const env: z.infer<typeof serverSchema> = (() => {
   if (!parsed.success) fail('server', parsed.error);
   return parsed.data;
 })();
+
+/**
+ * Refuse to run a destructive command against a database that is not on this machine.
+ * Phase 9 §9.8 (D-054).
+ *
+ * ── What this is for ──
+ * `pnpm db:migrate`, `pnpm seed` and `pnpm test` all rewrite or destroy data, and each takes
+ * its target from an environment variable. Nothing stopped a production URL pasted into
+ * `.env` "just to check something" from being the target. The sharpest of the three is
+ * `db:migrate` — `prisma migrate dev` **resets the database** when it detects drift, which
+ * against production is total loss with no error beforehand.
+ *
+ * Staging is deliberately deferred until the first non-additive migration (D-054), so this
+ * guard is doing the job staging would otherwise do for the failure that actually costs a
+ * restore: not bad code, but a destructive command pointed at the wrong database.
+ *
+ * ── Why an explicit escape hatch, when SEC-042 refused to offer one ──
+ * `verify-degradation` has no legitimate remote use, so it has no override. These three do:
+ * seeding a fresh staging database is exactly `pnpm seed` against a remote host. So the
+ * hatch exists, is named for what it does, and has to be typed on purpose:
+ *
+ *     ALLOW_REMOTE_DB=1 pnpm seed
+ *
+ * A flag you must type is a decision. A default that happens to be permissive is not.
+ */
+const LOCAL_HOSTS = ['localhost', '127.0.0.1', '::1', '[::1]', 'db', 'postgres'];
+
+export function assertLocalDatabase(url: string, command: string): void {
+  if (process.env.ALLOW_REMOTE_DB === '1') return;
+
+  let host: string;
+  try {
+    host = new URL(url).hostname;
+  } catch {
+    // An unparseable URL is not something to guess about. Let the command fail on its own
+    // terms rather than second-guessing a connection string this function does not own.
+    return;
+  }
+
+  if (LOCAL_HOSTS.includes(host)) return;
+
+  throw new Error(
+    [
+      `${command} is pointed at ${host}, which is not this machine.`,
+      '',
+      'This command rewrites or destroys data. `prisma migrate dev` in particular RESETS',
+      'the database when it detects drift — against production that is total loss.',
+      '',
+      'If this is genuinely a remote database you mean to change (seeding a new staging,',
+      'for example), say so explicitly:',
+      '',
+      `    ALLOW_REMOTE_DB=1 ${command}`,
+    ].join('\n'),
+  );
+}

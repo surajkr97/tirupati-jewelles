@@ -1493,3 +1493,61 @@ that improves nothing. The precedent is D-035's: state the measurement, do not q
 the spec — and equally, do not perform the letter of a checklist item when the measurement
 says it buys nothing. If the admin bundle ever matters, the same three components are still
 the candidates and the numbers above are the baseline.
+
+---
+
+## D-054 — staging is deferred until the first non-additive migration, and a guard takes its place
+
+§9.8 asks for "staging mirrors production". It is not built, and this records why rather than
+ticking it — the standard D-035 and D-049 set.
+
+### The argument
+
+Staging protects against deploying something that breaks production. Most of that protection
+already exists here: **1197 unit/integration tests and 571 E2E**, all green; `pnpm build &&
+pnpm start` on a laptop _is_ a production build; rollback is a documented two-minute Render
+redeploy (`specs/ROLLBACK.md`); and all 10 migrations to date are additive, so the old code
+runs against the new schema by construction.
+
+**The part that settles it is what a first deploy costs.** At launch the production database
+has no customers. A wrong environment variable makes `lib/env.ts` refuse to boot and name the
+variable; you fix it and redeploy, and nobody was affected. Staging is insurance on a house
+with nothing in it. That reverses once there are real orders — which is why the deferral has a
+**trigger** rather than a date:
+
+> **Build staging before the first non-additive migration, or before any deploy that changes
+> how money is calculated.**
+
+### What is knowingly given up
+
+- No rehearsal of a migration against production-shaped data. Acceptable while every migration
+  is additive; not acceptable for the first one that is not.
+- **DEBT-009's ops half stays owed** — sending a forged `x-forwarded-for` through a real
+  deployment to confirm `TRUSTED_PROXY_HOPS`. It is MEDIUM and concerns rate-limit accuracy.
+- The first production deploy is also the first real deploy. Do it on a quiet morning.
+
+### What replaces it, and why this is the better spend today
+
+Staging protects against **bad code**. It does not protect against the failure that actually
+costs a restore: a **destructive command pointed at the wrong database**. Three commands here
+take their target from an environment variable and rewrite or destroy data —
+
+| Command           | What it does to the wrong database                            |
+| :---------------- | :------------------------------------------------------------ |
+| `pnpm db:migrate` | `prisma migrate dev` **RESETS** on drift — drops everything   |
+| `pnpm seed`       | overwrites the settings row and the admin                     |
+| `pnpm test`       | the integration suites `TRUNCATE` shared tables between files |
+
+— and nothing stopped a production URL pasted into `.env` for one debugging session from being
+that target. `assertLocalDatabase()` in `lib/env.ts` now refuses unless the host is local.
+
+**An explicit escape hatch, unlike SEC-042's guard**, which offered none. `verify-degradation`
+has no legitimate remote use; these three do — seeding a fresh staging database is exactly
+`pnpm seed` against a remote host. So `ALLOW_REMOTE_DB=1` exists, is named for what it does,
+and must be typed on purpose. A flag you type is a decision; a permissive default is not.
+
+`migrate deploy` is deliberately **not** wrapped: forward-only, never resets, and applying
+pending migrations to a remote database is precisely its job on Render.
+
+Each of the three refusals was tested rather than trusted, and the escape hatch was tested
+too — it gets past the guard and fails on the connection instead, which is the right failure.
