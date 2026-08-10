@@ -1355,3 +1355,105 @@ the build, and flagged both for the owner. Both are now ratified as policy:
   records the same fact from the tax side: every bill is split CGST/SGST, which is correct only
   for an intra-state counter sale. **If the shop ever posts a piece to another state, this
   sentence and the tax split both become wrong**, and DEBT-034 is the ticket for the second.
+
+---
+
+## D-051 — the backup is a command in this repository, not only the platform's snapshot button
+
+**§9.5 asks for daily backups with 30-day retention and, harder, for the restore to have been
+tested.** Render's managed Postgres takes its own daily snapshots, and those remain the
+primary. `pnpm backup` exists alongside them for two reasons that a provider snapshot cannot
+cover:
+
+1. **A provider snapshot can only be restored back into that provider.** It is a recovery
+   mechanism, not a portable artefact. The day the answer to "can we get the invoices back" is
+   "we would have to ask Render", it is already too late to find out.
+2. **It cannot be tested.** §9.5's second item is the load-bearing one — "an untested backup is
+   a hope, not a backup" — and testing means restoring somewhere and comparing. `pnpm
+verify:restore` restores into a scratch database on this machine and diffs five properties
+   against the source.
+
+### What is compared, and why those five
+
+The failure worth designing against is not a dump that crashes. It is a dump that succeeds,
+restores with zero errors, and is **missing something**. Three ways that happens in this
+schema specifically:
+
+- **`BillPdf.bytes` is `bytea`** holding 91 rendered invoices (D-026). Binary is where dump
+  and restore pipelines corrupt silently. Compared by digest — `md5(bytea)` computed
+  server-side and aggregated in `key` order — not by row count.
+- **Money is `bigint` paise** (MASTER-SPEC §4). A restore landing `numeric`, or truncating,
+  still counts the right number of rows.
+- **Expression and GIN indexes are invisible to Prisma's schema diff.** DEBT-023 found
+  `Product_name_trgm_idx` had been silently dropped and nothing failed for two phases, because
+  at 25 products a sequential scan is the correct plan. A restore is the other way to lose it.
+
+Plus exact `count(*)` per table — not `pg_stat_user_tables.n_live_tup`, which is an autovacuum
+estimate and reads 0 on a freshly restored database, so that check would have passed by
+accident — and the `_prisma_migrations` ledger, without which the next deploy re-runs
+everything.
+
+**Mutation-checked**, because a verification that cannot fail is worth nothing: a dump taken
+with `--exclude-table-data BillPdf` restores with zero errors and fails exactly two checks
+(row counts, PDF digest) while the other three stay green.
+
+### The dump runs as the owner, and that is deliberate
+
+SEC-029 dropped the runtime role to `SELECT`/`INSERT`/`UPDATE` with no `DELETE` on the invoice
+tables. `pg_dump` as that role would **succeed** and quietly omit what it could not read —
+a file of the right shape and the wrong contents, which is the worst outcome available here.
+`MIGRATE_DATABASE_URL` is used, falling back to `DATABASE_URL`.
+
+### What is not done
+
+The schedule and the off-box copy. A backup on the same disk as the database survives a bad
+migration and nothing else, and these dumps are personal data (DEBT-031) so the copy has to be
+encrypted at rest. Both are ops, both are DEBT-049, and the cron line is printed by
+`pnpm backup --help` rather than described.
+
+---
+
+## D-052 — a password reset is delivered to the account's email whatever the customer typed
+
+**Found by killing the dependency, which is the only way it could have been found.**
+
+`/api/auth/password/forgot` chose its channel from the shape of the identifier: an email went
+to `Channel.EMAIL`, a phone number to `Channel.SMS`. There is no SMS provider (D-011) and
+`SmsNotifier.send` throws. So the phone branch had never worked — and worse, it broke the one
+property the endpoint exists to have.
+
+§3 requires this route to answer identically whether or not the account exists, because
+otherwise it is an unauthenticated oracle over the customer list. It does that by always
+returning the same generic 200 with padded timing. But **the send only runs on the branch
+where the user was found**, so the exception only ever fired for a real account:
+
+| identifier                | before  | after |
+| :------------------------ | :------ | :---- |
+| registered phone number   | **500** | 200   |
+| unregistered phone number | 200     | 200   |
+
+Anyone could test a list of Indian mobile numbers against this endpoint and read the shop's
+customer list off the status codes. `pnpm verify:degradation` reported it as `500 vs 200`.
+
+### The fix, and the part of it that is not obvious
+
+Delivery goes to `user.email`. The OTP stays **keyed on what the customer typed**, so the code
+they receive verifies the identifier they gave — getting that backwards would send a working
+code that the reset step then refuses. `/api/auth/phone/start` has always worked this way
+(§3.7); this route was the outlier.
+
+The second half matters more. **A delivery failure is caught, logged and does not change the
+response.** That is not the codebase's usual rule — everywhere else an exception becomes a 500
+— and the reason for the exception is that here the response is a security property. Any error
+escaping delivery re-opens the oracle at exactly the moment the provider is unhealthy: a Resend
+outage, an expired key, a rate-limited sender. Nothing is swallowed; the error is logged
+redacted (DEBT-036) and reaches Sentry like any other.
+
+**The cost, stated:** a customer whose email genuinely failed is told a code is on its way and
+never gets one. They can retry. The alternative leaks the customer list, which they cannot undo.
+
+### What this does not do
+
+It does not add SMS. When a provider is finally wired, the channel choice comes back — and the
+generic-response guarantee must survive it, which is what the provider-outage test in
+`app/api/auth/password/forgot/route.test.ts` is there to hold.

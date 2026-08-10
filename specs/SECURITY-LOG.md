@@ -1782,3 +1782,50 @@ Two things travel forward and neither is a §9.1 defect:
   the exposure. §9.1 item 5 requires rotation before launch regardless.
 - **DEBT-009's ops half.** `TRUSTED_PROXY_HOPS` is verified against synthetic headers only.
   Send a forged `x-forwarded-for` through the real deployment and log what arrives.
+
+## SEC-040 · HIGH · fixed — the password-reset endpoint was an account-existence oracle over phone numbers
+
+Found by Phase 9 §9.5's degradation run, not by review, and it had been live since Phase 3.
+
+`/api/auth/password/forgot` chose its delivery channel from the shape of the identifier:
+`Channel.EMAIL` for an email, `Channel.SMS` for a phone number. There is no SMS provider
+(D-011) and `SmsNotifier.send` throws by design, "so nothing silently succeeds at sending an
+SMS that never arrives". The throw was caught by `serverError` and answered **500**.
+
+The send only executes on the branch where the user was **found**. So:
+
+| identifier                | response |
+| :------------------------ | :------- |
+| registered phone number   | **500**  |
+| unregistered phone number | 200      |
+
+Which is precisely what the route is built not to do. §3 and AGENTS.md's risk table both
+require the identical answer either way — the route pads its timing to 400ms and returns the
+same generic body specifically to avoid being "an unauthenticated account-existence oracle over
+the entire customer list" — and this made it one, keyed on phone number, for anyone willing to
+POST a list of Indian mobile numbers. Indian mobile numbers are ten digits with a leading 6-9,
+which is a small enough space to walk.
+
+**Why it survived four phases of review.** The property was asserted at the level everyone
+looked at — one response shape, one padded timing, one code path — and broken one level below,
+in a dependency that only fails when it is called, on a branch nothing had ever called. Phase 3
+TEST covered the flow end to end at the integration level with the notifier mocked; a mock does
+not throw.
+
+**Fixed** (D-052): delivery goes to the account's email whatever the customer typed, matching
+`/api/auth/phone/start`, which has always done this. The OTP stays keyed on the identifier
+given, so the code still verifies what the customer typed.
+
+**And the second half, which is the security-relevant one:** a delivery failure is now caught,
+logged and does **not** change the response. This deliberately departs from the codebase's
+"let it throw" rule because here the response is the control. Any exception escaping delivery
+re-opens the oracle at exactly the moment the provider is unhealthy — a Resend outage, an
+expired key, a throttled sender — and that is a fault an attacker can wait for rather than
+cause. The error is logged redacted (DEBT-036) and reaches Sentry; only the customer-visible
+answer is held constant.
+
+Regression coverage: `app/api/auth/password/forgot/route.test.ts`, 5 tests, 3 failing against
+the pre-fix route. The two that pass against it do so because `@/lib/notify` is mocked — which
+is the finding, restated: a unit test with the failing dependency stubbed out cannot see a fault
+whose nature is that the dependency is unavailable. `pnpm verify:degradation` is what catches
+this class, and it now asserts both halves against a running server.

@@ -27,9 +27,36 @@ import {
   requireSameOrigin,
   serverError,
 } from '@/lib/http';
+import { log } from '@/lib/log';
 import { sendOtp } from '@/lib/notify';
 
 export const dynamic = 'force-dynamic';
+
+/**
+ * Send the code, and never let a delivery failure change the response — Phase 9 §9.5.
+ *
+ * This is deliberately not the codebase's usual "let it throw and return 500". The response
+ * of this endpoint is a SECURITY property: §3 requires the same answer for an account that
+ * exists and one that does not, and the send only runs on the branch where the account was
+ * found. So any exception escaping from delivery — the SMS stub, a Resend outage, an expired
+ * API key — converts this endpoint into an account-existence oracle at exactly the moment
+ * the provider is unhealthy.
+ *
+ * Nothing is swallowed: the error is logged at `error` level (redacted, DEBT-036) and
+ * reaches Sentry through the same pipe as any other, so the outage is visible to whoever is
+ * on call. What does not happen is the customer, or an attacker, learning about it.
+ *
+ * The cost, stated: a customer whose email genuinely failed to send is told a code is on its
+ * way and never receives one. That is the better failure — they can retry, and the alternative
+ * leaks the customer list.
+ */
+async function deliver(email: string, code: string): Promise<void> {
+  try {
+    await sendOtp(Channel.EMAIL, email, code);
+  } catch (err) {
+    log.error('password/forgot delivery failed', { error: String(err) });
+  }
+}
 
 export async function POST(request: Request) {
   // CSRF: reject a cross-origin state change (Phase 7 §7 SECURITY).
@@ -61,17 +88,39 @@ export async function POST(request: Request) {
           normalised.kind === 'email'
             ? { email: normalised.value }
             : { phone: normalised.value },
-        select: { id: true },
+        select: { id: true, email: true },
       });
 
-      if (user) {
-        const channel = normalised.kind === 'email' ? Channel.EMAIL : Channel.SMS;
+      /**
+       * Delivery goes to the account's EMAIL whatever the customer typed — Phase 9 §9.5.
+       *
+       * ── The bug this replaces, found by killing the dependency ──
+       * This branch used to pick `Channel.SMS` whenever the identifier was a phone number.
+       * There is no SMS provider (D-011) and `SmsNotifier.send` throws, so a customer
+       * resetting their password by phone got a **500**, from a flow that works perfectly
+       * by email — and the failure was invisible because nothing had ever exercised the
+       * phone branch end to end.
+       *
+       * It was also an enumeration hole, which is the worse half. §3 requires this endpoint
+       * to answer identically whether or not the account exists, and it does — except that
+       * the send only happens when the user was FOUND, so the throw only happened for real
+       * accounts. A registered number returned 500 and an unregistered one returned 200:
+       * an unauthenticated oracle over the customer list, keyed by phone number. Measured
+       * by `pnpm verify:degradation`, which reported `500 vs 200` on exactly that pair.
+       *
+       * `/api/auth/phone/start` has always done it this way (§3.7). This route was the
+       * outlier, not the rule.
+       *
+       * The OTP is still KEYED on what they typed, so the code they receive verifies the
+       * identifier they gave. Only the delivery address changes.
+       */
+      if (user?.email) {
         const { code } = await issueOtp(
           normalised.value,
           OtpPurpose.PASSWORD_RESET,
-          channel,
+          Channel.EMAIL,
         );
-        await sendOtp(channel, normalised.value, code);
+        await deliver(user.email, code);
       }
     }
 

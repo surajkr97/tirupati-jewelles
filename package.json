@@ -27,7 +27,10 @@
     "verify:sentry": "tsx --import ./scripts/loaders/register-server-only.mjs scripts/verify-sentry.mts",
     "verify:bill": "tsx --import ./scripts/loaders/register-server-only.mjs scripts/verify-bill.mts",
     "build:analyze": "ANALYZE=true next build --webpack",
-    "worker": "tsx --import ./scripts/loaders/register-server-only.mjs scripts/worker.mts"
+    "worker": "tsx --import ./scripts/loaders/register-server-only.mjs scripts/worker.mts",
+    "backup": "tsx scripts/backup.mts",
+    "verify:restore": "tsx scripts/verify-restore.mts",
+    "verify:degradation": "tsx --import ./scripts/loaders/register-server-only.mjs scripts/verify-degradation.mts"
   },
   "prisma": {
     "seed": "tsx prisma/seed.ts"

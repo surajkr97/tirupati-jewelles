@@ -3330,3 +3330,153 @@ intra-state counter sale. The first time the shop posts a piece to another state
 and the tax split both become wrong.
 
 Full reasoning in **D-049** and **D-050**.
+
+### Phase 9 — DEV / TEST (§9.5 Reliability)
+
+Status: **PASS on three of four items, one `[~]` on an ops action.** Two real defects found by
+killing dependencies, both fixed, both with regression tests that fail against the old code.
+
+New: `scripts/backup.mts` (`pnpm backup`), `scripts/verify-restore.mts` (`pnpm verify:restore`),
+`scripts/verify-degradation.mts` (`pnpm verify:degradation`), `scripts/lib/pg.mts`,
+`scripts/lib/backup-files.mts`, `e2e/degradation.spec.ts` (6),
+`app/api/auth/password/forgot/route.test.ts` (5), `components/ui/image-with-fallback.tsx`,
+`components/ui/empty-frame-mark.tsx`. **No dependencies added.**
+
+Verified: `pnpm build` zero TypeScript errors, `pnpm lint` and `pnpm format:check` clean,
+**1171 unit/integration tests** pass, `pnpm verify:degradation` **25/25**, `pnpm verify:restore`
+6/6.
+
+E2E: **557 passed, 2 failed** across the three viewports. Both failures re-run green in
+isolation and neither touches this phase's code — `seo.spec.ts:149` died on
+`apiRequestContext.get: Target page, context or browser has been closed` and
+`admin.spec.ts:80` timed out at 30s, both under four-worker contention on a machine that had
+just been stopping and starting containers. Recorded rather than re-run until green and
+reported as 559: a suite that is flaky under load is a fact about the suite, and DEBT-040
+already tracks this family.
+
+#### Redis persistence was not enabled, and the polite test would not have found it
+
+`--requirepass` on the command line means Redis starts with **no config file**, so it took the
+built-in defaults: RDB only, at `save 3600 1 / 300 100 / 60 10000`. At this shop's write volume
+the 100-in-300s and 10000-in-60s rules never fire, so the real durability window was the
+**one-hour** rule.
+
+That matters because of what is in there. This instance is not a cache: `session:{id}` is the
+Phase 3 §3.3 session store, and `rl:*` are the rate-limit counters. Losing an hour of it signs
+everyone out, including an admin halfway through raising a bill.
+
+**Measured before changing anything** — a key written, then `docker kill --signal=SIGKILL`: the
+key was **gone** on restart and `DBSIZE` came back at the pre-write figure, i.e. the last
+snapshot. With `--appendonly yes --appendfsync everysec` the same test survives.
+
+**`SIGKILL` and not `docker compose restart`, and that is the whole point.** A graceful stop
+writes an RDB on the way out, so the polite version of this test passes against the broken
+configuration. The test has to be the failure you are actually insuring against.
+
+One operational cost, found by doing it: **turning AOF on starts from an empty dataset.** Redis
+with `appendonly yes` and no existing append directory creates a fresh one and ignores
+`dump.rdb`, so the recreate dropped 191 keys — every session — on the spot. Harmless here,
+worth knowing before doing it in production: either accept a mass sign-out during a maintenance
+window, or `CONFIG SET appendonly yes` at runtime and let `BGREWRITEAOF` convert the live
+dataset first.
+
+#### The restore is the item that mattered, and it is mutation-checked
+
+§9.5's own words: "an untested backup is a hope, not a backup." The failure being designed
+against is not a dump that crashes — that is visible — but one that succeeds, restores with
+zero errors and is **missing something**. So `verify-restore.mts` compares source and copy on
+five properties, chosen against this schema rather than generically (D-051):
+
+| Check                                     | Result                                           |
+| :---------------------------------------- | :----------------------------------------------- |
+| Every table's exact `count(*)`            | PASS — 17 tables, 1650 rows                      |
+| Invoice PDF bytes, digested server-side   | **PASS — 91 PDFs, 521,118 bytes, md5 identical** |
+| Money still `bigint`, totals to the paise | PASS — `bigint:2489543406:2489543406`            |
+| Every index, incl. GIN and trigram        | PASS — 45 of 45                                  |
+| `_prisma_migrations` ledger               | PASS — 10 applied                                |
+
+Row counts use `count(*)` and not `pg_stat_user_tables.n_live_tup`: the statistics view is an
+autovacuum estimate and reads 0 on a freshly restored database, so that check would have passed
+by accident on an empty copy.
+
+**Mutation-checked twice.** A truncated file fails at `pg_restore`. And a dump taken with
+`--exclude-table-data BillPdf` — which `pg_restore` accepts **without a single error** — fails
+exactly the two checks it should (`missing after restore: BillPdf=91`, digest
+`91:521118:e32e… → 0:0:empty`) while the other three stay green. A verification that reported
+everything red on any fault would be no more useful than one that reported nothing.
+
+#### Two defects, and neither was findable by review
+
+**1. `/api/auth/password/forgot` was an account-existence oracle.** The channel came from the
+identifier's shape, so a phone number went to `Channel.SMS`, and `SmsNotifier` throws because
+there is no provider (D-011). The send only runs on the branch where the user was **found** —
+so a registered number got **500** and an unregistered one **200**. Anyone could read the
+shop's customer list off the status codes by testing Indian mobile numbers, against a route
+whose entire purpose is to not answer that question. §3 has required the identical-answer
+property since Phase 3; it held for two years of phases in every case except the one nobody had
+ever exercised. Fixed in D-052: delivery goes to the account's email whatever was typed, the OTP
+stays keyed on what the customer typed, and a delivery failure is logged rather than allowed to
+change the response — because a Resend outage would otherwise re-open the same oracle.
+
+**2. The image CDN case was half met.** With every request to `res.cloudinary.com` aborted in a
+real browser, the layout was perfect — frame at 335×335, no horizontal scroll, price and CTA in
+place — and Chrome drew its torn-page glyph in the corner. §9.5 asks for "branded empty frames",
+and §2.2's standard is "must look intentional while empty, **not like a broken page**". The
+monogram had only ever covered a missing `src`, never an unreachable one. `ImageWithFallback`
+closes it, and needs both an `onError` handler and a mount check — `onError` never fires for an
+image that already failed before React hydrated, which is the common case for a dead CDN.
+Screenshotted before and after. Cost measured, not assumed: **+0.4 kB** on `/collections`, 0 on
+the other three routes, against §9.2's 290 kB budget.
+
+#### The degradation checklist, killed one container at a time
+
+`pnpm verify:degradation` — 25 checks, repeatable, and it puts the machine back as it found it.
+
+| Scenario                | Result                                                                            |
+| :---------------------- | :-------------------------------------------------------------------------------- |
+| Baseline                | 5/5                                                                               |
+| Redis stopped           | 9/9 — all four storefront routes 200, `/api/rates` true from Postgres, health 200 |
+| Recovery                | 4/4 — both services reconnect with no application restart                         |
+| Broker up, no worker    | 4/4 — job accepted, waits, visible to §9.4's depth alert                          |
+| SMS channel unavailable | 2/2 — after the fix; 0/2 before it                                                |
+| Postgres stopped        | 1/1 — 503, and the ISR cache keeps serving                                        |
+
+Three things are worth stating rather than leaving inside a green tick.
+
+**"Redis down → slower, functional" has a designed exception, and it is now written down.**
+Login answers **429**, not 500 — `lib/auth/rate-limit.ts` fails closed by SEC-005, because a
+limiter that fails open hands unlimited OTP attempts to anyone who can pressure Redis. The
+honest sentence is "browsing, rates and the calculator stay up; signing in does not". The check
+asserts 429 specifically, since a 500 would be an unhandled fault wearing the same outcome.
+
+**A dead broker and a dead worker are different failures.** `enqueueOrRun` catches the first —
+1s deadline, then the job runs inline (measured 1037ms). The second has no fallback by design:
+the job is durable and runs when a worker returns, so what must exist is visibility, and
+`/api/health` provides it. Conflating the two is how a queue "with a fallback" quietly stops
+processing anything.
+
+**The run caught D-042's stated cost happening.** A push that timed out against the dead broker
+**landed anyway** once Redis came back, so `cleanup.expire_shares` held two jobs where one was
+sent. `lib/queue/index.ts` predicted exactly this in prose — "if the push lands after the
+deadline, the job runs twice… that is exactly why §9.3 requires every task to be idempotent" —
+and a sweep that deletes already-deleted rows deletes nothing. It surfaced through a cleanup
+check that compared against a baseline and failed; the first reading of that failure was "the
+removal is broken", which it was not.
+
+**Postgres is where degradation stops**, and §9.5 does not ask but a checklist that never
+records the boundary is not a checklist. With the database stopped, `/api/health` correctly
+returns 503 so a load balancer pulls the instance, and every storefront route kept answering
+**200 from the ISR cache**. A browsing customer sees a working shop; nothing dynamic works.
+
+#### What is not done
+
+**The backups are not scheduled and never leave this machine — DEBT-049.** `pnpm backup` is
+proven (465.5 kB from an 11 MB database in 0.7s, pruning at 30 days, refusing to call an
+implausibly small file a backup), and `pnpm backup --help` prints the cron line rather than
+describing it. Until something runs it daily, §9.5's first word — _automated_ — is not true, and
+a dump on the same disk as the database survives a bad migration and nothing else. The
+reconciliation DEBT-031 asks for is also still owed: dumps prune at 30 days, the invoices inside
+them must be kept six years (DEBT-026), and nobody has written down how those meet.
+
+`@OWNER:` DEBT-049 joins DEBT-047 as an ops action before launch. Both are "the code is proven,
+the deployment has not been told about it".

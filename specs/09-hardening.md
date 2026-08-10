@@ -209,15 +209,79 @@ The dormant infrastructure from Phase 1 now earns its keep.
 
 ## 9.5 Reliability
 
-- [ ] Automated daily Postgres backups, 30-day retention.
-- [ ] **Restore tested.** An untested backup is a hope, not a backup.
-- [ ] Redis persistence enabled — but the app must survive total Redis loss. Verify by killing
-      Redis in staging and browsing the site.
-- [ ] Graceful degradation checklist:
-  - Redis down → slower, functional
-  - Celery down → synchronous fallback
-  - SMS provider down → email OTP still works
-  - Image CDN down → branded empty frames, no broken layout
+- [~] Automated daily Postgres backups, 30-day retention. — **the mechanism is built and run,
+  the schedule is an ops action.** `pnpm backup` takes a `pg_dump --format=custom`, writes it
+  0600 into a 0700 `backups/`, records a SHA-256 beside it, prunes by mtime at 30 days and
+  **refuses to call an implausibly small file a backup** — a green cron job producing 3 kB of
+  header is the failure mode this item exists to prevent. Measured: 465.5 kB from an 11 MB
+  database in 0.7s. It dumps as the **owner** role, not the runtime one, because SEC-029's
+  least-privilege role would produce a dump that succeeds and silently omits what it cannot
+  read. `pnpm backup --help` prints the cron line; on Render the same command is a Cron Job
+  service. **What is owed is off-box: a copy that survives the machine, encrypted at rest —
+  DEBT-049.**
+- [x] **Restore tested.** An untested backup is a hope, not a backup. — `pnpm verify:restore`
+      restores into a scratch database and compares it to the source on five properties, then
+      drops it. **91 invoice PDFs came back byte-identical** (`bytea` digested server-side with
+      `md5()`, not counted), 17 tables at 1650 rows exact, money still `bigint` summing to the
+      same paise, **all 45 indexes** including the GIN and trigram ones DEBT-023 found had been
+      silently dropped once already, and the Prisma migration ledger intact.
+      **Mutation-checked twice:** a truncated file fails on `pg_restore`, and a dump taken with
+      `--exclude-table-data BillPdf` — which restores with zero errors — fails exactly the two
+      checks it should while the other three stay green.
+- [x] Redis persistence enabled — but the app must survive total Redis loss. Verify by killing
+      Redis in staging and browsing the site. — **it was not enabled, and that was measured
+      rather than assumed.** `--requirepass` on the command line means no config file, so Redis
+      took the built-in defaults: RDB only, `save 3600 1 / 300 100 / 60 10000`. At this shop's
+      write volume only the one-hour rule ever fires, so the real durability window was an
+      hour — and this instance holds the **session store** (§3.3), not just cache. Proven by
+      `SIGKILL`: a key written and killed away was **gone** on restart, `DBSIZE` back at the
+      last snapshot. Now `--appendonly yes --appendfsync everysec`; the same test survives.
+      **A `SIGKILL` and not a `docker compose restart`** — a graceful stop writes an RDB on the
+      way out, so the polite test passes against the broken configuration. Total-loss browsing
+      is the checklist below.
+- [x] Graceful degradation checklist: — **all four killed and measured, `pnpm verify:degradation`
+      (25 checks) plus `e2e/degradation.spec.ts` (6). Two real defects found and fixed.**
+  - Redis down → slower, functional — all four storefront routes 200, `/api/rates` serving the
+    true rate from Postgres, `/api/health` 200 and `degraded` rather than 503. **With one
+    designed exception now stated out loud: login answers 429, not 500** — `lib/auth/rate-limit.ts`
+    fails closed by SEC-005, so browsing stays up and signing in does not. The app reconnects
+    without a restart.
+  - Celery down → synchronous fallback — **the broker being down and the worker being down are
+    different failures and both are checked.** Dead broker: `enqueueOrRun` gives up on its 1s
+    deadline and runs the job inline (measured 1037ms). Live broker, no worker: the job is
+    accepted and waits, and `/api/health` can see the depth §9.4 alerts on. The run also caught
+    D-042's stated cost happening — a push that timed out **landed anyway** when Redis came
+    back, so the job ran twice. Harmless exactly because §9.3 required idempotency.
+  - SMS provider down → email OTP still works — **it did not. A 500, and an enumeration
+    oracle.** `/api/auth/password/forgot` picked `Channel.SMS` for a phone identifier;
+    `SmsNotifier` throws (D-011), and the send only runs when the account was FOUND — so a
+    registered number returned **500** and an unregistered one **200**, an unauthenticated
+    account-existence oracle over the customer list. Now delivered to the account's email
+    whatever was typed, with the OTP still keyed on the identifier given, and a delivery
+    failure logged rather than allowed to change the response. **5 tests**, 3 of which fail
+    against the old route. See D-052.
+  - Image CDN down → branded empty frames, no broken layout — **half met, now whole.** With
+    every request to `res.cloudinary.com` aborted in a real browser, the layout held perfectly
+    — the frame kept its 335×335 box and its tint, no horizontal scroll, price and CTA in place
+    — and Chrome painted its torn-page glyph on top, which is the opposite of §2.2's "must look
+    intentional while empty, not like a broken page". `ImageWithFallback` swaps to the monogram
+    on `onError` **and** on a mount check for an image that already failed before hydration.
+    A separate client leaf so `ImageFrame` stays a Server Component: measured **+0.4 kB** on
+    `/collections` and 0 elsewhere, against §9.2's 290 kB budget. A negative control asserts the
+    photograph still renders when the CDN is up.
+
+**Not on the checklist, measured anyway: where degradation stops.** Postgres has no fallback,
+and it is worth knowing how it fails. `/api/health` correctly returns **503** so a load
+balancer pulls the instance — and every storefront route kept answering **200 from the ISR
+cache** with the database stopped. A customer browsing sees a working shop; nothing dynamic
+works. That is the honest boundary.
+
+## 9.5 — Dependencies added
+
+None. `pg_dump`/`pg_restore` come from the `db` container's own image, which is also the only
+way to guarantee the client matches the server — `pg_dump` refuses to dump a server newer than
+itself, and this machine has no Postgres client installed at all. `scripts/lib/pg.mts` uses a
+host binary when there is one, so the same command works against Render's managed database.
 
 ---
 

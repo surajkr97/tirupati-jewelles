@@ -6,9 +6,16 @@
  * must look intentional while empty, not like a broken page." Phase 7 lets the admin fill
  * these slots; until then — and whenever the image CDN is down (Phase 9 §9.5) — every slot
  * renders as a deliberate monogram tile rather than a broken-image icon.
+ *
+ * ── §9.5 made that sentence true for the second case, which it was not ──
+ * Until Phase 9 the monogram appeared only when `src` was absent. A slot with a good `src`
+ * and an unreachable CDN kept its box and its tint — so the layout held — and painted the
+ * browser's broken-image glyph on top of it. Measured in a browser with every request to
+ * the image host aborted, not reasoned about. `ImageWithFallback` is the leaf that closes
+ * it, and it is a separate client component so this one can stay on the server.
  */
-import Image from 'next/image';
-
+import { EmptyFrameMark } from '@/components/ui/empty-frame-mark';
+import { ImageWithFallback } from '@/components/ui/image-with-fallback';
 import { cn } from '@/lib/utils/cn';
 
 export interface ImageFrameProps {
@@ -42,6 +49,10 @@ export function ImageFrame({
 }: ImageFrameProps) {
   return (
     <div
+      // §9.5 measures these boxes with the image CDN unreachable: the fixed ratio is what
+      // keeps a failed load a hole of the right shape rather than a collapsed row. A class
+      // selector would be the alternative, and `cn()` merging makes that quietly brittle.
+      data-image-frame=""
       style={{ aspectRatio: ratio }}
       className={cn(
         'relative w-full overflow-hidden bg-taupe-lt/40',
@@ -50,42 +61,15 @@ export function ImageFrame({
       )}
     >
       {src ? (
-        <Image
+        <ImageWithFallback
           src={src}
           alt={alt}
-          fill
           sizes={sizes}
           priority={priority}
-          placeholder={blurDataURL ? 'blur' : 'empty'}
           blurDataURL={blurDataURL}
-          className="object-cover"
         />
       ) : (
-        <div
-          // Decorative placeholder — the alt text describes content that does not exist yet,
-          // so announcing it would be a lie. Callers render real copy alongside.
-          aria-hidden="true"
-          className="absolute inset-0 grid place-items-center"
-        >
-          {/*
-            `muted`, not `taupe/60`, and the change is forced rather than chosen (§9.7).
-
-            The mark measured **1.83:1** on the frame's own tint — the worst contrast
-            anywhere in the application — because a brand colour at 60% alpha over a tint of
-            the same family is very nearly the tint. The wrapper is already `aria-hidden`,
-            and axe still flags it, correctly: contrast is a rule about what a sighted
-            low-vision user can see, and marking something decorative does not make a smudge
-            legible.
-
-            No taupe in this palette can be AA body text on a light surface — that is D-007's
-            finding, and the frame's tint is lighter still. `taupe-deep` reaches only 4.13
-            here. A fourth taupe token was considered and rejected as disproportionate for a
-            placeholder: the tile's brand signal is the taupe TINT, which is untouched, and
-            the mark stands in for a missing photograph rather than expressing the brand.
-            4.76:1 at any frame size. See D-038.
-          */}
-          <span className="text-small font-semibold tracking-[0.2em] text-muted">TJ</span>
-        </div>
+        <EmptyFrameMark />
       )}
     </div>
   );

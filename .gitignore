@@ -39,3 +39,6 @@ public/photos/
 
 # Written and removed by eslint-rules/no-off-scale-spacing.test.ts.
 eslint-rules/__probe.tsx
+
+# Phase 9 §9.5 — Postgres dumps. They contain customer invoices (DEBT-031); never commit.
+backups/
