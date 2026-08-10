@@ -44,6 +44,18 @@ function isNodeRuntime(): boolean {
 export async function register(): Promise<void> {
   if (!isNodeRuntime()) return;
 
+  /**
+   * Console redaction FIRST, before anything can print.
+   *
+   * §9.1 item 9 promises logging with phone numbers and emails redacted, and DEBT-036
+   * delivered that for the calls this codebase makes. An uncaught route error is printed by
+   * Next itself, ahead of all of it — so the promise was only half kept, and the half that
+   * was missing is the one carrying a Prisma error quoting the colliding email. This is the
+   * earliest point in the process where it can be closed.
+   */
+  const { installConsoleRedaction } = await import('@/lib/log');
+  installConsoleRedaction();
+
   const { initMonitoring } = await import('@/lib/monitoring/sentry');
   initMonitoring();
 }

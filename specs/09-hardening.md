@@ -29,7 +29,13 @@ the Celery infrastructure finally put to use.
 - [x] DB user has least privilege — no DDL rights at runtime.
 - [x] Redis password-protected, not publicly bound.
 - [x] Error responses leak no stack traces in production.
-- [x] Structured logging with phone numbers and emails **redacted**.
+- [x] Structured logging with phone numbers and emails **redacted**. — **§9.4 found this was
+      only half true and closed the rest.** DEBT-036 redacted the calls this codebase makes;
+      an uncaught route error is printed by **Next**, to stdout, before any of our code sees
+      it, so the terminal (and the platform's log viewer in production) carried the email and
+      phone in full while the Sentry event for the same error arrived redacted. Measured with
+      `pnpm verify:sentry`, not theorised. `installConsoleRedaction()` runs first in
+      `instrumentation.ts`. See DEBT-048.
 - [x] Full OWASP Top 10 review documented in `SECURITY-LOG.md`.
 
 ---
@@ -163,7 +169,7 @@ The dormant infrastructure from Phase 1 now earns its keep.
       would fail. `SENTRY_DSN` absent is a supported state: no init, no behaviour change.
       **Verified against the real transport on 10 Aug** — `pnpm verify:sentry` threw from a
       dev-only route and the event arrived reading `with value v***@example.com for
-    [phone:…001]`, diagnosis intact, via `auto.function.nextjs.on_request_error`. That
+[phone:…001]`, diagnosis intact, via `auto.function.nextjs.on_request_error`. That
       closed the half unit tests could not reach: `scrubEvent` was known correct, and
       nothing proved `beforeSend` was installed. **Still owner action: the DSN on Render.**
       DEBT-047.

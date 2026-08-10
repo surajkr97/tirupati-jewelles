@@ -100,6 +100,27 @@ interface RouteContract {
  * malformed input must produce a refusal rather than a stack trace.
  */
 const ROUTE_CONTRACTS: RouteContract[] = [
+  /**
+   * Dev-only, and it exists to THROW — §9.4's PII-scrubbing verification (`pnpm
+   * verify:sentry`). It reads no input at all: no body, no query, no params, so there is
+   * nothing for a schema to validate.
+   *
+   * Its guard is not authorisation but the environment: `proxy.ts` rewrites the path away
+   * under `NODE_ENV=production` and the handler independently returns 404 — the same
+   * belt-and-braces `/__design` uses (§2.5).
+   *
+   * Listed here rather than excluded because this enumeration is the point: §9.1 asks for a
+   * test that "fails if one lacks a schema import", and it did exactly that when this route
+   * was added. A route excluded from the list is a route the guard stops covering.
+   */
+  {
+    file: 'app/%5F%5Fsentry-check/route.ts',
+    load: () => import('@/app/%5F%5Fsentry-check/route'),
+    methods: ['GET'],
+    validates: 'no-input',
+    public: true,
+  },
+
   // ── Admin. Authorisation runs BEFORE validation (SEC-016), so these answer 404 first.
   {
     file: 'app/admin/bills/export/route.ts',

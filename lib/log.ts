@@ -177,3 +177,74 @@ export const log = {
   error: (message: string, context?: Record<string, unknown>) =>
     emit('error', message, context),
 };
+
+/**
+ * Route the process's own console output through `redact()`.
+ * Created by Phase 9 (§9.4), closing the half of §9.1 item 9 that DEBT-036 did not.
+ *
+ * ═══════════════════════════════════════════════════════════════════════════
+ *  §9.1 marks "Structured logging with phone numbers and emails redacted" as done, and
+ *  until this it was only true of `log.*` — the calls WE make.
+ *
+ *  An uncaught error in a route handler is printed by NEXT, to stdout, before any of this
+ *  module's code sees it. Measured, not theorised: `pnpm verify:sentry` throws a
+ *  Prisma-shaped error and the terminal prints
+ *
+ *    ⨯ Error: … with value verify-scrubbing@example.com for +919999900001
+ *
+ *  in full, while the Sentry event for the SAME error arrives correctly redacted. In
+ *  production that stream is the platform's log viewer, and the canonical real example is
+ *  the one DEBT-036 already measured: a Prisma unique-constraint error quotes the colliding
+ *  value, and in this application that value is an email or a phone number.
+ * ═══════════════════════════════════════════════════════════════════════════
+ *
+ * ── Why patching `console` is the right level ──
+ * There is no hook above it. `onRequestError` fires AFTER Next has logged, so it cannot
+ * intercept; a try/catch in every handler would not cover the errors that matter, which are
+ * by definition the ones nobody predicted. `console` is where every path converges.
+ *
+ * ── What it does not do ──
+ * It does not mutate the arguments. An `Error` passed in is left untouched and a redacted
+ * *copy* of its message and stack is printed, because Sentry's `beforeSend` reads the
+ * original object and this must not reach across and change what it sees.
+ *
+ * Idempotent: `redactString` on already-redacted text matches nothing, so `log.*` output
+ * passing through here a second time is unchanged.
+ */
+export function installConsoleRedaction(): void {
+  const target = globalThis.console as Console & { __redacted?: boolean };
+  if (target.__redacted) return;
+  target.__redacted = true;
+
+  const scrub = (argument: unknown): unknown => {
+    if (typeof argument === 'string') return redactString(argument);
+
+    /**
+     * A COPY of the error, not a string and not the original.
+     *
+     * Passing the redacted `stack` as a string was the first attempt and it cost the code
+     * frame: Next source-maps an Error it is handed, so a string got printed verbatim and
+     * the terminal showed `.next/dev/server/chunks/[root-of-the-server]__0lwqxit._.js:112`
+     * instead of `app/…/route.ts:52`. Handing back an Error keeps Next's formatting and the
+     * mapping, because the frame lines inside the stack are untouched by redaction.
+     *
+     * A copy rather than a mutation because Sentry's `beforeSend` reads the original object;
+     * this must not reach across and change what it sees.
+     */
+    if (argument instanceof Error) {
+      const copy = new Error(redactString(argument.message));
+      copy.name = argument.name;
+      if (argument.stack) copy.stack = redactString(argument.stack);
+      if (argument.cause !== undefined) copy.cause = scrub(argument.cause);
+      return copy;
+    }
+
+    if (argument && typeof argument === 'object') return redact(argument);
+    return argument;
+  };
+
+  for (const level of ['log', 'warn', 'error', 'info', 'debug'] as const) {
+    const original = target[level].bind(target);
+    target[level] = (...args: unknown[]) => original(...args.map(scrub));
+  }
+}
