@@ -161,7 +161,12 @@ The dormant infrastructure from Phase 1 now earns its keep.
       OTP breadcrumb, a login request body — and assert the phone number, the email and the
       session id are gone, with a negative control so a scrubber that empties every event
       would fail. `SENTRY_DSN` absent is a supported state: no init, no behaviour change.
-      **Owner action: create the project and set the DSN.** DEBT-047.
+      **Verified against the real transport on 10 Aug** — `pnpm verify:sentry` threw from a
+      dev-only route and the event arrived reading `with value v***@example.com for
+    [phone:…001]`, diagnosis intact, via `auto.function.nextjs.on_request_error`. That
+      closed the half unit tests could not reach: `scrubEvent` was known correct, and
+      nothing proved `beforeSend` was installed. **Still owner action: the DSN on Render.**
+      DEBT-047.
 - [~] Uptime checks on `/`, `/api/health`, `/api/rates`. — the application half is done and is
   the harder half: `/api/health` now answers all four alert conditions in one response,
   so an external checker needs one rule rather than four integrations. **Registering the
