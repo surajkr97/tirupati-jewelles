@@ -3286,3 +3286,47 @@ not create a contradiction with a page that makes a promise to customers.
 exists, and the scrubber — though unit-tested — has never been exercised against the real
 transport. One deliberate error after wiring it, checked for a redacted phone number, closes
 that.
+
+### Phase 9 — OWNER DECISIONS (the last of the policy questions)
+
+Four questions were put to the owner and all four are answered. None changed code; each closes
+a ticket that had been blocking a checklist item.
+
+| Ticket   | Decision                                                              |
+| :------- | :-------------------------------------------------------------------- |
+| DEBT-039 | The **applied** measurement governs, not Lighthouse's simulated model |
+| DEBT-043 | Buyback and exchange are the whole story; money is not returned       |
+| DEBT-046 | No analytics                                                          |
+| §9.6     | Both flagged policy sentences ratified as written                     |
+
+**DEBT-039 is the one that amends a written criterion**, so it is recorded as **D-049** rather
+than edited in quietly — the standard D-035 set when the JS budget moved. §9.2's acceptance
+criterion 1 asked for Lighthouse ≥ 90 on all key routes; the homepage never reached it across
+five runs (79 / 81 / 86 / 86 / 86), while the _applied_-throttling measurement of the same
+page — the method §9.2 used for every other line in its budget table — puts LCP at **676ms**,
+inside the 2.0s the same table sets. A model and a measurement disagreeing by 3.3 seconds is a
+modelling gap, and it was treated as one only after the two cheaper explanations were ruled out
+by measurement: not the cold `/_next/image` path (warming every variant moved the score 79 →
+87), and not general slowness (FCP 1.4s, TBT 20–30ms, CLS 0).
+
+Two things deliberately survive that decision. **Compression and a CDN are still owed** — they
+are §9.2's remaining items and are worth doing on their own merits; they are simply no longer
+being spent to chase a score. And **DEBT-041 stays open**: every Lighthouse figure in this
+project comes from a single run, and `/products/[slug]` measures 91 / 87 / 93 / 90 / 90 across
+repeats. Straddling a threshold is a methodology defect regardless of which figure is
+authoritative.
+
+**DEBT-043 and DEBT-046 change nothing in the code**, which is the point of asking. The refunds
+page already said what the owner has now decided, so it becomes the policy rather than a
+placeholder — the same status DEBT-018 conferred on the buyback and exchange copy. And
+declining analytics keeps three things true as a decision rather than as an accident: §9.1's
+CSP has no third-party script origin, §9.6's privacy page keeps its "no analytics service, no
+tracker" sentence, and no consent banner is ever required. §6.3's enquiry log already answers
+the question the shop actually has — which pieces are people asking about.
+
+Both ratified sentences carry a condition worth restating: **"We do not ship" and DEBT-034 are
+the same fact seen twice.** Every bill is split CGST/SGST, which is correct only for an
+intra-state counter sale. The first time the shop posts a piece to another state, that sentence
+and the tax split both become wrong.
+
+Full reasoning in **D-049** and **D-050**.

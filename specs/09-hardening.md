@@ -61,11 +61,16 @@ implementation is normally how budgets stop meaning anything, so the reasoning i
 rather than the number quietly edited — and 290KB is set deliberately close to the measured
 278.6KB so that a regression still trips it.
 
-² **Measured for the first time in Phase 9 (DEBT-020).** Four of the five key routes pass on
-all four categories, including `/products/[slug]` at 91 — the run §6 TEST asked for and could
-not have. **`/` scores 79** on performance alone, entirely on LCP, and the applied-throttling
-measurement of the same page disagrees with Lighthouse's simulated model by 3.3 seconds. The
-criterion is left unmet rather than adjusted; the choice is DEBT-039's. `pnpm lighthouse`.
+² **Amended, with the owner's decision, against a measurement — see D-049.** Lighthouse's
+simulated (Lantern) model reports the homepage at 79–86 on performance alone, entirely on LCP.
+Under _applied_ 4G throttling — 1.6 Mbps, 150ms RTT, 4× CPU — the same page's LCP is **676ms**,
+inside the 2.0s budget above. A model and a measurement of the same load disagree by 3.3
+seconds, and **the owner has decided the measurement governs**; the Lighthouse figure is
+recorded as a model artefact rather than the contract. `/rates`, `/collections`,
+`/products/[slug]` and `/calculator` all pass ≥90 regardless. Amended rather than quietly
+edited, the standard D-035 set. Note **DEBT-041 stays open**: every score here comes from a
+single run, and `/products/[slug]` straddles 90 across repeats — a methodology defect that
+survives this decision. `pnpm lighthouse`.
 
 - [x] `@next/bundle-analyzer`; remove anything unjustified. — **nothing unjustified found.**
       Attribution in D-035; the budget is framework, not bloat. Tool needs `--webpack` (D-034).
@@ -184,14 +189,12 @@ The dormant infrastructure from Phase 1 now earns its keep.
       config: no uptime service can see it, because it is a fact about this shop's data.
       Measured working — the development database reports `rates: warn, "last set 76h ago"`.
       Only Postgres returns 503; a stale rate must not take the site out of rotation.
-- [ ] Vercel Analytics or Plausible — privacy-friendly, no cookie banner needed. **Not built,
-      and it needs an owner decision first.** Vercel Analytics requires Vercel and the deploy
-      target is Render (D-011); Plausible requires an account or a self-hosted instance, and
-      neither exists. Building against a service that cannot be exercised is what Phase 7
-      declined to do for uploads (DEBT-022) — "code that has never run is worse than an
-      honest gap". **It also contradicts something already shipped:** §9.6's privacy page
-      states there is no analytics service on this site, which is why no cookie banner is
-      shown. Adding one means changing that page and the CSP in the same commit. DEBT-046.
+- [x] Vercel Analytics or Plausible — privacy-friendly, no cookie banner needed. **Closed on
+      the owner's decision: no analytics at all** (DEBT-046). Nothing is added, and three
+      things stay true as a result rather than by accident — §9.1's CSP keeps no third-party
+      script origin, §9.6's privacy page keeps its "no analytics service, no tracker" sentence,
+      and no consent banner is ever required. §6.3's enquiry log already records which product
+      each WhatsApp enquiry came from, which is the more actionable signal for this shop.
 
 ## 9.4 — Dependencies added
 
@@ -320,7 +323,10 @@ Move to `DEBT.md`, do not build now:
 
 ## Acceptance criteria
 
-1. Lighthouse mobile ≥ 90 on all key routes.
+1. ~~Lighthouse mobile ≥ 90 on all key routes.~~ **Amended (D-049, owner's decision):** the
+   applied-throttling measurement governs, and the homepage's LCP of 676ms meets the budget in
+   §9.2. Four of five key routes pass ≥90 on all categories anyway; the homepage's simulated
+   score is recorded as a model artefact. See footnote ² above.
 2. Zero CRITICAL/HIGH security findings.
 3. Performance budget met on throttled 4G.
 4. Backups tested by actual restore.

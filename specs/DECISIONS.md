@@ -1284,3 +1284,74 @@ The cost is stated rather than hidden: a push that lands after the deadline runs
 twice, once inline and once on the worker. That is precisely why §9.3 requires every task to
 be idempotent, and each handler in `lib/queue/jobs.ts` says how it achieves it — a duplicate
 render overwrites the same PDF key, a duplicate sweep deletes nothing.
+
+---
+
+## D-049 — the applied-throttling measurement governs, not Lighthouse's simulated model
+
+**Raised as:** DEBT-039. §9.2's acceptance criterion 1 asks for "Lighthouse mobile ≥ 90 on all
+key routes". The homepage does not reach it and, across five runs, never has: 79 / 81 / 86 /
+86 / 86 on performance alone.
+
+**Two measurements of the same page load, 3.3 seconds apart.**
+
+| Method                                       | Homepage LCP | Source                        |
+| :------------------------------------------- | -----------: | :---------------------------- |
+| Lighthouse default (simulated / Lantern)     |        4.0 s | `pnpm lighthouse`             |
+| Applied throttling — 1.6 Mbps, 150ms RTT, 4× |   **676 ms** | §9.2's own Web Vitals harness |
+
+The applied figure is the method §9.2 used for every other line in its budget table, and it
+sits comfortably inside the 2.0s the same table sets for LCP. The LCP element is the hero
+`<img>`, recorded at its blur-placeholder paint — §9.2's own work is what makes it fast.
+
+**Two explanations were ruled out before this was treated as a modelling gap**, and neither
+was assumed: it is not the cold `/_next/image` path — warming every image variant with a real
+browser load first moved the score only 79 → 87 — and it is not general slowness, since FCP is
+1.4s, TBT 20–30ms, CLS 0 and Speed Index 1.4s.
+
+**The owner's decision: the measurement governs.** The Lighthouse score is recorded as a model
+artefact rather than the contract, and §9.2's criterion 1 is **amended in the spec file, not
+quietly dropped**. D-035 set that standard when the JS budget moved from 180KB to 290KB —
+state the measurement, state the reasoning, involve the owner — and this follows it.
+
+**What the decision does not do.** It does not excuse the remaining §9.2 items: compression and
+a CDN are still worth doing, on their own merits, and are simply no longer being spent to chase
+a number. It does not touch the other four key routes, which pass ≥90 regardless. And it does
+not close **DEBT-041** — every Lighthouse figure in this project comes from a single run, and
+`/products/[slug]` measures 91 / 87 / 93 / 90 / 90 across repeats, straddling the threshold.
+That is a methodology defect that survives whichever figure is authoritative, and the fix is
+median-of-N rather than a different number.
+
+---
+
+## D-050 — three owner decisions closing the last of Phase 9's policy questions
+
+Recorded together because they were taken together, on the owner's instruction, and each
+closes a ticket rather than changing code.
+
+**DEBT-043 — refunds.** Buyback and exchange are the whole story; money is not returned. A
+piece comes back as value against another piece, assessed in store against the weight and
+purity on the original bill. `/policies/refunds` already says exactly that and states no
+cash-refund window, so **the page IS the policy** rather than a placeholder for one — the same
+status DEBT-018 gave the buyback and exchange copy. Nothing changes in the code. Two things
+travel with it: every sentence on that page is a claim a customer may rely on, and a _stated_
+policy is binding under Indian consumer-protection rules, so if the shop ever does return money
+the page must change **before** that happens, not after.
+
+**DEBT-046 — analytics.** None. Nothing is added, and three properties hold as a decision
+rather than as an accident: §9.1's CSP keeps **no third-party script origin at all**, §9.6's
+privacy page keeps its sentence that there is no analytics service and no tracker on the site,
+and no cookie-consent banner is ever required. The shop is not blind — §6.3's enquiry log
+records which product each WhatsApp enquiry came from, which for this business is a more
+actionable signal than pageviews. If it is ever revisited, the CSP, the privacy page and
+(unless the tool is genuinely cookieless) a consent banner all change in the same commit.
+
+**The two ratified sentences.** §9.6 wrote two lines that commit the shop rather than describe
+the build, and flagged both for the owner. Both are now ratified as policy:
+
+- _"We do not sell your details, and we do not share them with anyone for marketing."_ True of
+  the build — there is no data-sharing code — and now a promise as well as a description.
+- _"We do not ship. Every piece is collected in store."_ Consistent with DEBT-034, which
+  records the same fact from the tax side: every bill is split CGST/SGST, which is correct only
+  for an intra-state counter sale. **If the shop ever posts a piece to another state, this
+  sentence and the tax split both become wrong**, and DEBT-034 is the ticket for the second.

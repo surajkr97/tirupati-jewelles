@@ -36,12 +36,46 @@ services:
       timeout: 5s
       retries: 10
 
+  # ── Persistence is enabled deliberately, and it is not only a cache — Phase 9 §9.5 ──
+  #
+  # `--requirepass` on the command line means Redis starts with NO config file, so it took
+  # the built-in defaults: RDB only, at `save 3600 1 / 300 100 / 60 10000`. Measured before
+  # this change, not assumed — a key written and then SIGKILLed away was gone on restart and
+  # `DBSIZE` came back at the pre-write figure, i.e. the last snapshot. With this shop's
+  # write volume the 100-changes-in-300s and 10000-in-60s rules never fire, so the real
+  # durability window was the ONE HOUR rule.
+  #
+  # What is in here decides whether that matters, and this instance holds three things:
+  #
+  #   session:{id}       Phase 3 §3.3 — the session store. Losing it signs everyone out,
+  #                      including an admin halfway through raising a bill.
+  #   rl:{...}           the rate-limit counters. `lib/auth/rate-limit.ts` FAILS CLOSED, so
+  #                      losing these is safe in the direction that matters.
+  #   rates:*, search:*  ordinary cache-aside. Losing these costs a Postgres query.
+  #
+  # Only the third is a cache. So AOF with `everysec`: the durability window goes from up
+  # to an hour to at most a second, at the cost of one background fsync per second. The RDB
+  # save points are LEFT ON — with `appendonly yes` Redis loads the AOF on start and the RDB
+  # becomes a cheap point-in-time file, which is what `docker compose exec redis redis-cli
+  # BGSAVE` produces for a restore.
+  #
+  # `maxmemory-policy` is deliberately left at `noeviction`. The cache-shaped default
+  # (`allkeys-lru`) would evict SESSIONS under pressure, which reads to a customer as being
+  # randomly signed out; failing a write loudly is the better error.
   redis:
     container_name: tirupati-redis
     image: redis:7-alpine
     restart: unless-stopped
     command:
-      ['redis-server', '--requirepass', '${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}']
+      [
+        'redis-server',
+        '--requirepass',
+        '${REDIS_PASSWORD:?set REDIS_PASSWORD in .env}',
+        '--appendonly',
+        'yes',
+        '--appendfsync',
+        'everysec',
+      ]
     ports:
       - '127.0.0.1:6379:6379'
     volumes:
