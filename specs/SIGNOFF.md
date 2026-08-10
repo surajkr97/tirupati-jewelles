@@ -3668,8 +3668,11 @@ Verified on the final build: `pnpm build` zero TypeScript errors, `pnpm lint`,
 retries. `pnpm verify:degradation` 25/25, `pnpm verify:restore` 6/6, `pnpm cache:stats`
 91.7%, `pnpm verify:sentry` and `pnpm verify:upload` both proven against live accounts.
 
-**Debt: 21 open — zero CRITICAL, zero HIGH.** Seven MEDIUM, thirteen LOW, one INFO, against
-29 closed. §9.8's "nothing CRITICAL outstanding" therefore already holds.
+**Debt: 19 open — zero CRITICAL, zero HIGH.** Five MEDIUM, thirteen LOW, one INFO, against
+31 closed. §9.8's "nothing CRITICAL outstanding" therefore already holds.
+
+_(Updated after sign-off: DEBT-042 and DEBT-050 closed — the owner's screen-reader pass, and
+the WhatsApp setting the storefront now reads.)_
 
 ### What is deliberately NOT built, and is not a gap
 
@@ -3691,9 +3694,13 @@ decision behind it rather than an omission:
 
 ### The two acceptance criteria this phase could not meet from inside the repository
 
-1. **Screen-reader pass (§9.7).** The structures are asserted across 22 routes; nobody has
-   listened. One hour with VoiceOver or NVDA over the three flagship flows. DEBT-042.
-2. **Real-device test (§9.8).** A budget Android on real 4G. Not a simulator.
+1. ~~**Screen-reader pass (§9.7).**~~ **Done — the owner confirms the manual pass, 11 Aug.**
+   DEBT-042 closed. The structures were asserted across 22 routes; the listening has now
+   happened.
+2. ~~**Real-device test (§9.8).**~~ **Done — owner-confirmed, 11 Aug.** A budget Android on
+   real 4G, which is the only measurement that settles D-049's 3.3-second gap between
+   Lighthouse's simulated model and applied throttling. **DEBT-006 stays open**: the iOS home
+   indicator is an iPhone question an Android run does not answer.
 
 ### What §9.8 still holds
 
@@ -3703,5 +3710,8 @@ message, the real-device run, and a written rollback plan. Five of its items wer
 the owner on 11 Aug and are recorded as such — a confirmation, not a measurement, because each
 happens in an environment this repository cannot read.
 
-`@OWNER:` the shortest path to launch is the four manual items above. Nothing in the codebase
-blocks them.
+`@OWNER:` **one item left — a staging environment that mirrors production**, and its two
+traps are written into §9.8: its own Postgres _and_ its own Redis (DEBT-030 is that bug in
+miniature, and sharing Redis would share sessions), and no production dump restored into it
+(DEBT-031 — a dump holds 91 customer invoices). Rollback is documented in `specs/ROLLBACK.md`.
+Nothing in the codebase blocks either.

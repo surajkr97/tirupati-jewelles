@@ -374,10 +374,13 @@ decision (D-033), so no nonce is needed and none is invented.
 - [x] Full keyboard navigation. — every rendered control reached by Tab, a visible focus
       indicator on each, no trap outside the modal, and the product gallery made operable
       (it was not). `e2e/keyboard.spec.ts`.
-- [~] Screen-reader pass on the three flagship flows. — **the structures are asserted, the
-  listening is not.** Names, landmarks, the heading spine and the live regions are tested
-  in `e2e/screen-reader.spec.ts`; nobody has driven VoiceOver or NVDA over the site.
-  DEBT-042.
+- [x] Screen-reader pass on the three flagship flows. — **owner-confirmed, 11 Aug: the
+      listening has now happened.** Closes DEBT-042, the one §9.7 item automation could not reach —
+      axe covers roughly a third to a half of real barriers and none of them can tell you whether
+      a heading order is _meaningful_ or whether alt text is _accurate_. What was already asserted,
+      and still is: **the structures are asserted, the listening was not.** Names, landmarks, the heading spine and the live regions are tested
+      in `e2e/screen-reader.spec.ts`; nobody has driven VoiceOver or NVDA over the site.
+      DEBT-042.
 - [x] Ticker changes announced via `aria-live="polite"` — **polite, not assertive.** A
       per-second assertive region is unusable with a screen reader. — it was already polite
       and was still unusable: at `TICK_INTERVAL_MS` 1000 the queue never drained, and every
@@ -403,12 +406,12 @@ decision (D-033), so no nonce is needed and none is invented.
   Phase 9's block records what is deliberately unbuilt (DEBT-044, 045, 051) and the two
   acceptance criteria that cannot be met from inside the repository — the screen-reader pass
   and the real-device run.
-- [x] `DEBT.md` reviewed; nothing CRITICAL outstanding. — **21 open: zero CRITICAL, zero
-      HIGH, 7 MEDIUM, 13 LOW, 1 INFO, against 29 closed.** The MEDIUMs are DEBT-009 (the ops
-      half of the proxy-hop confirmation), 026 (invoice retention policy), 027 (Indic script
-      on invoices), 031 (backup retention reconciliation), 034 (IGST when the shop ships out
-      of state), 042 (the screen-reader pass) — none of which blocks a launch, and each names
-      the condition that would make it urgent.
+- [x] `DEBT.md` reviewed; nothing CRITICAL outstanding. — **19 open: zero CRITICAL, zero
+      HIGH, 5 MEDIUM, 13 LOW, 1 INFO, against 31 closed.** The MEDIUMs are DEBT-009 (the ops
+      half of the proxy-hop confirmation), 026 (a stated invoice-retention period), 027 (Indic
+      script on invoices), 031 (reconciling 30-day dump retention with six-year invoice
+      retention) and 034 (IGST the first time the shop ships out of state). None blocks a
+      launch, and each names the condition that would make it urgent.
 - [ ] Staging mirrors production. — **the only §9.8 item left, and it is a Render setup
       task.** "Mirrors" means, concretely: Node 24 LTS (`.nvmrc`), **Postgres 16** and **Redis 7**
       to match `docker-compose.yml`, the same build and start commands, and the same env var
@@ -430,7 +433,9 @@ decision (D-033), so no nonce is needed and none is invented.
   real customer data into a lower environment is the commonest way a small shop has a breach
   without ever being attacked.
 
-- [ ] Admin trained — record a short screen capture of the bill flow.
+- [x] Admin trained — record a short screen capture of the bill flow. — **owner-confirmed,
+      11 Aug.** Recorded on their instruction; a screen capture is not an artefact this repository
+      can see.
 - [~] Owner WhatsApp number verified working end to end. — **the number is set, it lives
   where the owner can change it, and every link on the site uses it; the "a message actually
   arrives" half is yours.** Supplied 11 Aug. It is in the **`Settings` row** — the field
@@ -455,8 +460,13 @@ decision (D-033), so no nonce is needed and none is invented.
   mechanism — worth doing so the fallback is right, and noting it is inlined at BUILD time,
   so it needs a redeploy rather than a restart.
 
-- [ ] Test the full journey on a **real budget Android phone on real 4G.** Not a simulator.
-      This is where the 95% of users actually are.
+- [x] Test the full journey on a **real budget Android phone on real 4G.** Not a simulator.
+      This is where the 95% of users actually are. — **owner-confirmed, 11 Aug.** The criterion
+      §9.2 could never satisfy from a laptop: every performance figure in this phase comes from
+      either Lighthouse's simulated model or applied CPU/network throttling on desktop hardware,
+      and D-049 turned on the 3.3-second gap between those two. A real phone on a real network is
+      the only measurement that settles it. Note **DEBT-006 stays open** — the bottom nav clearing
+      the iOS home indicator is an iPhone question, and an Android run does not answer it.
 - [x] Rollback plan documented. — **`specs/ROLLBACK.md`**, written against this system rather
       than as a generic runbook. Its load-bearing point: a deploy is **three** things that roll
       back at different speeds — code (a Render button, ~2 min), schema (**forward-only**,
