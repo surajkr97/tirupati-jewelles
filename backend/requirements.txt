@@ -7,4 +7,4 @@
 # Do not add application dependencies here until Phase 9 activates real tasks.
 
 celery==5.6.3
-redis==8.0.1
+redis==8.1.0
