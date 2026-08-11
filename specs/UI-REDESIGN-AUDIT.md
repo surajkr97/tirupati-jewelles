@@ -353,6 +353,17 @@ covered, but under a different name.
 orders", and `lib/navigation.test.ts` asserts that `/admin/orders` is never added without a
 route behind it. If a dedicated order list is ever wanted it is a new page, not a rename.
 
+**UI_REDESIGN_DEBT-006 — `/claim/[token]` was not restyled with the auth screens.**
+*Problem:* the order-claim flow is auth-adjacent — it verifies a phone by OTP — but lives in
+the `(app)` group with the full storefront shell rather than in `(auth)`, and it renders its
+own `Card`-based UI. Stage 3 restyled the three `(auth)` routes and left it alone.
+*Affected:* `app/(app)/claim/[token]/page.tsx`, `claim-card.tsx`.
+*Severity:* LOW — it works, it is on the Stage 1 tokens, and it is reached from a WhatsApp
+link rather than from the auth screens, so nobody sees the two treatments side by side.
+*Recommended fix:* restyle it with the order UI in Stage 4, not with auth. Moving it into
+`(auth)` was considered and rejected: it is a storefront destination and the shell it has is
+the right one.
+
 **UI_REDESIGN_DEBT-005 — client-side errors are not reported.**
 *Problem:* `app/error.tsx` renders a recovery UI but captures nothing. A SERVER render error
 is already reported by `onRequestError` in `instrumentation.ts` before the boundary paints, so

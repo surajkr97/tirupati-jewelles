@@ -15,7 +15,7 @@ export default function ForgotPasswordPage() {
   return (
     <AuthShell
       title="Reset your password"
-      subtitle="We'll send a code to your mobile number or email."
+      subtitle="We’ll send a 6-digit code to your mobile number or email."
       footer={
         <Link href="/login" className="font-semibold text-rose-deep hover:underline">
           Back to sign in

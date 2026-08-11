@@ -89,7 +89,7 @@ export function LoginForm() {
         required
       />
 
-      <Button type="submit" full loading={busy}>
+      <Button type="submit" full loading={busy} loadingLabel="Signing in…">
         Sign in
       </Button>
 

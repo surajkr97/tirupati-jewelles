@@ -8,13 +8,22 @@ import { Suspense } from 'react';
 import { SignupForm } from '@/app/(auth)/signup/signup-form';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { Skeleton } from '@/components/ui';
+import { redirectIfSignedIn } from '@/lib/auth/signed-in-redirect';
 
 export const metadata = { title: 'Create an account — Tirupati Jewelles' };
 
-export default function SignupPage() {
+export default async function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  // Audit C-4. Creating a second account while signed into the first is never the intent.
+  await redirectIfSignedIn((await searchParams).next);
+
   return (
     <AuthShell
       title="Create an account"
+      subtitle="So your purchases, rates and estimates stay in one place."
       footer={
         <>
           Already have one?{' '}
