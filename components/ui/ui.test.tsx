@@ -48,6 +48,37 @@ describe('Button', () => {
     expect(button).toHaveAttribute('aria-busy', 'true');
   });
 
+  /**
+   * Stage 3 — the double-submit hole `disabled ?? loading` left open.
+   *
+   * `false ?? true` is `false`, so a button given `disabled={false} loading={true}` stayed
+   * PRESSABLE. That is not hypothetical: all three OTP verify buttons are written
+   * `loading={busy} disabled={code.length < 6}`, so the moment the sixth digit landed the
+   * guard evaluated to `false` and the button was live for the whole request. Two presses
+   * meant two verifications, and each one spends an attempt against the 6-attempt lockout.
+   */
+  it('stays disabled while loading even when disabled={false} is passed', () => {
+    render(
+      <Button loading disabled={false}>
+        Verify
+      </Button>,
+    );
+    expect(screen.getByRole('button')).toBeDisabled();
+  });
+
+  it('swaps in the loading label so a pending button says what it is doing', () => {
+    const { rerender } = render(<Button loadingLabel="Signing in…">Sign in</Button>);
+    expect(screen.getByRole('button', { name: 'Sign in' })).toBeEnabled();
+
+    rerender(
+      <Button loading loadingLabel="Signing in…">
+        Sign in
+      </Button>,
+    );
+    // The accessible NAME changes, which is the half a spinner cannot do.
+    expect(screen.getByRole('button', { name: 'Signing in…' })).toBeDisabled();
+  });
+
   it('does not fire onClick when disabled', async () => {
     const onClick = vi.fn();
     render(

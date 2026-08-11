@@ -236,17 +236,77 @@ internal path the browser is sent to after a successful sign-in.
 
 ---
 
-## Stage 3 — Authentication
+## Stage 3 — Authentication ✅ COMPLETE
 
 - [x] **10 Auth redirects** — **done in Stage 2.** `lib/auth/safe-next.ts`, applied to login,
       signup and forgot-password. Fixes C-3, closes UI_REDESIGN_DEBT-002.
-- [ ] **11 Signed-in bounce** — send authenticated visitors away from `/login` and `/signup`.
-      **Fixes C-4.** Keep it in the pages, not `proxy.ts` — the proxy sees only a cookie, not
-      a role, and must not become a second authorisation path.
-- [ ] **12 Auth screens** — re-skin `AuthShell`, `OtpInput`, `FormError`. OTP keeps loading /
-      error / expired / resend / success. **Security behaviour unchanged**: one generic error
-      for every failure mode.
-- [ ] **13 Sign-out** — "Signed out" toast; quiet destructive styling (C-7, brief §17).
+- [x] **11 Signed-in bounce** — `redirectIfSignedIn()` on `/login` and `/signup`, resolving
+      the real session rather than the cookie. **Fixes C-4**, the last open navigation
+      finding. D-067.
+      - [x] `/forgot-password` deliberately NOT bounced — resetting while signed in is
+            legitimate, and it stays statically rendered as a result
+      - [x] `?next=` pointing at an auth route can no longer loop (D-068)
+      - [x] A **stale** cookie falls through to the form; asserted by test
+- [x] **12 Auth screens**
+      - [x] `AuthShell` — the `Card` is gone. Hierarchy from a Playfair `h1`, one muted line
+            and whitespace; fields are white on cream. Brief §5.
+      - [x] **"Back to the shop"** — brief §13. The only previous exit was the browser button.
+      - [x] `StepIndicator` — signup is three screens that each look complete (brief §6)
+      - [x] `FormError` — icon + ring, so the state is not carried by colour alone (§16)
+      - [x] Password hints now read `MIN_PASSWORD_LENGTH` from the policy the **server**
+            enforces, so the copy cannot drift from the rule
+      - [x] `OtpInput` needed no structural change — paste, backspace, arrow keys,
+            `one-time-code` and `inputMode="numeric"` were already right
+- [x] **13 Sign-out** — "Signed out" toast, quiet text buttons instead of a card with two
+      full-width blocks. **Fixes C-7.** Both controls verified at 44px.
+
+### Shared-primitive work (brief §19: fix the component, not the page)
+
+- [x] `Button` gains `loadingLabel` — "Signing in…", "Verifying…", "Creating account…".
+      A spinner beside an unchanged label says nothing to a screen reader, which announces
+      only the label.
+- [x] `Spinner` gains `decorative` — inside a `Button` it no longer nests a `role="status"`
+      live region or prepends "Loading" to the button's accessible name.
+
+### Two real bugs found
+
+- **Double-submit on every OTP verify button.** `disabled={disabled ?? loading}` — and
+  `false ?? true` is `false`, so `loading={busy} disabled={code.length < 6}` left the button
+  **live** the moment the sixth digit landed. Five call sites, including all three OTP verify
+  buttons. Two verifications means two attempts spent against the 6-attempt lockout. Now
+  `disabled || loading`, pinned by a unit test.
+- **Every loading button announced "Loading &lt;label&gt;".** `Spinner` is `role="status"`
+  with `aria-label="Loading"`, which is right standalone and wrong inside a control that
+  already carries `aria-busy`.
+
+### Stage 3 verification
+
+| Gate | Result |
+| :--- | :--- |
+| `pnpm lint` / `typecheck` / `build` | pass |
+| `pnpm test` (unit) | **1312 passed**, 7 skipped |
+| `e2e/auth.spec.ts` | 27 passed |
+| Full Playwright suite | **654 passed, 0 failed**, 193 skipped |
+| axe / screen-reader / keyboard | pass — all three suites already cover `/login`, `/signup`, `/forgot-password` |
+
+Responsive: `/login`, `/signup`, `/forgot-password` and the OTP step verified at **320 / 360
+/ 390 / 414**, asserting real scrollability and 44px targets. Auth layout is a single column
+and does not change shape above 414, so the wide widths are covered by the shell suite.
+
+### Preserved
+
+No change to OTP generation, hashing, TTL, attempt limits or rate limiting; password hashing;
+sessions or cookies; `proxy.ts`; `requireAdmin()`; password-reset security; account claiming;
+API contracts; or the schema. The enumeration-safe generic error is unchanged and asserted.
+
+### Deferred
+
+- **`/claim/[token]`** — an auth-adjacent flow living in the `(app)` group with the storefront
+  shell. Left alone: it is reached from a WhatsApp link rather than from the auth screens, and
+  restyling it means touching order-claim UI, which is Stage 4's. UI_REDESIGN_DEBT-006.
+- **Success interstitials** (brief §15) — signup and reset redirect straight to the
+  destination. Brief §10 also says not to add an unnecessary intermediate page; the toast
+  carries the confirmation instead.
 
 ---
 

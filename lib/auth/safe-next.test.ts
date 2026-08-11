@@ -98,3 +98,31 @@ describe('destinationAfterAuth', () => {
     }
   });
 });
+
+/**
+ * Stage 3 — the loop that the signed-in bounce would otherwise create.
+ *
+ * `/login?next=/login` is a same-origin path and `isSafeNext` rightly accepts it. Once a
+ * signed-in visitor is redirected AWAY from /login, that composes into an infinite bounce, so
+ * `destinationAfterAuth` refuses to return an auth route at all. Brief §11: no redirect loops.
+ */
+describe('an auth route is never a destination', () => {
+  it.each([
+    ['/login'],
+    ['/signup'],
+    ['/forgot-password'],
+    ['/login/'],
+    ['/login?next=/login'],
+    ['/signup#top'],
+  ])('%s falls back to the role home instead of looping', (next) => {
+    expect(destinationAfterAuth(next, 'CUSTOMER')).toBe('/account');
+    expect(destinationAfterAuth(next, 'ADMIN')).toBe('/admin');
+  });
+
+  it('still allows paths that merely start with an auth route name', () => {
+    // `/loginhelp` is a different route, not /login — the guard matches segments, not
+    // prefixes, so it must not swallow a legitimate destination.
+    expect(destinationAfterAuth('/loginhelp', 'CUSTOMER')).toBe('/loginhelp');
+    expect(destinationAfterAuth('/account/orders', 'CUSTOMER')).toBe('/account/orders');
+  });
+});

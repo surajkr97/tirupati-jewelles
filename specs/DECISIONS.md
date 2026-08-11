@@ -1939,3 +1939,53 @@ geometry, the component should not have to guess it.**
 DEBT-033's rule still holds and was not touched — the outer box stays transparent and
 `pointer-events-none`, with the chrome on the inner element, so the bar cannot swallow the
 bottom nav's taps.
+
+---
+
+## D-067 — the signed-in bounce resolves the session; it does not read the cookie
+
+Audit C-4: an already-authenticated visitor was shown the sign-in form. Stage 3 fixes it in
+`app/(auth)/login/page.tsx` and `signup/page.tsx` via `redirectIfSignedIn()`, which calls
+`getCurrentUser()`.
+
+`proxy.ts` could have done this in one line and it would have been wrong. The proxy reads
+only whether a session COOKIE exists — its own header says so, and calls that "a UX signal,
+not a fact about the caller". A cookie whose session has expired, been revoked, or been
+evicted from Redis is indistinguishable from a live one at that layer.
+
+Bouncing on that signal builds the loop brief §11 forbids, and builds it for exactly the
+person who most needs the page: stale cookie hits `/login`, the proxy sends them to
+`/account`, `/account` resolves the real session, finds nothing, and redirects back to
+`/login?next=/account`. **They can never sign in, because the sign-in page refuses to render
+for them.** `e2e/auth.spec.ts` sets a bogus `tj_session` and asserts the form renders.
+
+### What it costs
+
+`/login` and `/signup` were statically prerendered and are now dynamic. That is the correct
+trade rather than a regression: a page whose output depends on who is asking was never
+static, and it had been getting away with it only because it ignored the question.
+
+`/forgot-password` is deliberately NOT bounced and stays static — a signed-in user resetting
+their password is doing something legitimate, and there is nothing to send them away from.
+
+### What it is not
+
+Not an authorisation boundary, and it must not become one. It chooses a destination.
+`requireAdminPage()` still guards `/admin`, unchanged.
+
+---
+
+## D-068 — an auth route is never a valid `?next=` destination
+
+`isSafeNext()` accepts `/login` — it is a same-origin path, and by its own rules it should.
+Composed with D-067 that is an infinite bounce: `/login?next=/login` redirects to `/login`,
+which redirects again.
+
+So `destinationAfterAuth()` now refuses to return `/login`, `/signup` or `/forgot-password`
+and falls back to the role home. The guard matches whole segments, so `/loginhelp` — a
+different route — is still a legitimate destination.
+
+This is the right layer for the rule because both callers read it: the post-authentication
+redirect in the three forms, and the signed-in bounce in the two pages. Putting it in either
+one would have left the other looping. It is also correct on its own terms: someone who has
+just finished authenticating has no business being handed a sign-in form.

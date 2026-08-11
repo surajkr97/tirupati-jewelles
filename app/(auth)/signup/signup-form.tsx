@@ -11,10 +11,11 @@
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
-import { FormError, ResendTimer } from '@/components/auth/auth-shell';
+import { FormError, ResendTimer, StepIndicator } from '@/components/auth/auth-shell';
 import { OtpInput } from '@/components/auth/otp-input';
 import { Button, Input } from '@/components/ui';
 import { destinationAfterAuth } from '@/lib/auth/safe-next';
+import { MIN_PASSWORD_LENGTH } from '@/lib/auth/password-policy';
 
 type Step = 'email' | 'code' | 'password';
 
@@ -126,6 +127,7 @@ export function SignupForm() {
         className="flex flex-col gap-4"
         noValidate
       >
+        <StepIndicator step={1} total={3} />
         <FormError message={error} />
         <Input
           label="Email address"
@@ -138,7 +140,7 @@ export function SignupForm() {
           required
           autoFocus
         />
-        <Button type="submit" full loading={busy}>
+        <Button type="submit" full loading={busy} loadingLabel="Sending code…">
           Send code
         </Button>
       </form>
@@ -148,10 +150,11 @@ export function SignupForm() {
   if (step === 'code') {
     return (
       <div className="flex flex-col gap-4">
+        <StepIndicator step={2} total={3} />
         <FormError message={error} />
         <p className="text-body text-muted">
-          Enter the code we sent to{' '}
-          <span className="font-semibold text-ink">{email}</span>.
+          Enter the 6-digit code we sent to{' '}
+          <span className="font-medium text-ink">{email}</span>.
         </p>
 
         <OtpInput
@@ -167,6 +170,7 @@ export function SignupForm() {
           full
           loading={busy}
           disabled={code.length < 6}
+          loadingLabel="Verifying…"
           onClick={() => void checkCode(code)}
         >
           Verify
@@ -179,6 +183,7 @@ export function SignupForm() {
 
   return (
     <form onSubmit={completeSignup} className="flex flex-col gap-4" noValidate>
+      <StepIndicator step={3} total={3} />
       <FormError message={error} />
 
       <Input
@@ -197,12 +202,13 @@ export function SignupForm() {
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         autoComplete="new-password"
-        hint="At least 8 characters. Avoid anything you use elsewhere."
+        // The length comes from the policy the SERVER enforces, so the two cannot drift.
+        hint={`At least ${MIN_PASSWORD_LENGTH} characters. Common passwords are rejected.`}
         error={fieldErrors.password}
         required
       />
 
-      <Button type="submit" full loading={busy}>
+      <Button type="submit" full loading={busy} loadingLabel="Creating account…">
         Create account
       </Button>
     </form>

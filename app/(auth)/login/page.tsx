@@ -8,14 +8,26 @@ import { Suspense } from 'react';
 import { LoginForm } from '@/app/(auth)/login/login-form';
 import { AuthShell } from '@/components/auth/auth-shell';
 import { Skeleton } from '@/components/ui';
+import { redirectIfSignedIn } from '@/lib/auth/signed-in-redirect';
 
 export const metadata = { title: 'Sign in — Tirupati Jewelles' };
 
-export default function LoginPage() {
+/**
+ * `searchParams` is a promise in Next 16 (D-002), and reading it opts this page into dynamic
+ * rendering — which the signed-in check below requires anyway.
+ */
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>;
+}) {
+  // Audit C-4: a signed-in visitor was shown the sign-in form.
+  await redirectIfSignedIn((await searchParams).next);
+
   return (
     <AuthShell
-      title="Sign in"
-      subtitle="Use your mobile number or email address."
+      title="Welcome back"
+      subtitle="Sign in with your mobile number or email address."
       footer={
         <>
           New here?{' '}

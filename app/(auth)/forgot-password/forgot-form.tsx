@@ -11,6 +11,7 @@ import { FormError, IdentifierHint, ResendTimer } from '@/components/auth/auth-s
 import { OtpInput } from '@/components/auth/otp-input';
 import { Button, Input } from '@/components/ui';
 import { destinationAfterAuth } from '@/lib/auth/safe-next';
+import { MIN_PASSWORD_LENGTH } from '@/lib/auth/password-policy';
 
 export function ForgotPasswordForm() {
   const router = useRouter();
@@ -99,7 +100,7 @@ export function ForgotPasswordForm() {
           />
           <IdentifierHint value={identifier} />
         </div>
-        <Button type="submit" full loading={busy}>
+        <Button type="submit" full loading={busy} loadingLabel="Sending code…">
           Send code
         </Button>
       </form>
@@ -122,12 +123,18 @@ export function ForgotPasswordForm() {
         value={password}
         onChange={(e) => setPassword(e.target.value)}
         autoComplete="new-password"
-        hint="At least 8 characters."
+        hint={`At least ${MIN_PASSWORD_LENGTH} characters. Common passwords are rejected.`}
         error={fieldErrors.password}
         required
       />
 
-      <Button type="submit" full loading={busy} disabled={code.length < 6}>
+      <Button
+        type="submit"
+        full
+        loading={busy}
+        loadingLabel="Updating password…"
+        disabled={code.length < 6}
+      >
         Reset password
       </Button>
 
