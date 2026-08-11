@@ -40,11 +40,18 @@ async function killImageCdn(page: Page): Promise<{ blocked: () => number }> {
   await page.route('**/*', async (route) => {
     const url = route.request().url();
     const isCdn = CDN_HOSTS.some((host) => url.includes(host));
-    // `/_next/image?url=https%3A%2F%2Fres.cloudinary.com%2F…` — the optimiser proxy. The
-    // host appears percent-encoded in the query, so a plain `includes` misses it.
-    const isOptimised =
-      url.includes('/_next/image') &&
-      CDN_HOSTS.some((host) => decodeURIComponent(url).includes(host));
+    /**
+     * Every `/_next/image` request, whatever the upstream — not only the ones whose query
+     * names a CDN host.
+     *
+     * It used to match the host inside the percent-encoded `url=` parameter, which tied the
+     * test to the photographs happening to live on Cloudinary. On a freshly seeded shop —
+     * which is what CI has — nothing was intercepted and the control assertion below
+     * correctly reported "the test is not testing". Aborting the optimiser endpoint is the
+     * same simulation, hermetically: it is what the browser sees whether the CDN is down,
+     * the DNS fails, or the optimiser itself cannot reach upstream.
+     */
+    const isOptimised = url.includes('/_next/image');
 
     if (isCdn || isOptimised) {
       blocked += 1;

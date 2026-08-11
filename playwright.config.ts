@@ -68,6 +68,13 @@ export default defineConfig({
      * workers authenticating per test trip the Phase 3 login limiter — see e2e/admin.setup.ts.
      */
     { name: 'setup', testMatch: /admin\.setup\.ts/ },
+    /**
+     * The data the suite asserts on — DEBT-040. A fresh shop has no photographs and no
+     * bills, and 14 tests failed for that reason the first time this ran anywhere but the
+     * machine it was written on. `e2e/fixtures.setup.ts` fills the gaps and overwrites
+     * nothing, so it is a no-op against a database that already has them.
+     */
+    { name: 'fixtures', testMatch: /fixtures\.setup\.ts/ },
     {
       name: 'mobile-375',
       use: {
@@ -77,17 +84,17 @@ export default defineConfig({
         hasTouch: true,
         deviceScaleFactor: 2,
       },
-      dependencies: ['setup'],
+      dependencies: ['setup', 'fixtures'],
     },
     {
       name: 'tablet-768',
       use: { ...devices['Desktop Chrome'], viewport: { width: 768, height: 1024 } },
-      dependencies: ['setup'],
+      dependencies: ['setup', 'fixtures'],
     },
     {
       name: 'desktop-1280',
       use: { ...devices['Desktop Chrome'], viewport: { width: 1280, height: 800 } },
-      dependencies: ['setup'],
+      dependencies: ['setup', 'fixtures'],
     },
   ],
 
