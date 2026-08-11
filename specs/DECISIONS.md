@@ -1551,3 +1551,62 @@ pending migrations to a remote database is precisely its job on Render.
 
 Each of the three refusals was tested rather than trusted, and the escape hatch was tested
 too — it gets past the guard and fails on the connection instead, which is the right failure.
+
+---
+
+## D-055 — the queue-depth check is retired and the sweep moves to Vercel Cron
+
+Two consequences of moving the deploy target from Render to Vercel, recorded rather than
+quietly applied — §9.3 and §9.4 are both signed off.
+
+### The deploy target changed, and nobody had ever chosen the old one
+
+D-011 refers to "Render — the deployment target" in passing, and everything downstream
+inherited it. There is **no decision record choosing Render**, and MASTER-SPEC never names a
+host. It was an assumption, not a decision.
+
+Vercel is the better fit and the reasoning is short: it is Next.js's own platform, its CDN and
+Brotli close **DEBT-051** at no cost, its free tier does not spin down (Render's does — a
+50-second cold start for the first customer each morning), and `www.tirupatijewelles.com` was
+already pointed at it, so there was no DNS cutover at all.
+
+What Vercel cannot do is run a long-lived process. That is what forces the two changes below.
+
+### The queue-depth alert is removed, not disabled
+
+§9.4 asked for an alert on "Celery queue depth" and `/api/health` checked all five queues on
+every request. Two facts make that a pure cost:
+
+- **Nothing enqueues.** `enqueueOrRun` has zero call sites in the application. §8.3 kept bill
+  PDFs synchronous (DEBT-044) and three of §9.3's five jobs were never built (DEBT-045). The
+  depth is structurally zero, not incidentally zero.
+- **It is billed.** `getJobCounts` across five queues is roughly fifteen Redis commands, and
+  §9.4/DEBT-047 asks for an uptime check on this endpoint **every minute**. On Upstash's
+  per-command pricing that is ~22,000 commands a day to measure a number that cannot change.
+
+Removed rather than put behind a flag — a flag is a second thing to get wrong. **The condition
+for restoring it is exact and written in the file: the first time anything calls
+`enqueueOrRun`.** At that moment the depth becomes a real signal and a stuck queue becomes a
+real failure. `lib/queue/` is untouched and still tested; §9.3's work stands.
+
+### `cleanup.expire_shares` moves to Vercel Cron
+
+The worker's only job. `/api/cron/cleanup` calls **the same `runExpireShares` handler** — not a
+reimplementation, and not through the queue, which would add a broker round trip to a job with
+one caller. Scheduled `45 21 * * *`; Vercel Cron is UTC and that is **03:15 IST**, the time
+`scripts/worker.mts` used.
+
+The guard is a bearer token, and it **fails closed when `CRON_SECRET` is unset**. An endpoint
+that deletes rows on a GET, with no body and no session, is a public delete button if the
+secret is ever missing — and "we forgot to set it" is precisely how that ships. It answers
+**404 rather than 401**, for SEC-016's reason: a 401 confirms the path is worth attacking.
+Five tests, mutation-checked — flipping "unset means open" fails exactly the test that exists
+to catch it.
+
+### What this leaves behind, stated plainly
+
+`lib/queue/`, `lib/queue/jobs.ts` and `scripts/worker.mts` are now **unused in production**.
+They are tested, documented and correct, and the day a bill takes five seconds the change is
+one call site. That is a deliberate carry, not an oversight — but it is dead code today and
+saying so is better than letting a future reader assume it runs. `backend/celery_app/` remains
+dormant and undeletable (AGENTS.md).

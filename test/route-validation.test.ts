@@ -121,6 +121,19 @@ const ROUTE_CONTRACTS: RouteContract[] = [
     public: true,
   },
 
+  /**
+   * The Vercel Cron sweep (D-055). Takes no input at all — the schedule is the trigger and
+   * the payload is empty — so there is nothing to validate; the guard is the bearer token,
+   * and without it every request gets 404 like an admin route.
+   */
+  {
+    file: 'app/api/cron/cleanup/route.ts',
+    load: () => import('@/app/api/cron/cleanup/route'),
+    methods: ['GET'],
+    validates: 'guard',
+    public: false,
+  },
+
   // ── Admin. Authorisation runs BEFORE validation (SEC-016), so these answer 404 first.
   {
     file: 'app/admin/bills/export/route.ts',

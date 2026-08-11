@@ -27,7 +27,6 @@ import { NextResponse } from 'next/server';
 
 import { getCurrentUser } from '@/lib/auth/guard';
 import { db } from '@/lib/db';
-import { QUEUE, queueFor } from '@/lib/queue';
 import { redisHealthy } from '@/lib/redis';
 
 export const dynamic = 'force-dynamic';
@@ -37,13 +36,6 @@ export const dynamic = 'force-dynamic';
  * purpose — the dashboard tells the owner when they next look, and this pages someone.
  */
 const RATE_STALE_AFTER_MS = 24 * 60 * 60 * 1000;
-
-/**
- * A queue deeper than this has stopped draining. Generous: the shop raises a handful of
- * bills a day, so anything approaching this means the worker is not running rather than
- * that it is busy.
- */
-const QUEUE_DEPTH_LIMIT = 100;
 
 type CheckStatus = 'ok' | 'warn' | 'down';
 
@@ -88,42 +80,25 @@ async function checkRates(): Promise<Check> {
 }
 
 /**
- * Queue depth across every queue. §9.4 calls it "Celery queue depth"; it is BullMQ (D-042).
+ * Queue depth — retired, and this is why rather than a quiet deletion. D-055.
  *
- * Counts waiting + delayed + failed. Failed matters most: those are the dead-letter jobs
- * §9.3 deliberately keeps rather than discarding, and a growing pile of them is the signal
- * that retries are not working — which nothing else surfaces.
+ * §9.4 asked for an alert on "Celery queue depth", and this checked all five queues on every
+ * request. Two facts make that a cost with no benefit:
+ *
+ *   Nothing enqueues. `enqueueOrRun` has zero call sites in the application — §8.3 kept bill
+ *   PDFs synchronous (DEBT-044) and three of §9.3's five jobs were never built (DEBT-045).
+ *   The depth is structurally zero, not incidentally zero.
+ *
+ *   It is not free. `getJobCounts` over five queues is roughly fifteen Redis commands, and
+ *   §9.4/DEBT-047 asks for an uptime check on this endpoint every minute. Against Upstash's
+ *   per-command pricing that is ~22,000 commands a day to measure a number that cannot
+ *   change. An alert nobody can trip, billed by the command.
+ *
+ * So the check is removed rather than made conditional — a flag would be a second thing to
+ * get wrong. **The condition for bringing it back is exact:** the first time anything calls
+ * `enqueueOrRun`, this comes back with it, because at that moment the depth becomes a real
+ * signal and a stuck queue becomes a real failure. `lib/queue/` is untouched and still tested.
  */
-async function checkQueues(): Promise<Check> {
-  try {
-    const counts = await Promise.all(
-      Object.values(QUEUE).map(async (name) => {
-        const { wait, delayed, failed } = await queueFor(name).getJobCounts(
-          'wait',
-          'delayed',
-          'failed',
-        );
-        return { name, depth: (wait ?? 0) + (delayed ?? 0), failed: failed ?? 0 };
-      }),
-    );
-
-    const deepest = counts.reduce((worst, entry) =>
-      entry.depth > worst.depth ? entry : worst,
-    );
-    const failed = counts.reduce((total, entry) => total + entry.failed, 0);
-
-    if (deepest.depth > QUEUE_DEPTH_LIMIT) {
-      return { status: 'warn', detail: `${deepest.name} has ${deepest.depth} waiting` };
-    }
-    if (failed > 0) return { status: 'warn', detail: `${failed} in the dead-letter set` };
-
-    return { status: 'ok' };
-  } catch {
-    // The broker is unreachable. §9.3's `enqueueOrRun` means the application still works —
-    // it does the job inline — so this is a warning, not an outage.
-    return { status: 'warn', detail: 'broker unreachable' };
-  }
-}
 
 /**
  * SEC-041. The free-text `detail` is for whoever is on call, not for the internet.
@@ -164,11 +139,10 @@ function publicise(check: Check, withDetail: boolean): Check {
 }
 
 export async function GET() {
-  const [database, redis, rates, queues, detailed] = await Promise.all([
+  const [database, redis, rates, detailed] = await Promise.all([
     checkDatabase(),
     checkRedis(),
     checkRates(),
-    checkQueues(),
     canSeeDetail(),
   ]);
 
@@ -176,14 +150,11 @@ export async function GET() {
     database: publicise(database, detailed),
     redis: publicise(redis, detailed),
     rates: publicise(rates, detailed),
-    queues: publicise(queues, detailed),
   };
   // Computed from the RAW checks, not the publicised copy — the HTTP code and the summary
   // must not depend on who is asking.
   const healthy = database.status === 'ok';
-  const degraded = [database, redis, rates, queues].some(
-    (check) => check.status !== 'ok',
-  );
+  const degraded = [database, redis, rates].some((check) => check.status !== 'ok');
 
   return NextResponse.json(
     {

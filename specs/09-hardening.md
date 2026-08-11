@@ -226,13 +226,19 @@ The dormant infrastructure from Phase 1 now earns its keep.
       must assert the response BODY carries `"status":"ok"`, because this endpoint returns 200
       while degraded by design and a status-code-only rule sits green through the stale-rate
       alert §9.4 cares most about.
-- [x] Alerts: error rate spike, DB connection failures, Redis down, Celery queue depth,
-      **rates not updated in 24h** (a stale gold rate is a business incident, not a technical
-      one). — every condition is exposed at `/api/health` as `checks.<name>.status`. The
-      stale-rate one is the reason it lives in the application rather than in a monitoring
-      config: no uptime service can see it, because it is a fact about this shop's data.
-      Measured working — the development database reports `rates: warn, "last set 76h ago"`.
-      Only Postgres returns 503; a stale rate must not take the site out of rotation.
+- [~] Alerts: error rate spike, DB connection failures, Redis down, ~~Celery queue depth~~,
+  **rates not updated in 24h** (a stale gold rate is a business incident, not a technical
+  one). — every condition is exposed at `/api/health` as `checks.<name>.status`. The
+  stale-rate one is the reason it lives in the application rather than in a monitoring
+  config: no uptime service can see it, because it is a fact about this shop's data.
+  Measured working — the development database reports `rates: warn, "last set 76h ago"`.
+  Only Postgres returns 503; a stale rate must not take the site out of rotation.
+  **The queue-depth condition was removed on the move to Vercel — D-055.** Nothing
+  enqueues (`enqueueOrRun` has zero call sites), so the depth is structurally zero, and
+  checking five queues on every request is ~15 Redis commands against an uptime rule that
+  fires every minute — ~22,000 Upstash commands a day to measure a number that cannot
+  change. The condition for restoring it is written in the route: the first call to
+  `enqueueOrRun`. The other three alerts are unaffected.
 - [x] Vercel Analytics or Plausible — privacy-friendly, no cookie banner needed. **Closed on
       the owner's decision: no analytics at all** (DEBT-046). Nothing is added, and three
       things stay true as a result rather than by accident — §9.1's CSP keeps no third-party

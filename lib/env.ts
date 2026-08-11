@@ -118,6 +118,15 @@ const serverSchema = z.object({
    * `lib/monitoring/sentry.ts` does that unconditionally, so it cannot be forgotten in the
    * gap between adding the DSN and remembering the scrubber.
    */
+  /**
+   * Shared secret for the Vercel Cron endpoint (D-055).
+   *
+   * Vercel sends `Authorization: Bearer $CRON_SECRET` on scheduled invocations when this is
+   * set on the project. `/api/cron/cleanup` refuses everything when it is absent rather than
+   * running unauthenticated — an endpoint that deletes rows must fail closed.
+   */
+  CRON_SECRET: z.string().min(16).optional(),
+
   SENTRY_DSN: z.string().url().optional(),
   /** `production` / `staging`. Defaults to NODE_ENV so a staging error is distinguishable. */
   SENTRY_ENVIRONMENT: z.string().optional(),
