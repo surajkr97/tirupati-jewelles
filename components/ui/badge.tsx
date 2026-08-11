@@ -11,8 +11,8 @@ const badge = cva(
   {
     variants: {
       tone: {
-        neutral: 'bg-taupe-lt/60 text-ink',
-        accent: 'bg-taupe-deep text-white',
+        neutral: 'bg-rose-tint text-ink',
+        accent: 'bg-rose-deep text-white',
         up: 'bg-up/10 text-up',
         down: 'bg-down/10 text-down',
         outline: 'text-ink ring-1 ring-inset ring-line',

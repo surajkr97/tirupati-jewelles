@@ -150,7 +150,7 @@ export default async function ProductPage({ params }: { params: Params }) {
             <div className="flex flex-col gap-2">
               <Link
                 href={`/collections/${product.categorySlug}`}
-                className="text-small font-medium text-taupe-deep hover:underline"
+                className="text-small font-medium text-rose-deep hover:underline"
               >
                 {product.categoryName}
               </Link>

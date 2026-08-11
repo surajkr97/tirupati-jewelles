@@ -8,15 +8,29 @@
  */
 
 export const COLORS = {
-  cream: '#FAF7F4',
-  ink: '#1A1613',
-  taupe: '#B07D62',
-  // Four values moved in Phase 9 §9.7 against measurements of the RENDERED palette.
-  // See app/globals.css and D-038; hue and saturation are unchanged in every case.
-  taupeDeep: '#96654B',
-  taupeLt: '#E8D5C9',
-  line: '#EFE9E3',
-  muted: '#6E6560',
+  cream: '#FAF7F5',
+  ink: '#1A1A1A',
+  /** Corrected from the brief's #8B888F, which failed on all four light surfaces. D-057. */
+  muted: '#6E6B72',
+  line: '#F0EEF0',
+
+  /** Wine — the primary luxury surface. D-056. */
+  wine: '#3D0C1E',
+  wineDeep: '#260610',
+  wineSoft: '#5A1B31',
+
+  /**
+   * `rose` is the brand accent and is NOT text — 3.87 on cream clears 3:1 and fails 4.5:1.
+   * `roseDeep` is the interactive token. The split is the same one `taupe`/`taupeDeep`
+   * encoded before the rename (D-058), which is why every call site mapped one-to-one.
+   */
+  rose: '#D9486B',
+  roseDeep: '#B3324F',
+  roseTint: '#FCEEF1',
+
+  /** Jewellery detail. 6.84 on wine, 2.27 on cream — wine surfaces ONLY. D-057. */
+  gold: '#C9A227',
+
   up: '#0A7551',
   down: '#C61D2B',
   white: '#FFFFFF',

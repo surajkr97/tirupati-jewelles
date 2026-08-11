@@ -9,26 +9,11 @@
  */
 'use client';
 
-import { Calculator, Home, ReceiptText, TrendingUp, User } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { BOTTOM_NAV, isActiveHref } from '@/lib/navigation';
 import { cn } from '@/lib/utils/cn';
-
-const ITEMS = [
-  { href: '/', label: 'Home', icon: Home },
-  { href: '/rates', label: 'Rates', icon: TrendingUp },
-  { href: '/calculator', label: 'Calculator', icon: Calculator },
-  { href: '/account/orders', label: 'Orders', icon: ReceiptText },
-  { href: '/account', label: 'Account', icon: User },
-] as const;
-
-function isActive(pathname: string, href: string): boolean {
-  if (href === '/') return pathname === '/';
-  // /account must not light up while on /account/orders — check the more specific first.
-  if (href === '/account') return pathname === '/account';
-  return pathname.startsWith(href);
-}
 
 export function BottomNav() {
   const pathname = usePathname();
@@ -46,8 +31,8 @@ export function BottomNav() {
           --spacing-bottom-nav plus the safe-area inset — which is what the spacer
           reserves. border-box means the 1px border is inside the 64px. */}
       <ul className="flex h-bottom-nav items-stretch justify-around border-t border-line">
-        {ITEMS.map(({ href, label, icon: Icon }) => {
-          const active = isActive(pathname, href);
+        {BOTTOM_NAV.map(({ href, label, icon: Icon }) => {
+          const active = isActiveHref(pathname, href);
           return (
             <li key={href} className="flex-1">
               <Link
@@ -57,7 +42,7 @@ export function BottomNav() {
                   // h-full fills the 64px row — comfortably above the 44px minimum.
                   'flex h-full flex-col items-center justify-center gap-1 px-1',
                   'text-small font-medium transition-colors duration-fast ease-standard',
-                  active ? 'text-taupe-deep' : 'text-muted',
+                  active ? 'text-rose-deep' : 'text-muted',
                 )}
               >
                 <Icon

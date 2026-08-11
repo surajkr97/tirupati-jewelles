@@ -10,6 +10,7 @@ import { useState } from 'react';
 
 import { FormError, IdentifierHint } from '@/components/auth/auth-shell';
 import { Button, Input } from '@/components/ui';
+import { destinationAfterAuth } from '@/lib/auth/safe-next';
 
 export function LoginForm() {
   const router = useRouter();
@@ -31,7 +32,7 @@ export function LoginForm() {
         body: JSON.stringify({ identifier, password }),
       });
 
-      const body: { error?: string } = await response.json();
+      const body: { error?: string; user?: { role?: string } } = await response.json();
 
       if (!response.ok) {
         // The server returns one generic message for every failure mode; showing it
@@ -40,11 +41,18 @@ export function LoginForm() {
         return;
       }
 
-      // `next` comes from the proxy redirect. Only ever a same-site path — reject an
-      // absolute URL so a crafted ?next=https://evil.example cannot bounce the user off.
-      const next = params.get('next');
-      const destination =
-        next?.startsWith('/') && !next.startsWith('//') ? next : '/account';
+      /**
+       * `next` comes from the proxy redirect and is validated in `safe-next.ts` — only a
+       * same-site path, so a crafted `?next=https://evil.example` cannot bounce the user off.
+       *
+       * When there is no `next`, the ROLE decides. Sending every user to `/account` was
+       * audit finding C-3: an admin landed on the customer page, which showed an "Admin"
+       * badge and no link onward, so the dashboard could only be reached by typing its URL.
+       *
+       * The role is advisory — it only picks a destination. `/admin` is still guarded by
+       * `requireAdminPage()`, so a tampered response buys nothing but a 404.
+       */
+      const destination = destinationAfterAuth(params.get('next'), body.user?.role);
 
       router.replace(destination);
       router.refresh();
@@ -87,7 +95,7 @@ export function LoginForm() {
 
       <Link
         href="/forgot-password"
-        className="flex h-tap items-center justify-center text-small font-semibold text-taupe-deep hover:underline"
+        className="flex h-tap items-center justify-center text-small font-semibold text-rose-deep hover:underline"
       >
         Forgot your password?
       </Link>

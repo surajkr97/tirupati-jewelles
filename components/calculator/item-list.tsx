@@ -74,7 +74,7 @@ export function ItemList({
         type="button"
         onClick={onAdd}
         disabled={atLimit}
-        className="flex h-control-lg w-full items-center justify-center gap-2 rounded-card border-2 border-dashed border-line text-body font-semibold text-taupe-deep transition-colors duration-fast ease-standard hover:border-taupe hover:bg-taupe-lt/20 disabled:opacity-40"
+        className="flex h-control-lg w-full items-center justify-center gap-2 rounded-card border-2 border-dashed border-line text-body font-semibold text-rose-deep transition-colors duration-fast ease-standard hover:border-rose hover:bg-rose-tint disabled:opacity-40"
       >
         <Plus className="size-icon" aria-hidden="true" />
         Add another item

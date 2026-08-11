@@ -226,7 +226,7 @@ function Chip({
         'h-tap rounded-pill px-4 text-small font-medium',
         'transition-colors duration-fast ease-standard',
         'focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none',
-        selected ? 'bg-ink text-white' : 'bg-taupe-lt/50 text-ink hover:bg-taupe-lt',
+        selected ? 'bg-ink text-white' : 'bg-rose-tint text-ink hover:bg-rose/15',
       )}
     >
       {label}

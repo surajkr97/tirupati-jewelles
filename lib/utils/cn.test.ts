@@ -1,8 +1,8 @@
 /**
  * Phase 9 §9.7 — `cn()` must not delete a colour or a size it was asked to keep.
  *
- * Found by the axe pass, not by review: the accent button rendered `ink` on `taupe-deep` at
- * 3.87:1 because `tailwind-merge` treated `text-body` as a colour — Phase 2 §2.1 replaced
+ * Found by the axe pass, not by review: the accent button rendered `ink` on the accent fill
+ * at 3.87:1 because `tailwind-merge` treated `text-body` as a colour — Phase 2 §2.1 replaced
  * Tailwind's font-size scale and never told it. Every assertion below fails against the
  * plain `twMerge` this module used before.
  */
@@ -16,12 +16,12 @@ import { cn, TEXT_SIZES } from '@/lib/utils/cn';
 describe('cn keeps a colour and a size together', () => {
   /**
    * The exact composition the Button produces. `variant="accent"` contributes the colour,
-   * `size="md"` contributes `text-body`, and D-007 exists precisely so that white sits on
-   * taupeDeep — white on plain taupe is 3.53:1 and fails AA.
+   * `size="md"` contributes `text-body`, and D-057 exists precisely so that white sits on
+   * roseDeep — white on plain rose is 4.13:1 and fails AA.
    */
-  it('the accent button keeps its white label — D-007, measured at 3.87:1 without this', () => {
+  it('the accent button keeps its white label — without this it is ink on roseDeep, 2.89:1', () => {
     const merged = cn(
-      'bg-taupe-deep text-white hover:bg-taupe-deep/90',
+      'bg-rose-deep text-white hover:bg-rose-deep/90',
       'h-control px-6 text-body',
     );
 
@@ -52,7 +52,7 @@ describe('cn still resolves genuine conflicts', () => {
 
   it("a caller's background overrides the component's", () => {
     // Phase 2's original reason for using tailwind-merge at all.
-    expect(cn('bg-taupe', 'bg-ink')).toBe('bg-ink');
+    expect(cn('bg-rose', 'bg-ink')).toBe('bg-ink');
   });
 
   it('leaves Tailwind’s own scales alone', () => {

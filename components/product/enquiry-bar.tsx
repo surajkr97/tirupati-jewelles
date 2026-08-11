@@ -109,8 +109,8 @@ export function EnquiryBar({
         data-testid="enquire-cta"
         className={cn(
           'inline-flex h-control shrink-0 items-center justify-center gap-2 rounded-pill px-6',
-          // taupeDeep, not taupe: white on plain taupe is 3.53:1 and fails AA (D-007).
-          'bg-taupe-deep text-body font-semibold text-white',
+          // roseDeep, not rose: white on plain rose is 4.13:1 and fails AA (D-057).
+          'bg-rose-deep text-body font-semibold text-white',
           'transition-transform duration-fast ease-standard active:scale-[0.98]',
         )}
       >

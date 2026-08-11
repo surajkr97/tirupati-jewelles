@@ -138,7 +138,7 @@ export default async function BillsPage({
               {/* §8.5: "Export CSV for the accountant." Same filters as the screen. */}
               <a
                 href={`/admin/bills/export${withPage(filters, 1).replace('/admin/bills', '')}`}
-                className="ml-auto inline-flex h-tap items-center rounded-pill px-4 text-small font-semibold text-taupe-deep hover:underline"
+                className="ml-auto inline-flex h-tap items-center rounded-pill px-4 text-small font-semibold text-rose-deep hover:underline"
               >
                 Export CSV
               </a>

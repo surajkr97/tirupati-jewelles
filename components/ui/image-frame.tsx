@@ -55,7 +55,7 @@ export function ImageFrame({
       data-image-frame=""
       style={{ aspectRatio: ratio }}
       className={cn(
-        'relative w-full overflow-hidden bg-taupe-lt/40',
+        'relative w-full overflow-hidden bg-rose-tint',
         ROUNDING[rounded],
         className,
       )}

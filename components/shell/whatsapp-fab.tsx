@@ -68,7 +68,7 @@ export function WhatsAppFab({ ownerWhatsApp }: { ownerWhatsApp: string }) {
         // is none.
         'bottom-[calc(var(--spacing-bottom-nav)+env(safe-area-inset-bottom)+16px)] md:bottom-8',
         'flex size-control-lg items-center justify-center rounded-pill',
-        'bg-taupe-deep text-white shadow-lift',
+        'bg-rose-deep text-white shadow-lift',
         'transition-transform duration-fast ease-standard active:scale-[0.98]',
         'focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none',
       )}

@@ -13,6 +13,7 @@
 
 import { MessageCircle } from 'lucide-react';
 
+import { buttonClasses } from '@/components/ui';
 import { buildWhatsAppUrl } from '@/lib/catalog/whatsapp';
 
 export function PolicyEnquiry({
@@ -34,7 +35,7 @@ export function PolicyEnquiry({
       href={href}
       target="_blank"
       rel="noopener noreferrer"
-      className="inline-flex h-control items-center justify-center gap-2 self-start rounded-pill bg-taupe-deep px-6 text-body font-semibold text-white transition-transform duration-fast ease-standard active:scale-[0.98]"
+      className={buttonClasses({ variant: 'accent', className: 'self-start' })}
     >
       <MessageCircle className="size-icon" aria-hidden="true" />
       Ask about this on WhatsApp

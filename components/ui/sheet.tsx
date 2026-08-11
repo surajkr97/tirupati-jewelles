@@ -86,7 +86,7 @@ export function Sheet({
               type="button"
               onClick={() => onOpenChange(false)}
               aria-label="Close"
-              className="grid size-tap shrink-0 place-items-center rounded-pill text-muted transition-colors duration-fast hover:bg-taupe-lt/40 hover:text-ink"
+              className="grid size-tap shrink-0 place-items-center rounded-pill text-muted transition-colors duration-fast hover:bg-rose-tint hover:text-ink"
             >
               <X className="size-4" aria-hidden="true" />
             </button>

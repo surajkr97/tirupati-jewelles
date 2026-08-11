@@ -80,7 +80,7 @@ export function SegmentedControl<T extends string>({
       role="radiogroup"
       aria-label={label}
       onKeyDown={onKeyDown}
-      className={cn('relative flex rounded-pill bg-taupe-lt/50 p-1', className)}
+      className={cn('relative flex rounded-pill bg-rose-tint p-1', className)}
     >
       {/* One absolutely positioned thumb slid with translate — animating `transform` never
           triggers layout, so switching metals cannot cause a shift (Phase 4 asserts CLS≈0). */}

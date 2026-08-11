@@ -7,7 +7,10 @@
  */
 export { Badge, type BadgeProps } from '@/components/ui/badge';
 export { Button, type ButtonProps } from '@/components/ui/button';
+// From the class module, not the component — it must stay callable from a server component.
+export { buttonClasses, type ButtonVariants } from '@/components/ui/button-classes';
 export { Card, type CardProps } from '@/components/ui/card';
+export { Chip, type ChipProps } from '@/components/ui/chip';
 export { EmptyState, type EmptyStateProps } from '@/components/ui/empty-state';
 export { ImageFrame, type ImageFrameProps } from '@/components/ui/image-frame';
 export { Input, type InputProps } from '@/components/ui/input';

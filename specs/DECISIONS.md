@@ -1610,3 +1610,332 @@ They are tested, documented and correct, and the day a bill takes five seconds t
 one call site. That is a deliberate carry, not an oversight — but it is dead code today and
 saying so is better than letting a future reader assume it runs. `backend/celery_app/` remains
 dormant and undeletable (AGENTS.md).
+
+---
+
+## D-056 — the UI redesign brief supersedes MASTER-SPEC §3's palette, and nothing else
+
+**Spec:** MASTER-SPEC §3 — "The reference is Airbnb / Headout… Warm taupe accent on cream",
+with `taupe #B07D62`, `taupeLt #E8D5C9` and a cream/taupe token block.
+**Actual:** a wine/rose palette, per the UI/UX redesign brief and its reference image.
+
+MASTER-SPEC opens with "if a phase file contradicts this document, this document wins", so a
+new visual direction cannot simply be implemented around it. This entry records the
+supersession explicitly, and bounds it.
+
+### What is superseded
+
+**MASTER-SPEC §3's colour tokens and its "Airbnb / Headout" reference, and nothing else.**
+The new direction is:
+
+| Role | Token |
+| :--- | :--- |
+| Primary luxury surface — hero, trust band, footer | `wine` / `wine-deep` / `wine-soft` |
+| Interaction and accent — buttons, links, active states | `rose-deep` (text/fill), `rose` (non-text only) |
+| Page background | `cream` |
+| Cards and product surfaces | white |
+| Jewellery detail, sparingly | `gold`, **on wine surfaces only** |
+
+### What is explicitly NOT superseded
+
+Every non-visual rule in MASTER-SPEC stands unchanged, and this redesign touches none of
+them: integer-paise/`BigInt` money (§4), the single pricing source of truth, GST handling,
+the Prisma schema and its relationships, every `/api/*` contract, Argon2id + session + OTP
+mechanics, `requireAdmin()`, Redis configuration, the dormant Celery app, rate snapshotting,
+order claiming, and WhatsApp-enquiry-instead-of-checkout (§1).
+
+MASTER-SPEC §3's **non-colour** rules also stand and are being kept, not rewritten: the
+4/8/16/24/32/48/64 spacing scale, the four radius tokens, shadow-or-nothing on cards, the
+44×44px minimum tap target, and the 15px body-text floor. The redesign changes the palette
+and adds a display serif. It does not introduce a second design system.
+
+---
+
+## D-057 — the brief's palette was measured before it was adopted, and four values moved
+
+The redesign brief supplied hex values directly. Running them through the repository's own
+`contrastRatio()` — the gate in `lib/design/contrast.test.ts` — **10 of 26 pairs failed WCAG
+AA**. Adopting them verbatim would have failed the build, so they were corrected first.
+
+This is the same method D-007 used for `taupeDeep` and §9.7 used for the four Phase 9 moves:
+**lightness only, hue and saturation untouched**, so nothing shifts as a colour.
+
+### The corrections
+
+| Token | Brief | Adopted | Measurement that forced it |
+| :--- | :--- | :--- | :--- |
+| `muted` | `#8B888F` | **`#6E6B72`** | 3.27:1 on cream — failed as body text on all four light surfaces. The binding constraint was `line` (4.41 at `#706D74`), not cream. |
+| `rose` | `#D9486B` | **kept, non-text only** | 3.87 on cream, 4.13 on white. Clears the 3:1 non-text bar, fails the 4.5:1 text bar. |
+| `roseDeep` | `#B3324F` | **kept, promoted** | 5.65 as text on cream, 6.02 as a button fill. **This is the interactive token.** |
+| `gold` | `#C9A227` | **kept, wine surfaces only** | 6.84 on wine; **2.27 on cream, failing even the 3:1 non-text bar.** |
+
+### Two consequences for the design language
+
+**`rose` is the colour of the brand; `rose-deep` is the colour of interaction.** Buttons,
+links, and active nav labels take `rose-deep`. `rose` is for chart strokes, the live dot,
+indicator fills and tints — never a label, never a button fill with white on it. This is
+structurally identical to the existing `taupe`/`taupe-deep` split, which is why the rename in
+D-058 maps one-to-one.
+
+**Gold cannot appear on a light surface at any size.** Not as a hairline, not as an icon, not
+as a rule. It works on wine (6.84) and is used there. This happens to agree with the brief's
+own §4 instruction to avoid decorative gold borders, but the reason recorded here is the
+measurement, not the taste.
+
+### The hero accent word
+
+`rose` on `wine` measures **4.01** — it clears 3:1 for large text and fails 4.5:1 for body.
+The reference image uses it at display size, which is legitimate. It is fenced by a test:
+`rose` on `wine` is asserted at `AA_LARGE` and asserted to be *below* `AA_BODY`, so anyone
+reaching for it at body size fails the gate rather than shipping it. If the accent word is
+ever needed at body size, `#DD5979` is the measured substitute.
+
+### `inkSoft` was dropped
+
+The brief listed both `inkSoft #6E6A6C` and `muted #8B888F` as text tokens. After correcting
+`muted` for contrast, the two sit at 5.00 and 4.91 on cream — **within 0.1 of each other**. A
+hierarchy that cannot be seen is not a hierarchy, it is two names for one colour and an
+invitation to use them inconsistently. The palette keeps two text levels that are genuinely
+distinguishable — `ink` (16.32) and `muted` (4.91) — and handles the softer copy on wine with
+`cream` at alpha, which is measured (`cream/70` on wine = 7.99).
+
+---
+
+## D-058 — `taupe*` is renamed to `rose*` rather than aliased
+
+The old palette's three accent tokens map one-to-one onto the new one, because both encode
+the same idea: a brand accent too light to be text, and a darkened sibling that is.
+
+```
+taupe      → rose        (non-text accent)
+taupe-deep → rose-deep   (text, links, button fills)
+taupe-lt   → rose-tint   (tint surface)
+```
+
+137 occurrences across 49 files were renamed mechanically. **No structural or layout change
+was made in the same pass** — only class names and token names.
+
+The alternative was to keep `--color-taupe` as an alias pointing at the new value. That was
+rejected: an alias leaves the codebase describing its own accent as "taupe" forever, and the
+`--color-*` mirror test in `contrast.test.ts` would then police a name that no longer means
+anything. One mechanical rename is cheaper than permanent ambiguity.
+
+**One behavioural change rode along, and it is deliberate.** `taupe-lt` was used at partial
+alpha in two places — `bg-taupe-lt/50` for the segmented-control track and `bg-taupe-lt/40`
+for the empty image frame — because the old tint was dark enough (`#E8D5C9`) to need
+softening. `rose-tint` (`#FCEEF1`) is already a soft tint; composited at 50% over cream it is
+within 1% of the page background and the control's track disappears. Both now use
+`rose-tint` at full opacity, which is what the reference image shows and what keeps the
+track visible. The contrast assertions for those two composites were replaced with
+assertions on the flat token.
+
+---
+
+## D-059 — admin gets a desktop sidebar; §7.1's bottom nav stays on mobile
+
+**Spec:** Phase 7 §7.1 — "Bottom nav: Dashboard · Rates · Products · Bills · More", and
+`components/admin/admin-nav.tsx` argues for it on every viewport: *"the owner is standing in
+a shop holding a phone… a second responsive layout is a second thing to keep correct."*
+**Actual:** a persistent sidebar at `md:` and up; the bottom nav below it.
+
+**Reasoning:** the original argument is a *mobile* argument, and a responsive split preserves
+it completely — the phone experience is unchanged. What it does not justify is the desktop
+cost: five nav slots force `/admin/settings` and `/admin/audit` out of the navigation
+entirely, and there is no route back to the storefront at all. A sidebar has room for all
+eight destinations plus "← Back to site". The "second thing to keep correct" is real but
+small.
+
+**One correction to the audit that weakens this, recorded because it was overstated.** The
+audit first claimed Settings and Audit were unreachable without typing a URL. They are not:
+`app/admin/page.tsx:292-300` links both from a "More" card on the dashboard, which the
+original grep missed by searching only for a literal `href="…"`. So the sidebar is justified
+by navigation quality — two destinations that require a detour through the dashboard, and no
+way back to the shop — not by inaccessibility. That is a weaker case, and it is still enough:
+brief §18 names all eight as navigation destinations.
+
+*Implemented in Stage 5 of `UI-REDESIGN-TODO.md`, not in Stage 1.*
+
+---
+
+## D-060 — `/about` and `/contact` are not created, and are not linked
+
+The redesign brief's footer specification lists About and Contact. **Neither route exists**,
+and the brief's own §20 forbids inventing an href for a route that does not exist.
+
+Creating two pages would mean writing business copy — the shop's history, its address, its
+staff — that this repository has no source for. Inventing it is worse than omitting it: an
+About page with placeholder text is a live page that damages trust, whereas a missing link
+costs nothing a visitor can see.
+
+**Decision:** the footer ships without them. Contact information is already reachable — the
+footer's WhatsApp CTA and the `LocalBusiness` structured data both read the shop's real
+address and phone from the §7.9 Settings row, which the owner controls.
+
+`@OWNER:` if About and Contact are wanted, supply the copy and they become a one-hour task
+against the existing `/policies/[slug]` pattern, which is already DB-backed and could hold
+both without a new route at all.
+
+---
+
+## D-061 — `rose-tint` is never used at alpha
+
+D-058 flattened two `taupe-lt/NN` surfaces during the rename. Auditing the rest of the tree
+found thirteen more, and the rule generalises: **`rose-tint` is already a tint, so composing
+it at alpha over a light page produces a surface that is not there.**
+
+`bg-rose-tint/50` over cream measures **1.02:1** against the page background. The old
+`taupe-lt` (`#E8D5C9`) was dark enough that halving it still read as a surface; `#FCEEF1` is
+not. Every `bg-rose-tint/NN` is now flat `bg-rose-tint` (1.06:1 — subtle, which is the point,
+but visible).
+
+**This mattered more than a tidy-up.** The admin dashboard's "More" card — the only route to
+`/admin/settings` and `/admin/audit` — was built from these pills. Left at 50% they would have
+been invisible on a cream page, turning a navigation weakness into a navigation failure, in
+the same change that was supposed to be a repalette.
+
+### The four rest/hover collisions this created
+
+Flattening made four controls hover to the colour they already were. Where the resting state
+is the tint, hover now steps to `bg-rose/15` — the same hue, perceptibly deeper — rather than
+to the tint itself:
+
+`app/(app)/search/page.tsx`, `components/ui/chip.tsx`,
+`components/calculator/item-card.tsx`, `components/product/filter-sheet.tsx`.
+
+The other nine are transparent-at-rest hover states, where flattening simply makes the hover
+more visible than it was.
+
+### What this leaves for later
+
+Three of those four — the search suggestions, the filter sheet's pills and the calculator's
+metal switch — are hand-rolled copies of what `Chip` now is. They were left as copies here on
+purpose: adopting the primitive changes page components, and Stage 1 is foundations. Each is
+adopted by the stage that owns its page (Stage 4). Recorded in `UI-REDESIGN-TODO.md` so it is
+a scheduled task rather than a discovered surprise.
+
+---
+
+## D-062 — the header's hero treatment ships unused, and that is the point
+
+`AppHeader` gained an `overlay` mode in Stage 2: transparent over a wine hero with cream
+marks, solidifying to cream on scroll. **Nothing sets it.** `app/(app)/layout.tsx` renders
+`<AppHeader ownerWhatsApp={…} />` with `overlay` defaulted to `false`.
+
+The mode exists because Stage 2 owns the header and building it later would mean opening the
+same component twice. It is not enabled because the homepage's hero is still Phase 4's
+`ImageFrame` — an arbitrary photograph from a `MediaSlot` the owner controls. Cream marks over
+an unknown image is not a treatment, it is a coin flip on contrast, and the brief's §3 is
+explicit that contrast must not be solved by lowering opacity.
+
+Stage 4 turns it on in the same change that makes the hero wine, where the ground is a known
+colour and the measurement holds (cream on wine, 15.51:1). Until then the storefront uses the
+cream header everywhere, which is correct at every viewport and on every page.
+
+---
+
+## D-063 — the admin phone keeps its bottom bar; "More" becomes a real menu
+
+D-059 committed to a desktop rail. Stage 2's brief also asked for a mobile *drawer*, which
+would have replaced §7.1's bottom bar.
+
+**The bar stays.** §7.1's argument is about frequency — "the owner is standing in a shop,
+holding a phone, between customers" — and a bar that is always visible beats a drawer that
+must be opened for the four destinations used dozens of times a day. A drawer is the right
+shape for the long tail, not for the hot path.
+
+So the fifth slot changed instead. It used to be a direct link to `/admin/media` **labelled
+"More"**, which is a label that lies about where it goes. It now opens a sheet containing
+Collections, Media, Settings, Audit log and "Back to site".
+
+Stage 2 §6 permitted replacing the dashboard's "More" card only if the new path were
+"equivalent or better". It is strictly better: the card is reachable only from `/admin`,
+whereas the sheet is reachable from every admin screen, and it carries the route back to the
+storefront that C-6 found missing entirely. The dashboard card is left in place — a second
+door to the same rooms costs nothing and it is where an admin already knows to look.
+
+---
+
+## D-064 — navigation destinations live in `lib/navigation.ts`, and a test resolves them
+
+Every nav — desktop header, mobile menu, bottom bar, admin rail, admin sheet — renders from
+one module instead of its own array.
+
+The reason is a defect this repository has shipped twice. The footer linked
+`/policies/privacy` and `/policies/terms` from Phase 2 and **both 404'd until §9.6 wrote the
+pages**. Phase 6 hit the identical bug in the trust block, fixed it, and added an E2E that
+fetched every link *in the trust block* — so the footer's copy of the same bug survived
+another three phases. A test scoped to one component cannot prevent a class of bug.
+
+`lib/navigation.test.ts` reads the registry and resolves every href against the real `app/`
+directory, stripping route groups and matching dynamic segments. A destination that does not
+exist fails in milliseconds without a browser. The suite also runs the check backwards — every
+`/admin/*` route that exists must appear in the admin navigation — which is the assertion that
+would have caught Settings and Audit falling out of the menu.
+
+**It immediately paid for itself.** The Stage 2 brief lists "Orders" as an admin destination.
+There is no `/admin/orders`: a customer `Order` is written by `lib/bills/create.ts`, and the
+admin's view of orders is `/admin/bills`. Adding the menu entry would have shipped the exact
+defect the registry exists to prevent, so Bills is labelled "Bills and orders" instead.
+UI_REDESIGN_DEBT-004.
+
+---
+
+## D-065 — a route that can `notFound()` does not get a `loading.tsx`
+
+Stage 2 added route-level skeletons to five routes. Two of them had to be taken straight back
+out, and the reason is worth recording because it is invisible until you check a status code.
+
+A `loading.tsx` opts its segment into **streaming**. A streamed response commits its HTTP
+status with the first byte — before the page body runs — so a `notFound()` later in the render
+produces the 404 *UI* underneath a **200** status.
+
+`/collections/[slug]` and `/products/[slug]` both call `notFound()`, and both became soft 404s
+the moment they got a skeleton:
+
+```
+/collections/does-not-exist   200   ← with loading.tsx
+/products/does-not-exist      200
+/collections/does-not-exist   404   ← without
+/products/does-not-exist      404
+```
+
+That is not cosmetic. §6 SECURITY makes "an inactive product is a 404" an acceptance
+criterion — it is how an unlisted piece stays unlisted — and a soft 404 invites crawlers to
+index every mistyped slug as a real page. `e2e/catalog.spec.ts` caught it, having asserted the
+status code since Phase 6.
+
+**The rule:** skeletons go on routes that always render. `/rates`, `/search` and
+`/account/orders` keep theirs. `/account/orders` was checked separately and still returns a
+real `307` when signed out, because `proxy.ts` redirects before the page is reached.
+
+`lib/navigation.test.ts` now greps every `page.tsx` for a `notFound()` call and fails if that
+directory also contains a `loading.tsx`, so this cannot return quietly.
+
+**Getting the skeleton back** is a `<Suspense>` boundary *inside* the page, placed after the
+lookup that decides whether to 404. That streams the grid without touching the status code,
+and it is Stage 4's job — the components are already written and kept in
+`components/shell/route-skeletons.tsx`.
+
+---
+
+## D-066 — the sticky bar's left edge is a variable, because the admin now has a rail
+
+`StickyBar` was `fixed inset-x-0 bottom-0 z-40`, which was correct while every layout in the
+application was a single column.
+
+D-059's desktop rail broke that assumption. The bar spanned the full viewport at `z-40`
+against the rail's `z-30`, so it painted `bg-cream/90` over the rail — and the composite of
+cream-over-wine is `#e7e0e0`, on which `muted` measures **4.02:1** and fails AA.
+
+**axe found it before any human did**, on `/admin/bills/new`, which is the only admin screen
+with a sticky bar. Worth noting how narrowly: the bar looked fine, the rail looked fine, and
+the only symptom was a contrast ratio in a corner of one page.
+
+The bar now takes its left edge from `--sticky-bar-left`, defaulting to `0px`; the admin shell
+sets it to `--spacing-admin-rail` at `md:`. The storefront is byte-identical. This is the same
+mechanism `--sticky-bar-height` already used, and for the same reason: **the layout knows the
+geometry, the component should not have to guess it.**
+
+DEBT-033's rule still holds and was not touched — the outer box stays transparent and
+`pointer-events-none`, with the chrome on the inner element, so the bar cannot swallow the
+bottom nav's taps.
