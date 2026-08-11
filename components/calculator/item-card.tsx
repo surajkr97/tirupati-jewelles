@@ -139,7 +139,7 @@ export function ItemCard({
               'focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none',
               item.makingPct === pct
                 ? 'bg-ink text-white'
-                : 'bg-taupe-lt/50 text-ink hover:bg-taupe-lt',
+                : 'bg-rose-tint text-ink hover:bg-rose/15',
             )}
           >
             {pct}%
@@ -162,7 +162,7 @@ export function ItemCard({
         <button
           type="button"
           onClick={() => setShowStones(true)}
-          className="flex h-tap items-center self-start text-small font-semibold text-taupe-deep hover:underline"
+          className="flex h-tap items-center self-start text-small font-semibold text-rose-deep hover:underline"
         >
           + Add stone or other charges
         </button>
@@ -298,7 +298,7 @@ function IconButton({
         'focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none',
         destructive
           ? 'text-muted hover:bg-down/10 hover:text-down'
-          : 'text-muted hover:bg-taupe-lt/50 hover:text-ink',
+          : 'text-muted hover:bg-rose-tint hover:text-ink',
       )}
     >
       {children}

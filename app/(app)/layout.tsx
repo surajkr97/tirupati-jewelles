@@ -55,7 +55,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
      */
     <div className="flex min-h-dvh flex-col has-data-sticky-bar:pb-[var(--sticky-bar-height,0px)]">
       <JsonLd data={localBusinessJsonLd(shop)} />
-      <AppHeader />
+      {/* `overlay` stays off until Stage 4's wine hero exists — cream marks over the
+          current photographic hero is a contrast failure, not a treatment. D-062. */}
+      <AppHeader ownerWhatsApp={ownerWhatsApp} />
       <main className="flex-1">{children}</main>
       <Footer ownerWhatsApp={ownerWhatsApp} />
       {/* Reserves the fixed nav's height so the footer is never hidden behind it. */}

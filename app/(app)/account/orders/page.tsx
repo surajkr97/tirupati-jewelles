@@ -77,7 +77,7 @@ export default async function OrdersPage() {
           the system cannot keep.
         */}
         {!user.phoneVerified && (
-          <Card className="flex flex-col gap-2 bg-taupe-lt/30">
+          <Card className="flex flex-col gap-2 bg-rose-tint">
             <p className="text-h3 font-semibold text-ink">Bought from us before?</p>
             <p className="text-body text-muted">
               Purchases made in the shop are held against your mobile number. Add and
@@ -146,7 +146,7 @@ export default async function OrdersPage() {
                         {formatINR(order.grandTotal)}
                       </p>
                       {order.billPdfKey && (
-                        <span className="inline-flex h-tap items-center rounded-pill px-4 text-small font-semibold text-taupe-deep ring-1 ring-line ring-inset">
+                        <span className="inline-flex h-tap items-center rounded-pill px-4 text-small font-semibold text-rose-deep ring-1 ring-line ring-inset">
                           Invoice
                         </span>
                       )}

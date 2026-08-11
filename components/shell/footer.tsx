@@ -10,6 +10,7 @@ import { BadgeCheck, MessageCircle, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
 
 import { Container } from '@/components/shell/container';
+import { buttonClasses } from '@/components/ui';
 
 const SHOP_LINKS = [
   { href: '/collections', label: 'Collections' },
@@ -56,7 +57,7 @@ export function Footer({ ownerWhatsApp }: { ownerWhatsApp: string }) {
               href={`https://wa.me/${ownerWhatsApp}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="inline-flex h-control w-fit items-center gap-2 rounded-pill bg-taupe-deep px-6 text-small font-semibold text-white"
+              className={buttonClasses({ variant: 'accent', className: 'w-fit text-small' })}
             >
               <MessageCircle className="size-4" aria-hidden="true" />
               Chat on WhatsApp
@@ -93,7 +94,7 @@ export function Footer({ ownerWhatsApp }: { ownerWhatsApp: string }) {
         <ul className="flex flex-wrap justify-center gap-6 border-t border-line py-8">
           {TRUST.map(({ icon: Icon, label }) => (
             <li key={label} className="flex items-center gap-2 text-small text-muted">
-              <Icon className="size-4 text-taupe-deep" aria-hidden="true" />
+              <Icon className="size-4 text-rose-deep" aria-hidden="true" />
               {label}
             </li>
           ))}

@@ -22,7 +22,7 @@
 import { useState, useTransition } from 'react';
 
 import { markBillSent, regenerateBillPdf, voidBill } from '@/app/admin/bills/actions';
-import { Button, Card, Input, toast } from '@/components/ui';
+import { Button, buttonClasses, Card, Input, toast } from '@/components/ui';
 
 export interface BillActionsProps {
   orderId: string;
@@ -114,13 +114,13 @@ export function BillActions({
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => setOpened(true)}
-            className="inline-flex h-control-lg w-full items-center justify-center rounded-pill bg-taupe-deep px-6 text-body font-semibold text-white transition-transform duration-fast ease-standard active:scale-[0.98]"
+            className={buttonClasses({ variant: 'accent', size: 'lg', full: true, className: 'px-6' })}
           >
             {sentAtLabel ? 'Send again on WhatsApp' : 'Send on WhatsApp'}
           </a>
 
           {opened && (
-            <div className="flex flex-col gap-2 rounded-field bg-taupe-lt/40 p-4">
+            <div className="flex flex-col gap-2 rounded-field bg-rose-tint p-4">
               <p className="text-body text-ink">
                 Did the message send? We can&rsquo;t tell from here.
               </p>

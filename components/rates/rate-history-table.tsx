@@ -63,9 +63,28 @@ export function RateHistoryTable({
           description={`No ${face.label} rate has been set in the last ${days} days.`}
         />
       ) : (
-        // Scrolls inside its own box rather than pushing the page sideways — the 375px
-        // no-horizontal-scroll assertion is on the document, not on this container.
-        <div className="overflow-x-auto">
+        /**
+         * `relative` is load-bearing, and it is the fix for a real 320px bug.
+         *
+         * `overflow-x-auto` alone did NOT contain this table. A scroll container only clips
+         * descendants for which it is the containing block, and an absolutely-positioned
+         * element resolves against its nearest POSITIONED ancestor — so with the container
+         * left `position: static`, every `.sr-only` inside it escaped: the `<caption>` and
+         * one `<span>` per row, thirteen of them, each announcing a rate change to a screen
+         * reader. They landed in the document's scroll region instead, and `/rates` scrolled
+         * sideways by 21px at 320px while the container itself measured perfectly (280px
+         * wide, 321px of scrollable content, `overflow: auto` both axes).
+         *
+         * Making the container positioned gives those descendants a containing block inside
+         * it, so the clip applies. Measured: document scrollWidth 341 → 320.
+         *
+         * It survived nine phases because the narrowest viewport ever measured was 375px,
+         * where the table fits and nothing overflows. Stage 2 added 320px (brief §15) and it
+         * appeared immediately. `e2e/responsive.spec.ts` now asserts real scrollability
+         * rather than a width comparison, because `documentElement.scrollWidth` reported the
+         * overflow while `document.body.scrollWidth` did not.
+         */
+        <div className="relative overflow-x-auto">
           <table className="w-full text-small tabular">
             <caption className="sr-only">
               {face.label} rate changes over the last {days} days, {face.unit}, newest

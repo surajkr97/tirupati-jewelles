@@ -10,6 +10,7 @@ import { useState } from 'react';
 import {
   Badge,
   Button,
+  Chip,
   Card,
   EmptyState,
   ImageFrame,
@@ -47,7 +48,15 @@ export function GalleryClient() {
       <Row title="Colour tokens">
         <div className="grid w-full grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-5">
           {Object.entries(COLORS).map(([name, hex]) => {
+            /**
+             * Both surfaces, not just cream.
+             *
+             * The wine/rose palette is the first one here with two page grounds, and a
+             * single "on cream" figure actively misleads on half of it — `gold` reads 2.27
+             * (unusable) when its whole job is to sit on wine at 6.84. D-057.
+             */
             const onCream = contrastRatio(hex, COLORS.cream);
+            const onWine = contrastRatio(hex, COLORS.wine);
             return (
               <div key={name} className="flex flex-col gap-2">
                 <div
@@ -56,9 +65,9 @@ export function GalleryClient() {
                 />
                 <div className="flex flex-col">
                   <span className="text-small font-medium text-ink">{name}</span>
-                  <span className="text-small text-muted tabular">{hex}</span>
-                  <span className="text-small text-muted tabular">
-                    {onCream.toFixed(2)}:1 on cream
+                  <span className="text-small text-muted num">{hex}</span>
+                  <span className="text-small text-muted num">
+                    {onCream.toFixed(2)} cream · {onWine.toFixed(2)} wine
                   </span>
                 </div>
               </div>
@@ -86,6 +95,50 @@ export function GalleryClient() {
         <Button full variant="accent">
           Enquire on WhatsApp
         </Button>
+      </Row>
+
+      {/* The on-wine pair, shown ON wine — the only place their contrast means anything.
+          Tab into these: the focus ring must be cream here and ink everywhere else. */}
+      <Row title="Buttons — on a wine surface">
+        <Card tone="wine" className="flex w-full flex-wrap items-center gap-4">
+          <Button variant="onWine">Explore collection</Button>
+          <Button variant="onWineOutline">Rate history</Button>
+        </Card>
+      </Row>
+
+      <Row title="Chip — selectable, 44px, aria-pressed">
+        <Chip selected={metal === 'k22'} onClick={() => setMetal('k22')}>
+          22K · 916
+        </Chip>
+        <Chip selected={metal === 'k18'} onClick={() => setMetal('k18')}>
+          18K · 750
+        </Chip>
+        <Chip disabled>Silver 999</Chip>
+      </Row>
+
+      <Row title="Type — display serif vs UI sans">
+        <div className="flex w-full flex-col gap-4">
+          <p className="font-display text-h1-lg font-medium text-ink">
+            Every gram, accounted for.
+          </p>
+          <p className="text-body text-muted">
+            Headlines are serif. Navigation, buttons, prices and every numeral stay sans —
+            brief §6.
+          </p>
+          {/* Tabular figures: these two columns must align to the pixel. */}
+          <div className="flex gap-8">
+            <div className="flex flex-col">
+              <span className="text-h2 text-ink num">₹71,240</span>
+              <span className="text-h2 text-ink num">₹58,310</span>
+              <span className="text-small text-muted">.num — aligned</span>
+            </div>
+            <div className="flex flex-col">
+              <span className="text-h2 text-ink">₹71,240</span>
+              <span className="text-h2 text-ink">₹58,310</span>
+              <span className="text-small text-muted">without — drifts</span>
+            </div>
+          </div>
+        </div>
       </Row>
 
       <Row title="Card">

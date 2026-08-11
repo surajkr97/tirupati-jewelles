@@ -354,7 +354,7 @@ function Toggle({
         className={cn(
           'relative h-8 w-16 shrink-0 rounded-pill transition-colors duration-fast ease-standard',
           'focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none',
-          checked ? 'bg-taupe-deep' : 'bg-line',
+          checked ? 'bg-rose-deep' : 'bg-line',
         )}
       >
         {/*

@@ -6,7 +6,7 @@
  * here — /admin and the Phase 3 auth screens deliberately do not get it.
  */
 import type { Metadata, Viewport } from 'next';
-import { Inter } from 'next/font/google';
+import { Inter, Playfair_Display } from 'next/font/google';
 
 import { Toaster } from '@/components/ui';
 import { SITE_URL } from '@/lib/seo';
@@ -17,6 +17,30 @@ const inter = Inter({
   subsets: ['latin'],
   display: 'swap',
   variable: '--font-inter',
+});
+
+/**
+ * The editorial serif, for headlines only (redesign brief §6, D-056).
+ *
+ * Playfair over Instrument Serif or Fraunces: its high stroke contrast and vertical stress
+ * are what the reference image's headline is doing, and it is the only one of the three with
+ * a variable weight axis, so 400–500 costs one file rather than two.
+ *
+ * `weight` is capped at 500 deliberately. The brief's §6 rule is "maximum normal weight
+ * 500", and a display serif is where over-weighting reads as cheap fastest — the elegance is
+ * supposed to come from scale and spacing, not from bolding. Asking for only what is used
+ * also keeps the download small.
+ *
+ * `preload: false` because no route renders serif text above the fold yet — the hero that
+ * will arrives in Stage 4. Preloading a font nothing paints costs a request on every page
+ * for nothing. Flip this to the default when the hero ships.
+ */
+const playfair = Playfair_Display({
+  subsets: ['latin'],
+  display: 'swap',
+  weight: ['400', '500'],
+  variable: '--font-playfair',
+  preload: false,
 });
 
 const SITE_NAME = 'Tirupati Jewelles';
@@ -74,12 +98,14 @@ export const viewport: Viewport = {
   // Never disable zoom — pinch-to-zoom is an accessibility requirement, and Phase 9 §9.7
   // runs an axe pass that will flag it.
   maximumScale: 5,
-  themeColor: '#FAF7F4',
+  // Must equal --color-cream. The one hex outside globals.css; PWA metadata needs a
+  // literal, so it cannot read the token. D-057 moved cream to #FAF7F5.
+  themeColor: '#FAF7F5',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en-IN" className={inter.variable}>
+    <html lang="en-IN" className={`${inter.variable} ${playfair.variable}`}>
       <body className="min-h-dvh antialiased">
         {children}
         <Toaster />

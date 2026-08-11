@@ -93,7 +93,7 @@ export function ResendTimer({
       }}
       className={cn(
         'flex h-tap w-full items-center justify-center text-small font-semibold',
-        ready ? 'text-taupe-deep hover:underline' : 'text-muted',
+        ready ? 'text-rose-deep hover:underline' : 'text-muted',
       )}
     >
       {ready ? 'Resend code' : `Resend in ${remaining}s`}

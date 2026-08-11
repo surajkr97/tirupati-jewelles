@@ -147,7 +147,7 @@ export default async function BillDetailPage({
     <Section className="pt-6 pb-0">
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-2">
-          <Link href="/admin/bills" className="text-small font-semibold text-taupe-deep">
+          <Link href="/admin/bills" className="text-small font-semibold text-rose-deep">
             ← All bills
           </Link>
           <div className="flex flex-wrap items-baseline justify-between gap-4">

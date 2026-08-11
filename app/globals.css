@@ -4,8 +4,8 @@
  * Token values from MASTER-SPEC §3.
  *
  * Tailwind v4 defines tokens in this `@theme` block rather than tailwind.config.ts — see
- * DECISIONS.md D-006. Every name here becomes a utility automatically: `--color-taupe`
- * gives `bg-taupe` / `text-taupe`, `--radius-card` gives `rounded-card`.
+ * DECISIONS.md D-006. Every name here becomes a utility automatically: `--color-rose`
+ * gives `bg-rose` / `text-rose`, `--radius-card` gives `rounded-card`.
  *
  * DESIGN owns this file. No hardcoded hex, no arbitrary radius, no off-scale spacing
  * anywhere else in the codebase.
@@ -14,42 +14,53 @@
 
 @theme {
   /* ── Colour ─────────────────────────────────────────────────────────────
-     Contrast verified by lib/design/contrast.test.ts, which fails the build
-     if any pair drops below its WCAG AA threshold. Two values differed from
-     the spec's first draft in Phase 2 — both because they measured as failures:
+     Wine and rose, per the UI redesign brief. D-056 records that this
+     supersedes MASTER-SPEC §3's cream/taupe palette and NOTHING else.
 
-       muted     #8A817C → #756C66   3.57:1 → 4.81:1 on cream (§2.1 predicted this)
-       taupeDeep (new)   #9B694E     white on #B07D62 was 3.53:1, needs 4.5:1
+     Contrast verified by lib/design/contrast.test.ts, which fails the build if
+     any pair drops below its WCAG AA threshold. The brief supplied hex values
+     directly; measuring them failed 10 of 26 pairs, so four moved before they
+     were adopted (D-057). Lightness only — hue and saturation are untouched,
+     the same method D-007 and §9.7 used, so nothing shifts as a colour:
 
-     Four more moved in Phase 9 §9.7, when `axe` measured the palette AS RENDERED
-     rather than as pairs. Phase 2 checked nine pairings it chose; the application
-     composes more than that, and every failure was a composition nobody had
-     enumerated — a token on a TINTED surface, a token at reduced ALPHA, or a
-     "non-text" accent used as text and so held to 4.5:1 rather than 3:1:
+       muted  #8B888F → #6E6B72  3.27 → 4.91 on cream. The binding surface was
+                                 `line` (4.41), not cream — text on a hairline
+                                 is the pair §9.7 learned to check.
 
-       taupeDeep #9B694E → #96654B  4.35 → 4.62 as TEXT on cream (it was only ever
-                                    checked as a background for white; white on it
-                                    improves too, 4.64 → 4.93)
-       muted     #756C66 → #6E6560  4.18 → 4.64 on the segmented control's tint
-                                    (5.33 on cream, so no surface regresses)
-       up        #0E9F6E → #0A7551  3.17 → 5.35 on cream; it renders as 14px TEXT
-                                    in the rate history and as a badge on its own
-                                    bg-up/10 tint, where it measured 3.01
-       down      #E02D3C → #C61D2B  4.26 → 5.45 on cream, same reason
+     Three tokens are adopted unchanged but CONSTRAINED, because measuring them
+     told us where they may be used rather than what they should be:
 
-     Every one is a LIGHTNESS change only — hue and saturation are untouched, the
-     same method D-007 used for taupeDeep, so nothing shifts as a colour.
+       rose      3.87 on cream — clears 3:1 non-text, fails 4.5:1 text.
+                 Chart strokes, dots, indicator fills, tints. NEVER a label,
+                 never a button fill under white text.
+       rose-deep 5.65 as text on cream, 6.02 under white. THIS is the
+                 interactive token — buttons, links, active nav.
+       gold      6.84 on wine, but 2.27 on cream, which fails even the 3:1
+                 non-text bar. Gold may appear on WINE SURFACES ONLY. Not a
+                 hairline on a card, not an icon on cream, at any size.
 
-     `taupe` is unchanged and still the brand accent. It cannot be text on any
-     light surface in this palette (3.30 on cream) — that is D-007's finding, and
-     §9.7 found three eyebrow labels that were doing it anyway. See D-038. */
-  --color-cream: #faf7f4;
-  --color-ink: #1a1613;
-  --color-taupe: #b07d62;
-  --color-taupe-deep: #96654b;
-  --color-taupe-lt: #e8d5c9;
-  --color-line: #efe9e3;
-  --color-muted: #6e6560;
+     rose/wine (the hero's accent word) is 4.01 — large text only. The gate
+     asserts it BOTH ways so body-size use fails the build. See D-057.
+
+     The taupe → rose rename is D-058: one-to-one, same semantics. */
+  --color-cream: #faf7f5;
+  --color-ink: #1a1a1a;
+  --color-muted: #6e6b72;
+  --color-line: #f0eef0;
+
+  /* Wine — the primary luxury surface. Hero, trust band, footer, admin rail. */
+  --color-wine: #3d0c1e;
+  --color-wine-deep: #260610;
+  --color-wine-soft: #5a1b31;
+
+  /* Rose — brand accent (`rose`) and interaction (`rose-deep`). See above. */
+  --color-rose: #d9486b;
+  --color-rose-deep: #b3324f;
+  --color-rose-tint: #fceef1;
+
+  /* Gold — jewellery detail, on wine only. */
+  --color-gold: #c9a227;
+
   --color-up: #0a7551;
   --color-down: #c61d2b;
 
@@ -60,9 +71,16 @@
   --radius-field: 16px;
 
   /* ── Shadow ───────────────────────────────────────────────────────────────
-     Cards get shadow or nothing — never a border (MASTER-SPEC §3). */
-  --shadow-card: 0 1px 3px rgba(26, 22, 19, 0.06);
-  --shadow-lift: 0 4px 16px rgba(26, 22, 19, 0.1);
+     Cards get shadow or nothing — never a border (MASTER-SPEC §3), which §3
+     keeps through the redesign.
+
+     Tinted with `wine` (61 12 30) rather than the old ink-brown. A neutral-grey
+     shadow over a warm cream page reads as dirt; a shadow carrying a trace of
+     the brand's own dark reads as depth. The alphas are unchanged and stay
+     deliberately low — the reference image's cards are separated by whitespace
+     and a hairline of shadow, not by a drop shadow. */
+  --shadow-card: 0 1px 3px rgba(61, 12, 30, 0.06);
+  --shadow-lift: 0 4px 16px rgba(61, 12, 30, 0.1);
 
   /* ── Spacing: 4 / 8 / 16 / 24 / 32 / 48 / 64 ONLY ─────────────────────────
      Tailwind's default scale is disabled below so off-scale values are hard
@@ -96,12 +114,28 @@
   --spacing-control-lg: 56px;
   --spacing-header: 56px;
   --spacing-header-lg: 72px;
+  /* Admin desktop rail (Stage 2, D-062). Its own token for the same reason
+     --spacing-bottom-nav is: the sidebar sets its width from this and the content
+     column reserves exactly the same amount, so the two cannot drift apart and
+     let the rail overlap the page. Not on the 4/8/16 scale because it is a
+     control dimension, not spacing — the comment above says these get their own. */
+  --spacing-admin-rail: 240px;
 
   /* ── Type ─────────────────────────────────────────────────────────────────
      H1 32/36 mobile → 48/52 desktop. Body 16/26. Small 14/20.
      Body copy never below 15px. */
   --font-sans:
     var(--font-inter), ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  /* Editorial serif for headlines only. Brief §6: navigation, buttons, prices,
+     rates and EVERY numeral stay sans — a serif numeral in a rate ticker reads
+     as a typo. `font-display` is the only way to reach it; nothing sets it as a
+     default, so a heading is serif because someone chose it.
+
+     Georgia is the fallback rather than a generic `serif` because it is metrically
+     closer to Playfair and ships on every target platform, so a failed webfont
+     degrades to a similar shape instead of a much wider Times. */
+  --font-display: var(--font-playfair), Georgia, 'Times New Roman', serif;
 
   --text-small: 14px;
   --text-small--line-height: 20px;
@@ -143,13 +177,32 @@ body {
 
 /* Focus must always be visible — Phase 9 §9.7 runs an axe pass over every route. */
 :focus-visible {
-  outline: 2px solid var(--color-ink);
+  outline: 2px solid var(--color-focus, var(--color-ink));
   outline-offset: 2px;
   border-radius: 4px;
 }
 
+/**
+ * Wine sections invert the focus ring.
+ *
+ * The default ink ring is 16.32:1 on cream and 1.05:1 on wine — effectively invisible on
+ * exactly the surfaces this redesign adds (hero, trust band, footer, admin rail). A
+ * keyboard user tabbing into the hero CTA would see nothing at all.
+ *
+ * Setting the variable rather than restyling `:focus-visible` again means the rule above
+ * stays the single definition of what focus looks like, and any wine surface opts in by
+ * carrying one class. `cream` on wine measures 15.51:1.
+ */
+.surface-wine {
+  --color-focus: var(--color-cream);
+}
+
 /* Money and rate figures. Tabular numerals stop digits shifting width as they
-   change, which is what makes a cheap ticker look broken (Phase 4 §4.3). */
+   change, which is what makes a cheap ticker look broken (Phase 4 §4.3).
+   `.num` is the redesign brief's §6 name for this; `.tabular` is the name ~40
+   existing call sites already use. One rule, two selectors — renaming the call
+   sites would be a 40-file diff that changes no pixel. */
+.num,
 .tabular {
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum';

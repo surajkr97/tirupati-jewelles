@@ -326,7 +326,7 @@ function IconButton({
         'focus-visible:ring-2 focus-visible:ring-ink focus-visible:outline-none disabled:opacity-30 ' +
         (destructive
           ? 'text-muted hover:bg-down/10 hover:text-down'
-          : 'text-muted hover:bg-taupe-lt/50 hover:text-ink')
+          : 'text-muted hover:bg-rose-tint hover:text-ink')
       }
     >
       {children}

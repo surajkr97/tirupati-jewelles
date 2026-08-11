@@ -87,14 +87,14 @@ export function TrustBlock({ hasHallmark, hallmarkNo, bisCertNo }: TrustBlockPro
             We buy back and exchange our own pieces at the prevailing rate.{' '}
             <Link
               href="/policies/buyback"
-              className="font-medium text-taupe-deep underline"
+              className="font-medium text-rose-deep underline"
             >
               Buyback policy
             </Link>{' '}
             ·{' '}
             <Link
               href="/policies/exchange"
-              className="font-medium text-taupe-deep underline"
+              className="font-medium text-rose-deep underline"
             >
               Exchange policy
             </Link>
@@ -116,7 +116,7 @@ function Item({
 }) {
   return (
     <div className="flex gap-4">
-      <span className="mt-1 shrink-0 text-taupe-deep">{icon}</span>
+      <span className="mt-1 shrink-0 text-rose-deep">{icon}</span>
       <div className="flex min-w-0 flex-col gap-1">
         <h3 className="text-small font-semibold text-ink">{title}</h3>
         {children}

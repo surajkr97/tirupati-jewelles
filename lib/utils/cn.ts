@@ -5,7 +5,7 @@
  *
  * `clsx` handles conditionals; `tailwind-merge` resolves conflicts so a caller's prop can
  * override a component's default. Without it, `<Button className="bg-ink">` on a component
- * that already sets `bg-taupe` produces both classes and the winner depends on stylesheet
+ * that already sets `bg-rose` produces both classes and the winner depends on stylesheet
  * order rather than intent.
  *
  * ── Why the type scale has to be declared here (Phase 9 §9.7) ──
@@ -22,8 +22,11 @@
  * That is the same shape as DEBT-032 — a class that reads as applied and is not — except
  * the class is removed after the fact rather than emitting nothing, so it survives a search
  * of the source. It was found by §9.7's axe pass, which measured the **accent button**
- * rendering `ink` on `taupe-deep` at 3.87:1: `variant="accent"` sets `text-white`, `size`
- * sets `text-body`, and the colour D-007 exists to guarantee was being deleted between them.
+ * rendering `ink` on the accent fill at 3.87:1: `variant="accent"` sets `text-white`, `size`
+ * sets `text-body`, and the colour the deepened accent exists to guarantee was being deleted
+ * between them. (That measurement was taken on the taupe palette; the same deletion on
+ * today's `rose-deep` measures 2.89:1, so the redesign made the bug worse, not better.
+ * D-057.)
  *
  * `TEXT_SIZES` is a mirror of `app/globals.css` and mirrors drift, so
  * `lib/utils/cn.test.ts` parses the stylesheet and fails if the two disagree — the same

@@ -154,13 +154,30 @@ test.describe('§9.6 — robots.txt and sitemap.xml', () => {
 
     expect(urls.length, 'sitemap is empty').toBeGreaterThan(4);
 
+    /**
+     * Fetched with bounded concurrency, not one at a time.
+     *
+     * The sitemap lists ~55 URLs and this ran them strictly sequentially, which is fine
+     * alone (10s) and blew the 30s budget once the suite grew and four workers were sharing
+     * one dev server. A pool of six cuts the wall time without turning the test into a load
+     * generator that starves the other workers — which is the thing that broke it.
+     *
+     * Every URL is still fetched and any non-200 still fails. Only the scheduling changed.
+     */
+    const POOL = 6;
     const broken: string[] = [];
-    for (const url of urls) {
-      // Fetched by path so this works against the test origin rather than the configured
-      // production one.
-      const path = new URL(url).pathname;
-      const response = await request.get(path);
-      if (response.status() !== 200) broken.push(`${path} → ${response.status()}`);
+    // Fetched by path so this works against the test origin rather than the configured
+    // production one.
+    const paths = urls.map((url) => new URL(url).pathname);
+
+    for (let i = 0; i < paths.length; i += POOL) {
+      const batch = paths.slice(i, i + POOL);
+      const results = await Promise.all(
+        batch.map(async (path) => ({ path, status: (await request.get(path)).status() })),
+      );
+      for (const { path, status } of results) {
+        if (status !== 200) broken.push(`${path} → ${status}`);
+      }
     }
 
     expect(broken, 'sitemap lists URLs that do not resolve').toEqual([]);

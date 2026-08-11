@@ -111,7 +111,7 @@ export default async function OrderDetailPage({
         <div className="flex flex-col gap-2">
           <Link
             href="/account/orders"
-            className="text-small font-semibold text-taupe-deep"
+            className="text-small font-semibold text-rose-deep"
           >
             ← Your orders
           </Link>

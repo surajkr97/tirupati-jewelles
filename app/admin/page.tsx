@@ -131,7 +131,7 @@ export default async function AdminDashboardPage() {
             <h2 className="text-h3 font-semibold text-ink">Today&rsquo;s rates</h2>
             <Link
               href="/admin/rates"
-              className="text-small font-semibold text-taupe-deep"
+              className="text-small font-semibold text-rose-deep"
             >
               Update →
             </Link>
@@ -160,7 +160,7 @@ export default async function AdminDashboardPage() {
                   updated in 48 hours.{' '}
                   <Link
                     href="/admin/rates"
-                    className="font-medium text-taupe-deep underline"
+                    className="font-medium text-rose-deep underline"
                   >
                     Update
                   </Link>
@@ -172,7 +172,7 @@ export default async function AdminDashboardPage() {
                   {productsWithoutImages === 1 ? 'piece has' : 'pieces have'} no image.{' '}
                   <Link
                     href="/admin/products"
-                    className="font-medium text-taupe-deep underline"
+                    className="font-medium text-rose-deep underline"
                   >
                     Add photos
                   </Link>
@@ -243,7 +243,7 @@ export default async function AdminDashboardPage() {
               {series.map((point) => (
                 <div
                   key={point.day.toISOString()}
-                  className="flex-1 rounded-t-[2px] bg-taupe-lt"
+                  className="flex-1 rounded-t-[2px] bg-rose-tint"
                   style={{
                     // Scaled against the peak; `Number` on a bigint is safe because this is
                     // only ever a bar height.
@@ -299,7 +299,7 @@ export default async function AdminDashboardPage() {
               <Link
                 key={href}
                 href={href!}
-                className="inline-flex h-tap items-center rounded-pill bg-taupe-lt/50 px-4 text-small font-semibold text-ink"
+                className="inline-flex h-tap items-center rounded-pill bg-rose-tint px-4 text-small font-semibold text-ink"
               >
                 {label}
               </Link>

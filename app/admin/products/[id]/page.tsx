@@ -49,7 +49,7 @@ export default async function EditProductPage({
     <Section className="pt-6 pb-0">
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-1">
-          <Link href="/admin/products" className="text-small font-medium text-taupe-deep">
+          <Link href="/admin/products" className="text-small font-medium text-rose-deep">
             ← Products
           </Link>
           <h1 className="text-h1 font-semibold tracking-tight text-ink">

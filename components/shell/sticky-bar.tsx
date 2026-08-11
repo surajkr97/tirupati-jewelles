@@ -86,7 +86,20 @@ export function StickyBar({
       data-sticky-bar=""
       data-testid={testId}
       className={cn(
-        'fixed inset-x-0 bottom-0 z-40',
+        /**
+         * ── The left edge is a variable, because the admin has a rail ──
+         *
+         * `inset-x-0` was right while every layout was a single column. Stage 2 gave the
+         * admin a fixed 240px rail at `md:`, and this bar — `fixed`, full width, `z-40`
+         * against the rail's `z-30` — painted its `bg-cream/90` straight over it. axe caught
+         * it before a human did: `text-muted` on the resulting composite of cream-over-wine
+         * (#e7e0e0) measures 4.02:1 and fails AA on /admin/bills/new.
+         *
+         * `--sticky-bar-left` defaults to 0, so the storefront is unchanged. The admin shell
+         * sets it to the rail's width at `md:`. Same mechanism as `--sticky-bar-height`
+         * above: one variable, set by the layout that knows the geometry.
+         */
+        'fixed right-0 bottom-0 left-[var(--sticky-bar-left,0px)] z-40',
         /**
          * ── DEBT-033: the band below this bar must not swallow the bottom nav ──
          *

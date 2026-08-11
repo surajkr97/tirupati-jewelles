@@ -8,12 +8,13 @@
  */
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
 import { FormError, ResendTimer } from '@/components/auth/auth-shell';
 import { OtpInput } from '@/components/auth/otp-input';
 import { Button, Input } from '@/components/ui';
+import { destinationAfterAuth } from '@/lib/auth/safe-next';
 
 type Step = 'email' | 'code' | 'password';
 
@@ -25,6 +26,7 @@ interface ApiError {
 
 export function SignupForm() {
   const router = useRouter();
+  const params = useSearchParams();
   const [step, setStep] = useState<Step>('email');
   const [email, setEmail] = useState('');
   const [code, setCode] = useState('');
@@ -100,7 +102,12 @@ export function SignupForm() {
         setFieldErrors(failure.fields ?? {});
         return;
       }
-      router.replace('/account');
+      /**
+       * Honour `?next=` after verification (brief §11). A signup always creates a CUSTOMER
+       * (`signup/complete` sets `Role.CUSTOMER`), so the role default is `/account` — but a
+       * visitor bounced here from a protected page should land back on it.
+       */
+      router.replace(destinationAfterAuth(params.get('next'), 'CUSTOMER'));
       router.refresh();
     } catch {
       setError('Network problem. Please try again.');

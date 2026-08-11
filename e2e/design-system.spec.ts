@@ -19,7 +19,10 @@ test.describe('/__design gallery', () => {
     for (const section of [
       'Colour tokens',
       'Buttons — variants',
+      'Buttons — on a wine surface',
       'Card',
+      'Chip — selectable, 44px, aria-pressed',
+      'Type — display serif vs UI sans',
       'Input',
       'Select',
       'SegmentedControl — arrow-key navigable',
@@ -28,7 +31,15 @@ test.describe('/__design gallery', () => {
       'ImageFrame — empty state must look deliberate',
       'EmptyState',
     ]) {
-      await expect(page.getByRole('heading', { name: section })).toBeVisible();
+      /**
+       * `exact`, because these are substrings of one another. 'Select' matched both its own
+       * section and 'Chip — selectable…' the moment the Chip row was added, and a locator
+       * that silently matches a neighbour is a test that stops meaning what it says. This
+       * narrows the assertion rather than relaxing it.
+       */
+      await expect(
+        page.getByRole('heading', { name: section, exact: true }),
+      ).toBeVisible();
     }
   });
 

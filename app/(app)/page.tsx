@@ -13,7 +13,7 @@ import Link from 'next/link';
 
 import { RateTicker, type SerialisedRates } from '@/components/rates/rate-ticker';
 import { Section } from '@/components/shell';
-import { Card, ImageFrame } from '@/components/ui';
+import { buttonClasses, Card, ImageFrame } from '@/components/ui';
 import { db } from '@/lib/db';
 import { getCurrentRates, getRateHistory, RATE_FACES } from '@/lib/rates';
 import { canonical } from '@/lib/seo';
@@ -145,12 +145,9 @@ export default async function HomePage() {
           <p className="text-body text-muted">
             Add each item&rsquo;s weight and making charge to get one total, GST included.
           </p>
-          {/* A link, not a button — it navigates. Styled to match the accent button
-              rather than adding a Radix Slot dependency for one call site. */}
-          <Link
-            href="/calculator"
-            className="inline-flex h-control items-center justify-center rounded-pill bg-taupe-deep px-6 text-body font-semibold text-white transition-transform duration-fast ease-standard active:scale-[0.98]"
-          >
+          {/* A link, not a button — it navigates, so it must be an anchor. It takes the
+              Button's own classes rather than a copy of them (UI_REDESIGN_DEBT-003). */}
+          <Link href="/calculator" className={buttonClasses({ variant: 'accent' })}>
             Open the calculator
           </Link>
         </Card>

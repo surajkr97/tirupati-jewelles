@@ -4,15 +4,17 @@
  */
 'use client';
 
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
 import { FormError, IdentifierHint, ResendTimer } from '@/components/auth/auth-shell';
 import { OtpInput } from '@/components/auth/otp-input';
 import { Button, Input } from '@/components/ui';
+import { destinationAfterAuth } from '@/lib/auth/safe-next';
 
 export function ForgotPasswordForm() {
   const router = useRouter();
+  const params = useSearchParams();
   const [sent, setSent] = useState(false);
   const [identifier, setIdentifier] = useState('');
   const [code, setCode] = useState('');
@@ -60,7 +62,13 @@ export function ForgotPasswordForm() {
         return;
       }
 
-      router.replace('/account');
+      /**
+       * `/api/auth/password/reset` returns `{ reset: true }` and not the user, so there is no
+       * role to branch on here. Deliberately NOT changed: adding a field to an auth route's
+       * response is outside Stage 2's remit. An admin who resets their password lands on
+       * `/account` and reaches the dashboard in one click via the shortcut there.
+       */
+      router.replace(destinationAfterAuth(params.get('next'), 'CUSTOMER'));
       router.refresh();
     } catch {
       setError('Network problem. Please try again.');

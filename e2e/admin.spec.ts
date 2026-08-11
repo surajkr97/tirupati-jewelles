@@ -362,13 +362,32 @@ test.describe('§7 DESIGN — usable one-handed at 375px', () => {
     test.skip(testInfo.project.name !== 'mobile-375', 'A mobile concern');
 
     await page.goto('/admin');
-    const links = page.getByRole('navigation', { name: 'Admin' }).getByRole('link');
+    const nav = page.getByRole('navigation', { name: 'Admin' });
 
-    const count = await links.count();
-    expect(count).toBe(5);
-    for (let i = 0; i < count; i += 1) {
-      const box = await links.nth(i).boundingBox();
+    /**
+     * Four links and a button, not five links — D-063.
+     *
+     * The fifth slot used to be a direct link to /admin/media labelled "More", a label that
+     * lied about where it went. It is now a button opening a sheet with every secondary
+     * destination plus "Back to site". The assertion this test exists to make — every target
+     * in the bar is at least 44px — is unchanged and now covers the button too.
+     */
+    const targets = [
+      ...(await nav.getByRole('link').all()),
+      ...(await nav.getByRole('button').all()),
+    ];
+    expect(targets).toHaveLength(5);
+
+    for (const target of targets) {
+      const box = await target.boundingBox();
       if (box) expect(box.height).toBeGreaterThanOrEqual(TAP_MIN);
+    }
+
+    // And the sheet it opens must reach the destinations the bar gave up.
+    await nav.getByRole('button', { name: 'More admin pages' }).click();
+    const sheet = page.getByRole('navigation', { name: 'Secondary admin pages' });
+    for (const label of [/Settings/, /Audit log/, /Media/, /Collections/]) {
+      await expect(sheet.getByRole('link', { name: label })).toBeVisible();
     }
   });
 });

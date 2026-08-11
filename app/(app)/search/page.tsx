@@ -102,7 +102,7 @@ function CategoryLinks({
         <li key={category.id}>
           <Link
             href={`/collections/${category.slug}`}
-            className="inline-flex h-tap items-center rounded-pill bg-taupe-lt/50 px-4 text-small font-medium text-ink transition-colors duration-fast ease-standard hover:bg-taupe-lt"
+            className="inline-flex h-tap items-center rounded-pill bg-rose-tint px-4 text-small font-medium text-ink transition-colors duration-fast ease-standard hover:bg-rose/15"
           >
             {category.name}
           </Link>

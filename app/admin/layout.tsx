@@ -19,7 +19,7 @@
  */
 import type { Metadata } from 'next';
 
-import { AdminNav, AdminNavSpacer } from '@/components/admin/admin-nav';
+import { AdminNav, AdminNavSpacer, AdminSidebar } from '@/components/admin/admin-nav';
 import { requireAdminPage } from '@/lib/auth/guard';
 
 /** Per-admin and never cacheable (§7.1, MASTER-SPEC §6). */
@@ -49,18 +49,29 @@ export default async function AdminLayout({ children }: { children: React.ReactN
      * The height is published by `StickyBar` from a real measurement — see that file for why
      * a hardcoded value was wrong twice already.
      */
-    <div className="flex min-h-dvh flex-col bg-cream has-data-sticky-bar:pb-[var(--sticky-bar-height,0px)]">
-      <header className="sticky top-0 z-30 border-b border-line bg-cream/90 backdrop-blur-md">
-        <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between gap-4 px-[20px] py-4 md:px-[40px]">
-          <p className="text-h3 font-semibold text-ink">Shop admin</p>
-          <p className="truncate text-small text-muted">{admin.email ?? admin.name}</p>
-        </div>
-      </header>
+    <div className="min-h-dvh bg-cream">
+      {/* Desktop rail. Fixed, so it survives a long bills table. `md:` only. */}
+      <AdminSidebar />
 
-      <main className="flex-1">{children}</main>
+      {/*
+        The content column reserves the rail's width from the SAME token the rail sets it
+        from (`--spacing-admin-rail`), so the two cannot drift apart and let the nav overlap
+        the page — the mechanism `--spacing-bottom-nav` already uses for the bottom bar.
+      */}
+      <div className="flex min-h-dvh flex-col md:pl-admin-rail md:[--sticky-bar-left:var(--spacing-admin-rail)] has-data-sticky-bar:pb-[var(--sticky-bar-height,0px)]">
+        <header className="sticky top-0 z-20 border-b border-line bg-cream/90 backdrop-blur-md">
+          <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between gap-4 px-[20px] py-4 md:px-[40px]">
+            {/* The rail carries the wordmark on desktop, so this is the page-level label. */}
+            <p className="text-h3 font-semibold text-ink">Shop admin</p>
+            <p className="truncate text-small text-muted">{admin.email ?? admin.name}</p>
+          </div>
+        </header>
 
-      <AdminNavSpacer />
-      <AdminNav />
+        <main className="flex-1">{children}</main>
+
+        <AdminNavSpacer />
+        <AdminNav />
+      </div>
     </div>
   );
 }
