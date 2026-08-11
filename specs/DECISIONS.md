@@ -1989,3 +1989,106 @@ This is the right layer for the rule because both callers read it: the post-auth
 redirect in the three forms, and the signed-in bounce in the two pages. Putting it in either
 one would have left the other looping. It is also correct on its own terms: someone who has
 just finished authenticating has no business being handed a sign-in form.
+
+---
+
+## D-069 — the rate card shows all three metals; the metal toggle is gone
+
+Phase 4's ticker showed ONE metal behind a segmented control. `LiveRateCard` shows all
+three, with 22K as the anchor — brief §5's hierarchy and the reference's composition.
+
+It is strictly more information. The two secondary rates previously required an interaction
+to see, so a customer comparing gold against silver had to toggle twice and hold the first
+number in their head.
+
+### What the removal cost, and what it did not
+
+Two tests guarded the control and are retired rather than patched, because the behaviour they
+guarded cannot occur any more:
+
+- *"switching metal shows the new truth, not a value drifted from the old one"* — there is no
+  switch. **Replaced** with the case that CAN still happen: a background refetch landing on a
+  new true rate must reset the jitter walk rather than drift on from the old one.
+- *"switching metal does not shift the layout"* — the CLS criterion survives, measured
+  against the thing that still changes: three seconds of jitter must not resize the card.
+
+`e2e/keyboard.spec.ts`'s radiogroup test now runs against `/rates`. It was never about the
+homepage — it is about the `SegmentedControl` primitive's keyboard contract, and that
+primitive is unchanged and still used by the rate-history selector, the calculator and the
+catalogue filters.
+
+### Jitter now applies to the anchor only
+
+It used to follow the selection, so silver jittered when silver was on screen. Only the 22K
+headline moves now; the secondary rows show the true rate, sitting still. MASTER-SPEC §8
+scopes the fluctuation to "the homepage widget" and this is that widget's headline figure.
+**That is less invented movement than before, not more.**
+
+---
+
+## D-070 — no rate range selector, because the data cannot distinguish the ranges
+
+Brief §11 lists a range selector in the /rates hierarchy and §12 describes 1W/1M/6M/1Y.
+It is not built, and the reason is a measurement rather than a preference.
+
+`/api/rates/history` accepts `days` from 1 to 365, so the endpoint would support it. The
+shop's data would not:
+
+```
+metalRate rows: 16   oldest: 2026-08-04   newest: 2026-08-07   span: 3 days
+gold22 points in the last 7d / 30d / 180d / 365d:  12 / 12 / 12 / 12
+```
+
+Every range returns the same twelve points. A selector over that is four buttons that look
+like they filter and do nothing — brief §10's "no buttons that do nothing" and §25's "do not
+invent data", in one control. §12 is also phrased conditionally: *"if the existing
+implementation supports 1W/1M/6M/1Y, retain it."* It does not.
+
+This is not a dev-database artefact to be waved away, either: **every new shop starts here.**
+A control that is inert for the first months of a shop's life is worse than one that appears
+when it means something.
+
+Recorded as UI_REDESIGN_DEBT-007 with its trigger: build it once a metal has more than ~60
+days of recorded rates, at which point 1M and 6M genuinely differ.
+
+---
+
+## D-071 — the homepage ticker's jitter is kept, and flagged rather than removed
+
+Stage 4B's brief is emphatic — §7 *"do not invent movement"*, §25 *"do not invent price
+movement"*. The homepage rate figure does exactly that, and has since Phase 4.
+
+`lib/ticker-jitter.ts` walks the DISPLAYED price by ±₹101–199 every second, clamped to ±2% of
+the true rate. On a ₹1,50,000 gold rate that is up to ₹3,000 away from the number the shop
+will quote. It is presentation-only — the calculator and every bill read `/api/rates`, and
+`true-rate.test.tsx` proves no calculator module can even import the jitter — and screen
+readers are given the true rate, never the shimmer.
+
+**It is kept, for now, because removing it is a product decision and not a visual one.** It
+was specified by the client ("±₹101–199 per tick, as the client specified"), signed off in
+Phase 4, is covered by a dozen tests, ships with an off-switch
+(`NEXT_PUBLIC_TICKER_JITTER=false`), is disabled under reduced motion, and is disclaimed
+everywhere it appears. Deleting all of that quietly, inside a stage whose remit is "visual
+redesign", would be exactly the silent behaviour change §18 forbids.
+
+### OWNER DECISION, 12 Aug 2026 — keep it for the redesign, revisit after Stage 4
+
+The owner reviewed the conflict and ruled: **the jitter stays unchanged through the
+redesign.** It is existing signed-off behaviour, and removing it is a product decision rather
+than a visual one, to be taken separately once Stage 4 is finished.
+
+Four invariants are conditions of keeping it. Each already holds and each is covered by a
+test, so a regression fails rather than ships:
+
+| Invariant | Enforced by |
+| :--- | :--- |
+| Never affects the stored/actual rate | The walk lives in component state only; `lib/rates.ts` never sees it |
+| Never affects calculator or pricing logic | `true-rate.test.tsx` greps every calculator and pricing module and fails if one so much as *imports* `ticker-jitter` or `live-rate-card` |
+| Accessibility exposes the TRUE rate | `screen-reader.spec.ts` — the shimmer is `aria-hidden`, and an `sr-only` live region announces the true figure, verified against `/api/rates` |
+| The displayed value stays within ±2% | `ticker-jitter.test.ts` over 10,000 ticks, plus a 300-tick assertion in a real render |
+
+Stage 4B narrowed the blast radius without touching the mechanism: the jitter now moves only
+the 22K anchor, so the 18K and silver figures sit still (D-069). Removal remains a one-line
+environment change (`NEXT_PUBLIC_TICKER_JITTER=false`) whenever the owner wants it.
+
+**UI_REDESIGN_DEBT-008** — revisit jitter removal as its own product decision after Stage 4.

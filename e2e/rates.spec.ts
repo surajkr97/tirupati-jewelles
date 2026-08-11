@@ -111,7 +111,7 @@ test.describe('ticker jitter — reduced motion', () => {
 });
 
 test.describe('ticker — layout', () => {
-  test('switching metal does not shift the layout', async ({ page }) => {
+  test('the jitter does not shift the layout', async ({ page }) => {
     await page.goto('/');
 
     const card = page.getByTestId('rate-ticker');
@@ -142,8 +142,13 @@ test.describe('ticker — layout', () => {
 
     const before = await geometry();
 
-    await page.getByRole('radio', { name: 'Silver 999' }).click();
-    await expect(page.getByRole('radio', { name: 'Silver 999' })).toBeChecked();
+    /**
+     * Stage 4B removed the metal toggle, so the shift this measured on a CLICK is now
+     * measured across the JITTER instead — which is the same criterion against the thing
+     * that still changes. Three seconds is three ticks; tabular numerals are what stop
+     * ₹1,49,999 → ₹1,50,001 resizing the card.
+     */
+    await page.waitForTimeout(3000);
 
     const after = await geometry();
 
@@ -153,24 +158,40 @@ test.describe('ticker — layout', () => {
     expect(Math.abs(after.left - before.left)).toBeLessThanOrEqual(1);
   });
 
-  test('the metal label and unit change with the selection', async ({ page }) => {
+  test('every metal, its unit and its rate are visible at once', async ({ page }) => {
     await page.goto('/');
 
+    // The anchor keeps the full unit; §8 requires units never to be hidden.
     await expect(page.getByTestId('ticker-unit')).toHaveText('per 10 grams');
 
-    await page.getByRole('radio', { name: 'Silver 999' }).click();
-    await expect(page.getByTestId('ticker-unit')).toHaveText('per 1 kilogram');
+    // What the toggle used to require an interaction to reveal is now simply on screen.
+    for (const label of ['Gold 22K (916)', 'Gold 18K', 'Silver 999']) {
+      await expect(page.getByText(label, { exact: true })).toBeVisible();
+    }
+    for (const unit of ['10 g', '1 kg']) {
+      await expect(page.getByText(unit, { exact: true })).toBeVisible();
+    }
   });
 });
 
 test.describe('/rates page — §4.6', () => {
-  test('shows all three rates as cards', async ({ page }) => {
+  test('shows all three rates', async ({ page }) => {
     await page.goto('/rates');
 
-    await expect(page.getByRole('heading', { name: /Today.s rates/ })).toBeVisible();
+    // One h1 named this, not two — the card's own label is omitted here precisely so this
+    // locator stays unambiguous. See `heading` in live-rate-card.tsx.
+    await expect(
+      page.getByRole('heading', { name: /Today.s rates/, level: 1 }),
+    ).toBeVisible();
 
-    for (const label of ['Gold 22K', 'Gold 18K', 'Silver 999']) {
-      await expect(page.getByRole('heading', { name: label, level: 2 })).toBeVisible();
+    /**
+     * Scoped to the card. The history table below it has its own metal selector carrying
+     * the same three labels, so an unscoped locator matches twice — legitimately, since
+     * they are two different controls for two different things.
+     */
+    const card = page.getByTestId('rate-ticker');
+    for (const label of ['Gold 22K (916)', 'Gold 18K', 'Silver 999']) {
+      await expect(card.getByText(label, { exact: true })).toBeVisible();
     }
   });
 
@@ -185,7 +206,9 @@ test.describe('/rates page — §4.6', () => {
     // MASTER-SPEC §8 — the disclaimer is the mitigation for showing an indicative price,
     // and §4.6 requires /rates to carry it too. One per card.
     await expect(page.getByText(/Indicative rate/).first()).toBeVisible();
-    await expect(page.getByText(/Final price confirmed in store/)).toHaveCount(3);
+    // One card now, so one disclaimer — it used to be one per metal card. §4.6 requires the
+    // page to carry it, not to carry it three times.
+    await expect(page.getByText(/Final price confirmed in store/)).toHaveCount(1);
   });
 
   test('history section renders and switches metal', async ({ page }) => {
@@ -218,7 +241,9 @@ test.describe('/rates page — §4.6', () => {
     await page.getByRole('navigation', { name: 'Primary' }).getByText('Rates').click();
 
     await expect(page).toHaveURL(/\/rates$/);
-    await expect(page.getByRole('heading', { name: /Today.s rates/ })).toBeVisible();
+    await expect(
+      page.getByRole('heading', { name: /Today.s rates/, level: 1 }),
+    ).toBeVisible();
   });
 });
 

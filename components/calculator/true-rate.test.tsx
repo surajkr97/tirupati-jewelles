@@ -33,11 +33,20 @@ vi.mock('@/lib/env', () => ({ clientEnv }));
 vi.mock('swr', () => ({
   default: (_key: string, _fetcher: unknown, options?: { fallbackData?: unknown }) => ({
     data: options?.fallbackData,
+    mutate: () => Promise.resolve(undefined),
+    isValidating: false,
   }),
 }));
 
+// The card's two action links are navigation, not the subject of this file.
+vi.mock('next/link', () => ({
+  default: ({ children, ...props }: { children: React.ReactNode; href: string }) => (
+    <a {...props}>{children}</a>
+  ),
+}));
+
 import { Calculator } from '@/components/calculator/calculator';
-import { RateTicker } from '@/components/rates/rate-ticker';
+import { LiveRateCard } from '@/components/rates/live-rate-card';
 import type { SerialisedRates } from '@/lib/rates.keys';
 import { calculateTotal, type RatesByPurity } from '@/lib/pricing';
 import { SPEC_ITEM_DEFAULTS, type CalculatorItem } from '@/lib/calculator/types';
@@ -148,7 +157,7 @@ describe('the calculator uses the TRUE rate while the ticker jitters', () => {
 
     render(
       <>
-        <RateTicker initialRates={API_PAYLOAD} />
+        <LiveRateCard initialRates={API_PAYLOAD} />
         <Calculator defaults={SPEC_ITEM_DEFAULTS} initialItems={[ITEM]} />
       </>,
     );
@@ -268,8 +277,10 @@ describe('the jitter is unreachable from the calculator by construction', () => 
       // §4: "If you find yourself passing it as a prop, you have made a mistake."
       // Asserted across the whole feature rather than trusted, because the mistake is a
       // one-line import away and prices a customer's bangle wrong when it happens.
+      // `live-rate-card` replaced `rate-ticker` in Stage 4B; the pattern follows it, or
+      // this stops guarding the thing it was written for.
       expect(imports, `${file} must not import the ticker jitter`).not.toMatch(
-        /ticker-jitter|rate-ticker/,
+        /ticker-jitter|rate-ticker|live-rate-card/,
       );
     }
   });

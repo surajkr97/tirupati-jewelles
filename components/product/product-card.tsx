@@ -72,6 +72,15 @@ export function ProductCard({
 }
 
 /** §6 DESIGN: 16px gap minimum. `gap-4` is the 16px step on the restricted scale. */
+/**
+ * The catalogue grid.
+ *
+ * **Children must be `<li>`.** This renders a `<ul>`, and `ProductCard` renders an `<a>` —
+ * so a caller that drops cards straight in produces a list whose direct children are
+ * anchors, which axe flags as a `list` violation (serious) and which screen readers do not
+ * announce as a list at all. Stage 4A did exactly that on the homepage and the axe suite
+ * caught it; the collection pages had always wrapped correctly.
+ */
 export function ProductGrid({ children }: { children: React.ReactNode }) {
   return (
     <ul

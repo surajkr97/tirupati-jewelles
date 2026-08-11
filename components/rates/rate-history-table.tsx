@@ -84,45 +84,81 @@ export function RateHistoryTable({
          * rather than a width comparison, because `documentElement.scrollWidth` reported the
          * overflow while `document.body.scrollWidth` did not.
          */
-        <div className="relative overflow-x-auto">
-          <table className="w-full text-small tabular">
-            <caption className="sr-only">
-              {face.label} rate changes over the last {days} days, {face.unit}, newest
-              first.
-            </caption>
-            <thead>
-              <tr className="border-b border-line text-muted">
-                <th scope="col" className="py-2 text-left font-medium">
-                  Date
-                </th>
-                <th scope="col" className="py-2 text-right font-medium">
-                  Rate
-                </th>
-                <th scope="col" className="py-2 text-right font-medium">
-                  Change
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {face.rows.map((row) => (
-                <tr key={row.at} className="border-b border-line last:border-0">
-                  <th
-                    scope="row"
-                    className="py-2 pr-4 text-left font-normal whitespace-nowrap text-ink"
-                  >
-                    <time dateTime={row.at}>{formatShopDateTime(row.at)}</time>
-                  </th>
-                  <td className="py-2 text-right font-medium whitespace-nowrap text-ink">
+        <>
+          {/*
+          ── Two presentations, one data source (brief §14, §22) ──
+
+          The same `face.rows` renders as stacked records on a phone and as a table from
+          `md`. Only one is ever in the DOM's accessibility tree, because `hidden` is
+          `display: none` — so a screen reader is never offered the data twice.
+
+          The table earns its semantics on a wide screen: "Date, 5 Aug 2026, Rate, ₹1,18,420"
+          is exactly what a `<table>` is for. At 320px those same semantics cost a horizontal
+          scroll inside the container, and three columns of `whitespace-nowrap` is not
+          something a 280px column can hold. A record per row reads better there and loses
+          nothing — each one still carries its date, its rate and its change.
+        */}
+          <ul className="flex flex-col md:hidden">
+            {face.rows.map((row) => (
+              <li
+                key={row.at}
+                className="flex items-baseline justify-between gap-4 border-b border-line py-4 last:border-0"
+              >
+                <time dateTime={row.at} className="text-small text-muted">
+                  {formatShopDateTime(row.at)}
+                </time>
+                <span className="flex shrink-0 flex-col items-end gap-1">
+                  <span className="text-body font-medium text-ink num">
                     {formatINR(BigInt(row.rate))}
-                  </td>
-                  <td className="py-2 pl-4 text-right whitespace-nowrap">
+                  </span>
+                  <span className="text-small num">
                     <ChangeCell change={row.change} />
-                  </td>
+                  </span>
+                </span>
+              </li>
+            ))}
+          </ul>
+
+          <div className="relative hidden overflow-x-auto md:block">
+            <table className="w-full text-small tabular">
+              <caption className="sr-only">
+                {face.label} rate changes over the last {days} days, {face.unit}, newest
+                first.
+              </caption>
+              <thead>
+                <tr className="border-b border-line text-muted">
+                  <th scope="col" className="py-2 text-left font-medium">
+                    Date
+                  </th>
+                  <th scope="col" className="py-2 text-right font-medium">
+                    Rate
+                  </th>
+                  <th scope="col" className="py-2 text-right font-medium">
+                    Change
+                  </th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody>
+                {face.rows.map((row) => (
+                  <tr key={row.at} className="border-b border-line last:border-0">
+                    <th
+                      scope="row"
+                      className="py-2 pr-4 text-left font-normal whitespace-nowrap text-ink"
+                    >
+                      <time dateTime={row.at}>{formatShopDateTime(row.at)}</time>
+                    </th>
+                    <td className="py-2 text-right font-medium whitespace-nowrap text-ink">
+                      {formatINR(BigInt(row.rate))}
+                    </td>
+                    <td className="py-2 pl-4 text-right whitespace-nowrap">
+                      <ChangeCell change={row.change} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
       )}
     </div>
   );

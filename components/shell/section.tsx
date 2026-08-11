@@ -21,6 +21,16 @@ export interface SectionProps extends React.HTMLAttributes<HTMLElement> {
   seeAllLabel?: string;
   /** Set false when the section manages its own horizontal padding (e.g. a bleed carousel). */
   contained?: boolean;
+  /**
+   * Render the heading in the display serif.
+   *
+   * Opt-in rather than the default, and it stays that way permanently. `Section` is shared
+   * with twelve admin pages, and the distinction is real rather than a migration shim: the
+   * storefront is editorial and reads in Playfair, the admin is a tool the owner uses
+   * between customers and reads in the UI sans. A serif heading over a bills table would be
+   * costume.
+   */
+  display?: boolean;
 }
 
 export function Section({
@@ -30,6 +40,7 @@ export function Section({
   seeAllHref,
   seeAllLabel = 'See all',
   contained = true,
+  display = false,
   children,
   ...props
 }: SectionProps) {
@@ -44,7 +55,18 @@ export function Section({
             {eyebrow}
           </span>
         )}
-        {heading && <h2 className="text-h2 font-semibold text-ink">{heading}</h2>}
+        {heading && (
+          <h2
+            className={cn(
+              'text-ink',
+              display
+                ? 'font-display text-h1 font-medium'
+                : 'text-h2 font-semibold',
+            )}
+          >
+            {heading}
+          </h2>
+        )}
       </div>
 
       {seeAllHref && (

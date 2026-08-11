@@ -319,10 +319,17 @@ API contracts; or the schema. The enumeration-safe generic error is unchanged an
 - [ ] **15 HeroMedia** — poster-first, video after, reduced-motion aware, never blocks first
       paint. Ships with `videoSrc` optional and unset — the schema has no video column
       (UI_REDESIGN_DEBT-001).
-- [ ] **16 LiveRateCard** — restyle `RateTicker` + `Sparkline`. Rose chart stroke, thin. Units
-      stay visible. Reused by `/` and `/rates`. Do not touch rate maths or the cache window.
-- [ ] **17 Rates page** — range selector 1W/1M/6M/1Y, history chart + table, disclaimer,
-      calculator CTA.
+- [x] **16 LiveRateCard** — **Stage 4B.** New shared component replacing `RateTicker`'s
+      presentation; used by `/` and `/rates`. All three metals at once with 22K as the anchor
+      (D-069), rose sparkline, units always visible, `.num` throughout. Rate maths, the cache
+      window and the true-rate provenance are untouched.
+      - [x] `rate-ticker.tsx` and `rate-card.tsx` deleted — §19's "no duplicate rate cards"
+      - [x] Jitter narrowed to the anchor; screen readers still get the TRUE rate
+      - [x] Refresh control wired to SWR `mutate()` — a real revalidation, not decoration
+- [x] **17 Rates page** — **Stage 4B.** Playfair heading, one `LiveRateCard`, 30-day history
+      with **stacked records on mobile and a table from `md`** (§14), wine calculator CTA.
+      - [!] **Range selector NOT built** — the shop has 3 days of history, so 1W/1M/6M/1Y all
+            return the same points. UI_REDESIGN_DEBT-007, D-070.
 - [ ] **18 Homepage sections** — disclaimer, new arrivals, trust band (wine, restrained, small
       type — not an icon grid).
 - [ ] **19 Product listing** — `ProductCard` re-skin; whole card navigates; 2-up at 390px.

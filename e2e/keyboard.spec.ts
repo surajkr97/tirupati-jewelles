@@ -215,7 +215,7 @@ test.describe('§9.7 — the segmented control follows the radiogroup pattern', 
   /**
    * The unselected options are `tabindex="-1"` ON PURPOSE. A radiogroup takes ONE tab stop
    * and the arrow keys move within it — the roving-tabindex pattern — so a keyboard user
-   * tabbing through the homepage passes the metal switcher in one press instead of three.
+   * tabbing past a metal switcher takes one press instead of three.
    *
    * That is correct, and it is also indistinguishable from "two controls are unreachable"
    * unless something checks the arrow keys actually work. The first version of the reach
@@ -223,7 +223,15 @@ test.describe('§9.7 — the segmented control follows the radiogroup pattern', 
    * reach the group with Tab, then change the selection without touching the mouse.
    */
   test('one tab stop, and the arrow keys move the selection', async ({ page }) => {
-    await page.goto('/');
+    /**
+     * `/rates`, not `/`.
+     *
+     * This test is about the `SegmentedControl` primitive's radiogroup keyboard contract,
+     * not about the homepage. Stage 4B removed the homepage's metal switcher — all three
+     * rates are on screen at once now — but the control itself is unchanged and still used
+     * by the rate-history selector here, the calculator and the catalogue filters.
+     */
+    await page.goto('/rates');
     await page.waitForTimeout(1500);
 
     const group = page.getByRole('radiogroup', { name: /metal/i });

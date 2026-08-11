@@ -40,15 +40,32 @@ import { clientEnv } from '@/lib/env';
 import { isActiveHref, STOREFRONT_PRIMARY, STOREFRONT_SECONDARY } from '@/lib/navigation';
 import { cn } from '@/lib/utils/cn';
 
+/**
+ * Routes whose first section is a wine hero, so the header can start transparent over it.
+ *
+ * The header is a client component that already reads the pathname; the `(app)` layout is a
+ * server component wrapping every storefront route and cannot know which one is rendering.
+ * Putting the list here keeps the decision in the one place that has the information.
+ */
+const OVERLAY_ROUTES = new Set(['/']);
+
 export interface AppHeaderProps {
-  /** Start transparent over a wine hero and only solidify on scroll. */
+  /**
+   * Force the transparent-over-hero treatment. Normally inferred from the route.
+   *
+   * Stage 2 built this and D-062 deliberately left it switched off: the homepage's hero was
+   * still a photograph from a `MediaSlot`, and cream marks over an arbitrary image is a coin
+   * flip on contrast rather than a treatment. Stage 4A gives `/` a wine hero, so the ground
+   * is now a known colour at 15.51:1 and it is switched on.
+   */
   overlay?: boolean;
   /** The shop's WhatsApp number, read once by the layout (DEBT-050). */
   ownerWhatsApp: string;
 }
 
-export function AppHeader({ overlay = false, ownerWhatsApp }: AppHeaderProps) {
+export function AppHeader({ overlay, ownerWhatsApp }: AppHeaderProps) {
   const pathname = usePathname();
+  const overlayHero = overlay ?? OVERLAY_ROUTES.has(pathname);
   const [scrolled, setScrolled] = useState(false);
   /**
    * The menu is DERIVED from the route it was opened on, not closed by an effect.
@@ -64,7 +81,7 @@ export function AppHeader({ overlay = false, ownerWhatsApp }: AppHeaderProps) {
   const setMenuOpen = (open: boolean) => setMenuOpenedAt(open ? pathname : null);
 
   useEffect(() => {
-    if (!overlay) return;
+    if (!overlayHero) return;
 
     const onScroll = () => setScrolled(window.scrollY > 8);
     onScroll(); // a refresh can restore mid-page scroll before any event fires
@@ -73,9 +90,9 @@ export function AppHeader({ overlay = false, ownerWhatsApp }: AppHeaderProps) {
     // every frame of a scroll and must never be able to block it.
     window.addEventListener('scroll', onScroll, { passive: true });
     return () => window.removeEventListener('scroll', onScroll);
-  }, [overlay]);
+  }, [overlayHero]);
 
-  const onWine = overlay && !scrolled;
+  const onWine = overlayHero && !scrolled;
 
   const whatsAppHref = buildWhatsAppUrl(
     ownerWhatsApp,
