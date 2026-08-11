@@ -47,7 +47,7 @@ export function TotalBar({
             {itemCount} {itemCount === 1 ? 'item' : 'items'}
           </span>
           <span
-            className="block truncate text-h1 font-semibold text-ink tabular"
+            className="block truncate text-h1 font-semibold text-ink num"
             data-testid="grand-total"
           >
             {formatINR(displayed)}

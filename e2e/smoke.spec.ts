@@ -12,10 +12,19 @@ import { ADMIN_STATE } from './admin-state';
 test('homepage renders the rate ticker', async ({ page }) => {
   await page.goto('/');
 
-  // Phase 4 replaced the "Coming soon" placeholder. §4.5: the ticker is the reason
-  // people visit, so its presence is the homepage's smoke test.
-  await expect(page.getByRole('radiogroup', { name: 'Metal and purity' })).toBeVisible();
-  await expect(page.getByRole('radio', { name: 'Gold 22K' })).toBeChecked();
+  /**
+   * §4.5: the rate card is the reason people visit, so its presence is the homepage's
+   * smoke test.
+   *
+   * Stage 4B removed the metal toggle this used to assert on — all three rates are now on
+   * screen at once, so there is no selection to make. Asserting the three labels is a
+   * stronger check than asserting a radiogroup was: it proves the information is present,
+   * not merely that a control to reach it exists.
+   */
+  await expect(page.getByTestId('rate-ticker')).toBeVisible();
+  for (const label of ['Gold 22K (916)', 'Gold 18K', 'Silver 999']) {
+    await expect(page.getByText(label, { exact: true })).toBeVisible();
+  }
 
   // MASTER-SPEC §8 requires this line to be present and readable at all times — it is
   // the mitigation for showing a price that differs from the transaction price.
@@ -27,9 +36,7 @@ test('ticker is above the fold at 375px', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'mobile-375', 'Fold position is a mobile concern');
 
   await page.goto('/');
-  const box = await page
-    .getByRole('radiogroup', { name: 'Metal and purity' })
-    .boundingBox();
+  const box = await page.getByTestId('rate-ticker').boundingBox();
 
   // §4.5: "it does not go below a marketing banner."
   expect(box?.y ?? Infinity).toBeLessThan(667);

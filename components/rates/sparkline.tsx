@@ -12,10 +12,24 @@ export function Sparkline({
   points,
   className,
   rising = true,
+  tone = 'movement',
 }: {
   points: bigint[];
   className?: string;
   rising?: boolean;
+  /**
+   * Draw in the brand accent instead of the up/down semantic colours.
+   *
+   * The line is `aria-hidden` decoration and always sits directly beneath a `RateDelta`
+   * that states the direction three ways — arrow, word and colour — so a rose stroke loses
+   * no information here. Brief §8 asks for exactly that: thin, restrained, rose. Callers
+   * that render a sparkline WITHOUT a delta beside it should leave this off and keep the
+   * semantic colouring.
+   *
+   * `rose` and not `rose-deep`: this is a 1.5px non-text mark on white, where rose measures
+   * 4.13:1 — comfortably past the 3:1 non-text bar it is held to (D-057).
+   */
+  tone?: 'movement' | 'brand';
 }) {
   // Two points is the minimum that makes a line. Anything less renders nothing rather
   // than a misleading flat baseline.
@@ -52,7 +66,9 @@ export function Sparkline({
         vectorEffect="non-scaling-stroke"
         strokeLinecap="round"
         strokeLinejoin="round"
-        className={rising ? 'stroke-up' : 'stroke-down'}
+        className={
+          tone === 'brand' ? 'stroke-rose' : rising ? 'stroke-up' : 'stroke-down'
+        }
       />
     </svg>
   );

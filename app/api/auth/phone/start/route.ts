@@ -76,7 +76,7 @@ export async function POST(request: Request) {
      * CLAIM_ORDER (which is keyed by phone) permanently distinct from this flow.
      */
     const { code } = await issueOtp(user.email, OtpPurpose.ADD_PHONE, Channel.EMAIL);
-    await sendOtp(Channel.EMAIL, user.email, code);
+    await sendOtp(Channel.EMAIL, user.email, code, 'phone');
 
     return json({
       sent: true,

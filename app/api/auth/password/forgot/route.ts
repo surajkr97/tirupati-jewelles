@@ -52,7 +52,7 @@ export const dynamic = 'force-dynamic';
  */
 async function deliver(email: string, code: string): Promise<void> {
   try {
-    await sendOtp(Channel.EMAIL, email, code);
+    await sendOtp(Channel.EMAIL, email, code, 'reset');
   } catch (err) {
     log.error('password/forgot delivery failed', { error: String(err) });
   }

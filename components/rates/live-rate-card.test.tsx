@@ -1,7 +1,10 @@
 /**
  * @vitest-environment jsdom
  *
- * Phase 4 TEST — the ticker's timer lifecycle and the off-switch.
+ * Phase 4 TEST — the rate card's timer lifecycle and the off-switch.
+ * Moved from `rate-ticker.test.tsx` by Stage 4B, which replaced `LiveRateCard` with
+ * `LiveRateCard`. The criteria below are Phase 4's and are unchanged; only the component
+ * under test moved.
  * specs/04-rates-ticker.md §4.3 and the TEST section:
  *
  *   "prefers-reduced-motion → no jitter at all, static true rate."
@@ -36,13 +39,32 @@ const { clientEnv } = vi.hoisted(() => ({
 
 vi.mock('@/lib/env', () => ({ clientEnv }));
 
+/**
+ * `next/link` is stubbed for the same reason `swr` is: it is transport, not the subject.
+ *
+ * `LiveRateCard` renders two Links for its actions, and Next schedules prefetch work on a
+ * timer for each. `vi.getTimerCount()` counts every fake timer, not just intervals, so with
+ * real Links the "no interval when the flag is off" assertion measured 2 and the
+ * "paused while hidden" assertion never reached 0 — both reporting a jitter timer that did
+ * not exist. A plain anchor keeps the timer count meaning what the tests say it means.
+ */
+vi.mock('next/link', () => ({
+  default: ({ children, ...props }: { children: React.ReactNode; href: string }) => (
+    <a {...props}>{children}</a>
+  ),
+}));
+
 vi.mock('swr', () => ({
+  // `mutate` and `isValidating` are read by the refresh control; the stub has to supply
+  // them or the component throws before any timer assertion can run.
   default: (_key: string, _fetcher: unknown, options?: { fallbackData?: unknown }) => ({
+    mutate: () => Promise.resolve(undefined),
+    isValidating: false,
     data: options?.fallbackData,
   }),
 }));
 
-import { RateTicker, type SerialisedRates } from '@/components/rates/rate-ticker';
+import { LiveRateCard, type SerialisedRates } from '@/components/rates/live-rate-card';
 import { JITTER_CLAMP } from '@/lib/ticker-jitter';
 
 const GOLD_22_PER_10G = 11_842_000n; // ₹1,18,420
@@ -124,7 +146,7 @@ afterEach(() => {
 describe('the off-switch — NEXT_PUBLIC_TICKER_JITTER', () => {
   it('holds the value constant for 10s when the flag is false', async () => {
     clientEnv.NEXT_PUBLIC_TICKER_JITTER = false;
-    render(<RateTicker initialRates={RATES} />);
+    render(<LiveRateCard initialRates={RATES} />);
 
     const seen = await runFor(10);
 
@@ -136,14 +158,14 @@ describe('the off-switch — NEXT_PUBLIC_TICKER_JITTER', () => {
 
   it('creates no interval at all when the flag is false', async () => {
     clientEnv.NEXT_PUBLIC_TICKER_JITTER = false;
-    render(<RateTicker initialRates={RATES} />);
+    render(<LiveRateCard initialRates={RATES} />);
 
     // Not merely "the number did not change" — nothing is scheduled to change it.
     expect(vi.getTimerCount()).toBe(0);
   });
 
   it('the positive control: with the flag on, the value does move', async () => {
-    render(<RateTicker initialRates={RATES} />);
+    render(<LiveRateCard initialRates={RATES} />);
 
     const seen = await runFor(10);
 
@@ -155,7 +177,7 @@ describe('the off-switch — NEXT_PUBLIC_TICKER_JITTER', () => {
 describe('prefers-reduced-motion', () => {
   it('produces no jitter even with the flag on', async () => {
     stubReducedMotion(true);
-    render(<RateTicker initialRates={RATES} />);
+    render(<LiveRateCard initialRates={RATES} />);
 
     const seen = await runFor(10);
 
@@ -170,7 +192,7 @@ describe('prefers-reduced-motion', () => {
 
 describe('the jitter loop', () => {
   it('never leaves the ±2% band over 300 ticks in a real render', async () => {
-    render(<RateTicker initialRates={RATES} />);
+    render(<LiveRateCard initialRates={RATES} />);
 
     const seen = await runFor(300);
 
@@ -185,7 +207,7 @@ describe('the jitter loop', () => {
   });
 
   it('pauses while the tab is hidden and resumes when it returns', async () => {
-    render(<RateTicker initialRates={RATES} />);
+    render(<LiveRateCard initialRates={RATES} />);
     expect(vi.getTimerCount()).toBeGreaterThan(0);
 
     act(() => setTabHidden(true));
@@ -203,26 +225,35 @@ describe('the jitter loop', () => {
     expect(new Set(afterReturn).size).toBeGreaterThan(1);
   });
 
-  it('switching metal shows the new truth, not a value drifted from the old one', async () => {
-    render(<RateTicker initialRates={RATES} />);
+  /**
+   * Phase 4's "switching metal shows the new truth, not a value drifted from the old one"
+   * is retired here, not ported.
+   *
+   * It guarded a real bug — the walk carrying its drifted value across a metal change — but
+   * Stage 4B removed the segmented control: all three rates are on screen at once, so there
+   * is no switch to make and no state to carry. The assertion below is what survives of it,
+   * and it guards the case that CAN still happen: a background refetch landing on a new
+   * true rate must reset the walk rather than drift on from the old one.
+   */
+  it('a new true rate resets the walk instead of drifting from the old one', async () => {
+    const { rerender } = render(<LiveRateCard initialRates={RATES} />);
 
-    // Let the gold value wander first, so a leaked previous value would be visible.
+    // Let the value wander first, so a leaked previous value would be visible.
     await runFor(20);
 
+    const moved = { ...RATES, gold22: { ...RATES.gold22, display: '15890000' } };
     await act(async () => {
-      screen.getByRole('radio', { name: 'Silver 999' }).click();
+      rerender(<LiveRateCard initialRates={moved} />);
     });
 
-    // Silver's true rate is ₹1,58,900/kg. Anything near gold's ₹1,18,420 would mean the
-    // walk carried across the switch.
+    // ₹1,58,900. Anything near the old ₹1,18,420 would mean the walk survived the update.
     expect(screen.getByTestId('ticker-value')).toHaveTextContent('₹1,58,900');
-    expect(screen.getByTestId('ticker-unit')).toHaveTextContent('per 1 kilogram');
   });
 });
 
 describe('timer leaks — §4.3 and the memory criterion', () => {
   it('clears every timer on unmount', async () => {
-    const { unmount } = render(<RateTicker initialRates={RATES} />);
+    const { unmount } = render(<LiveRateCard initialRates={RATES} />);
 
     await runFor(3); // let the pulse timeout exist alongside the interval
     expect(vi.getTimerCount()).toBeGreaterThan(0);
@@ -234,7 +265,7 @@ describe('timer leaks — §4.3 and the memory criterion', () => {
 
   it('does not accumulate timers across 100 mount/unmount cycles', async () => {
     for (let i = 0; i < 100; i += 1) {
-      const { unmount } = render(<RateTicker initialRates={RATES} />);
+      const { unmount } = render(<LiveRateCard initialRates={RATES} />);
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1000);
       });
@@ -249,7 +280,7 @@ describe('timer leaks — §4.3 and the memory criterion', () => {
 
 describe('the disclaimer — MASTER-SPEC §8', () => {
   it('is always present', () => {
-    render(<RateTicker initialRates={RATES} />);
+    render(<LiveRateCard initialRates={RATES} />);
 
     expect(screen.getByText(/Indicative rate/)).toBeInTheDocument();
     expect(screen.getByText(/Final price confirmed in store/)).toBeInTheDocument();
@@ -257,13 +288,13 @@ describe('the disclaimer — MASTER-SPEC §8', () => {
 
   it('survives the off-switch — it is not part of the animation', () => {
     clientEnv.NEXT_PUBLIC_TICKER_JITTER = false;
-    render(<RateTicker initialRates={RATES} />);
+    render(<LiveRateCard initialRates={RATES} />);
 
     expect(screen.getByText(/Final price confirmed in store/)).toBeInTheDocument();
   });
 
   it('renders the timestamp in the shop timezone, not the runtime one', () => {
-    render(<RateTicker initialRates={RATES} />);
+    render(<LiveRateCard initialRates={RATES} />);
 
     // 06:12 UTC is 11:42 AM IST — the exact example §4.4 gives. Pinning the zone is what
     // keeps the SSR string and the hydrated string identical.

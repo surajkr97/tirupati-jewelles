@@ -19,7 +19,7 @@ import Link from 'next/link';
 import { redirect } from 'next/navigation';
 
 import { Section } from '@/components/shell';
-import { Button, Card, EmptyState } from '@/components/ui';
+import { Badge, Button, Card, EmptyState } from '@/components/ui';
 import { getCurrentUser } from '@/lib/auth/guard';
 import { formatShopDate } from '@/lib/datetime';
 import { db } from '@/lib/db';
@@ -58,7 +58,7 @@ export default async function OrdersPage() {
   return (
     <Section className="pt-8 md:pt-12">
       <div className="flex flex-col gap-6">
-        <h1 className="text-h1 font-semibold tracking-tight text-ink md:text-h1-lg">
+        <h1 className="font-display text-h1 font-medium tracking-tight text-ink md:text-h1-lg">
           Your orders
         </h1>
 
@@ -128,7 +128,7 @@ export default async function OrdersPage() {
                 <Link href={`/account/orders/${order.id}`} className="block">
                   <Card className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                     <div className="flex flex-col gap-1">
-                      <p className="text-body font-semibold text-ink tabular">
+                      <p className="text-body font-semibold text-ink num">
                         {order.orderNo}
                       </p>
                       <p className="text-small text-muted">
@@ -137,12 +137,25 @@ export default async function OrdersPage() {
                         </time>{' '}
                         · {order._count.items}{' '}
                         {order._count.items === 1 ? 'item' : 'items'}
-                        {order.voidedAt && ' · cancelled'}
                       </p>
+
+                      {/*
+                        Status from real columns only — brief §18's "do not invent order
+                        actions", applied to state as well. This shop records exactly two
+                        facts about an order after it is written: whether it was voided, and
+                        whether a bill PDF exists. There is no fulfilment pipeline, so there
+                        is no "shipped" or "delivered" to show, and inventing one would be a
+                        promise the shop never made.
+                      */}
+                      {order.voidedAt && (
+                        <span className="mt-1 w-fit">
+                          <Badge tone="down">Cancelled</Badge>
+                        </span>
+                      )}
                     </div>
 
                     <div className="flex items-center gap-4">
-                      <p className="text-h3 font-semibold text-ink tabular">
+                      <p className="text-h3 font-semibold text-ink num">
                         {formatINR(order.grandTotal)}
                       </p>
                       {order.billPdfKey && (

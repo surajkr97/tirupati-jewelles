@@ -15,6 +15,7 @@
 import { Channel } from '@prisma/client';
 
 import { env } from '@/lib/env';
+import { renderOtpEmail, type OtpPurpose } from '@/lib/notify/email-template';
 
 export interface SendResult {
   delivered: boolean;
@@ -22,7 +23,7 @@ export interface SendResult {
 }
 
 export interface Notifier {
-  send(to: string, message: string, subject?: string): Promise<SendResult>;
+  send(to: string, message: string, subject?: string, html?: string): Promise<SendResult>;
 }
 
 const isProduction = env.NODE_ENV === 'production';
@@ -35,6 +36,8 @@ const isProduction = env.NODE_ENV === 'production';
 class ConsoleNotifier implements Notifier {
   constructor(private readonly channel: string) {}
 
+  // `html` is accepted and ignored: the dev console prints the code, and printing a
+  // hundred lines of table markup around it would bury the thing you are here to read.
   async send(to: string, message: string, subject?: string): Promise<SendResult> {
     console.info(
       [
@@ -55,7 +58,12 @@ class ConsoleNotifier implements Notifier {
 }
 
 class ResendNotifier implements Notifier {
-  async send(to: string, message: string, subject?: string): Promise<SendResult> {
+  async send(
+    to: string,
+    message: string,
+    subject?: string,
+    html?: string,
+  ): Promise<SendResult> {
     if (!env.RESEND_API_KEY) {
       throw new Error('RESEND_API_KEY is not set — cannot send email.');
     }
@@ -68,7 +76,11 @@ class ResendNotifier implements Notifier {
       from: env.EMAIL_FROM,
       to,
       subject: subject ?? 'Tirupati Jewelles',
+      // Both parts, always. `text` is not a fallback nicety: it is what plain-text clients
+      // render and what spam filters score, and an HTML-only transactional mail is a
+      // deliverability problem before it is an accessibility one.
       text: message,
+      ...(html ? { html } : {}),
     });
 
     // The SDK reports failures in the response rather than throwing, so an unchecked
@@ -107,16 +119,23 @@ export function notifierFor(channel: Channel): Notifier {
   return channel === Channel.SMS ? smsNotifier : emailNotifier;
 }
 
-/** Delivery copy for a one-time passcode. */
+/**
+ * Delivery copy for a one-time passcode.
+ *
+ * `purpose` is optional and defaults to `signup`, so the three existing call sites keep
+ * working unchanged; each now passes its own so the mail says what it is for. Nothing about
+ * the OTP itself moved — generation, hashing, TTL, attempt limits and rate limiting all
+ * live in `lib/auth/otp.ts` and are untouched.
+ *
+ * The expiry sentence is built from `OTP_TTL_SECONDS` rather than typed, so the copy cannot
+ * claim five minutes after someone changes the constant to ten.
+ */
 export async function sendOtp(
   channel: Channel,
   to: string,
   code: string,
+  purpose: OtpPurpose = 'signup',
 ): Promise<SendResult> {
-  const message =
-    `${code} is your Tirupati Jewelles verification code.\n\n` +
-    `It expires in 5 minutes. Do not share it with anyone.\n\n` +
-    `If you did not request this, you can ignore this message.`;
-
-  return notifierFor(channel).send(to, message, `${code} is your verification code`);
+  const { subject, html, text } = renderOtpEmail(code, purpose);
+  return notifierFor(channel).send(to, text, subject, html);
 }

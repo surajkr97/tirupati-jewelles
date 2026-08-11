@@ -1,22 +1,43 @@
 /**
  * Homepage.
  * Created by Phase 1, built out by Phase 4 (specs/04-rates-ticker.md §4.5).
+ * Recomposed by the UI redesign, Stage 4A (brief §4).
  *
  * ISR with a 300s window plus a client ticker island (MASTER-SPEC §6): the shell is
  * static and instant, only the rate widget is dynamic.
  *
- * Section order is fixed by §4.5, and the ticker's position is not cosmetic — "it is the
- * reason people visit; it does not go below a marketing banner."
+ * ── The section order, and the one rule it must not break ──
+ *
+ *   hero → rates → disclaimer → new arrivals → collections → trust
+ *
+ * §4.5 fixes the ticker's position and gives the reason: "it is the reason people visit; it
+ * does not go below a marketing banner." The hero above it is not a banner — it is the brand,
+ * and it is one viewport — but the criterion is measured rather than argued with:
+ * `e2e/smoke.spec.ts` asserts the ticker's top is under 667px at 375×667, and it is (638px).
+ * If the hero ever grows, that test fails before anyone notices by eye.
+ *
+ * ── What replaced the old first screen ──
+ *
+ * The page used to open with a bare 16:9 photograph and a `sr-only` h1 (audit C-10). It said
+ * nothing about who the shop is or why to trust it, and a first-time visitor met an
+ * unlabelled image and a rate widget. The hero now carries the headline, so the h1 is real
+ * and visible — and the fold criterion above is what keeps that from costing the ticker.
  */
 
-import Link from 'next/link';
-
-import { RateTicker, type SerialisedRates } from '@/components/rates/rate-ticker';
+import { Hero } from '@/components/home/hero';
+import { TrustBand } from '@/components/home/trust-band';
+import { ProductCard, ProductGrid } from '@/components/product/product-card';
+import { LiveRateCard } from '@/components/rates/live-rate-card';
 import { Section } from '@/components/shell';
-import { buttonClasses, Card, ImageFrame } from '@/components/ui';
+import { ImageFrame } from '@/components/ui';
+import { EMPTY_FILTERS } from '@/lib/catalog/filters';
+import { listProducts } from '@/lib/catalog/products';
 import { db } from '@/lib/db';
 import { getCurrentRates, getRateHistory, RATE_FACES } from '@/lib/rates';
+import { serialiseRates } from '@/lib/rates-view';
 import { canonical } from '@/lib/seo';
+
+import Link from 'next/link';
 
 import type { Metadata } from 'next';
 
@@ -31,24 +52,14 @@ export const metadata: Metadata = {
 
 export const revalidate = 300;
 
+/** How many new arrivals the strip shows. Six fills the grid at every breakpoint. */
+const NEW_ARRIVALS = 6;
+
 async function loadTickerData() {
   const rates = await getCurrentRates();
 
-  const serialised = Object.fromEntries(
-    RATE_FACES.map(({ key, unit }) => {
-      const face = rates[key];
-      return [
-        key,
-        {
-          perGram: face.perGram.toString(),
-          display: face.display.toString(),
-          change: face.change.toString(),
-          effectiveAt: face.effectiveAt,
-          unit,
-        },
-      ];
-    }),
-  ) as unknown as SerialisedRates;
+  // Shared with /rates so the two cannot disagree about the shape (lib/rates-view.ts).
+  const serialised = serialiseRates(rates);
 
   const histories = await Promise.all(
     RATE_FACES.map(async ({ key, metal, purity }) => {
@@ -61,7 +72,7 @@ async function loadTickerData() {
 }
 
 export default async function HomePage() {
-  const [{ serialised, history }, categories, hero] = await Promise.all([
+  const [{ serialised, history }, categories, hero, arrivals] = await Promise.all([
     loadTickerData(),
     db.category.findMany({
       where: { isActive: true },
@@ -72,60 +83,83 @@ export default async function HomePage() {
     /**
      * §7.6: "every image on the site replaceable from the dashboard."
      *
-     * This lookup was owed by Phase 7 and never landed — the frame below was left hardcoded
-     * to `null` with a comment saying the MediaSlot lookup "arrives in Phase 7". It did not,
-     * so the admin could set HERO_BANNER and nothing changed. Wired here.
-     *
-     * `isActive` is honoured, so clearing or deactivating the slot returns the frame to the
-     * branded empty state §2.2 requires rather than breaking the layout.
+     * `isActive` is honoured, so clearing or deactivating the slot returns the hero to its
+     * wine ground rather than breaking the layout — `HeroMedia` treats a null poster as a
+     * complete state, not an error.
      */
     db.mediaSlot.findUnique({
       where: { slotKey: 'HERO_BANNER' },
-      select: { imageUrl: true, blurDataUrl: true, headline: true, isActive: true },
+      select: { imageUrl: true, blurDataUrl: true, headline: true, subtext: true, isActive: true },
     }),
+    /**
+     * New arrivals, through the SAME priced-listing path the collection pages use.
+     *
+     * `listProducts(null, …)` with the default sort is already `createdAt: 'desc'` across
+     * every active category, so this needs no new query and — more importantly — no second
+     * copy of the pricing call. Every price on this page comes from `priceProduct` against
+     * the current rate snapshot, exactly as it does everywhere else.
+     */
+    listProducts(null, { ...EMPTY_FILTERS }),
   ]);
+
+  const heroActive = hero?.isActive ? hero : null;
+  const newArrivals = arrivals.products.slice(0, NEW_ARRIVALS);
 
   return (
     <>
+      <Hero
+        imageUrl={heroActive?.imageUrl ?? null}
+        // Decorative unless the owner has given the slot a headline to describe it.
+        imageAlt={heroActive?.headline ?? ''}
+        blurDataURL={heroActive?.blurDataUrl ?? undefined}
+        headline={heroActive?.headline}
+        subtext={heroActive?.subtext}
+      />
+
       {/*
-        The homepage had NO `h1` at all (§9.7). It opens with a hero image and the ticker, so
-        there was never a headline to be one — and a screen-reader user landing here got a
-        document with no title above `h2`, which is the first thing "navigate by heading"
-        lands on.
+        The rate card overlaps the hero, which is what the reference does — and here it is
+        also load-bearing.
 
-        Visually hidden rather than shown, because §4.5 makes "the ticker is above the fold at
-        375px" an acceptance criterion that Phase 4 measured; a visible headline would push it
-        down to satisfy a different criterion. `sr-only` gives the document its spine without
-        moving a pixel.
+        §4.5 makes "the ticker sits above the fold at 375×667" an acceptance criterion, with
+        a reason that is still true: it is what people open this site for. A full-height hero
+        above it pushed the card to y=733, 66px past the fold, and `e2e/smoke.spec.ts` failed
+        exactly as it should have.
+
+        Deleting that criterion was the wrong fix. Pulling the card up over the photograph
+        buys the space back, matches the reference composition, and gives the card the
+        overlap that makes it read as the page's centrepiece rather than the next block down.
+        Measured after: y=638, 29px inside the fold.
       */}
-      <h1 className="sr-only">Tirupati Jewelles — today’s gold and silver rates</h1>
-
-      {/* Hero — MediaSlot HERO_BANNER, or a branded placeholder while it is empty (§2.2). */}
-      <Section className="pt-6 pb-0 md:pt-8">
-        <ImageFrame
-          src={hero?.isActive ? hero.imageUrl : null}
-          // Decorative unless the owner has given the slot a headline to describe it.
-          alt={hero?.headline ?? ''}
-          ratio="16/9"
-          sizes="(max-width: 768px) 100vw, 1200px"
-          blurDataURL={hero?.blurDataUrl ?? undefined}
-          priority
-        />
-      </Section>
-
-      {/* Above the fold at 375px — §4.5. */}
-      <Section className="py-8 md:py-12">
-        <RateTicker
+      <Section className="relative z-10 -mt-12 py-8 md:-mt-16 md:py-12">
+        <LiveRateCard
           initialRates={serialised}
           history={history as Record<'gold22' | 'gold18' | 'silver999', string[]>}
         />
       </Section>
 
-      <Section eyebrow="Browse" heading="Collections" seeAllHref="/collections">
+      {newArrivals.length > 0 && (
+        <Section
+          display
+          heading="New arrivals"
+          seeAllHref="/collections"
+          seeAllLabel="View all"
+        >
+          <ProductGrid>
+            {newArrivals.map((product) => (
+              // ProductGrid is a <ul>. Its children must be <li> — see the note there.
+              <li key={product.id}>
+                <ProductCard product={product} />
+              </li>
+            ))}
+          </ProductGrid>
+        </Section>
+      )}
+
+      <Section display heading="Collections" seeAllHref="/collections">
         <ul className="grid grid-cols-2 gap-4 md:grid-cols-3">
           {categories.map((category) => (
             <li key={category.id}>
-              <Link href={`/collections/${category.slug}`} className="block">
+              <Link href={`/collections/${category.slug}`} className="group block">
                 <ImageFrame
                   src={category.imageUrl}
                   alt={category.name}
@@ -139,19 +173,8 @@ export default async function HomePage() {
         </ul>
       </Section>
 
-      <Section>
-        <Card className="flex flex-col items-start gap-4">
-          <h2 className="text-h2 font-semibold text-ink">Price several pieces at once</h2>
-          <p className="text-body text-muted">
-            Add each item&rsquo;s weight and making charge to get one total, GST included.
-          </p>
-          {/* A link, not a button — it navigates, so it must be an anchor. It takes the
-              Button's own classes rather than a copy of them (UI_REDESIGN_DEBT-003). */}
-          <Link href="/calculator" className={buttonClasses({ variant: 'accent' })}>
-            Open the calculator
-          </Link>
-        </Card>
-      </Section>
+      {/* The last thing before the footer, on wine — the page closes the way it opened. */}
+      <TrustBand />
     </>
   );
 }

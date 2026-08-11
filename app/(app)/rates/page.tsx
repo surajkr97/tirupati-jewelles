@@ -13,16 +13,20 @@
  */
 import type { Metadata } from 'next';
 
-import { RateCard } from '@/components/rates/rate-card';
+import { LiveRateCard } from '@/components/rates/live-rate-card';
 import {
   RateHistoryTable,
   type HistoryFace,
   type HistoryRow,
 } from '@/components/rates/rate-history-table';
 import { Section } from '@/components/shell';
+import { buttonClasses } from '@/components/ui';
+import Link from 'next/link';
 import { formatShopDateTime, hasRealTimestamp } from '@/lib/datetime';
 import { getCurrentRates, getRateHistory, RATE_FACES } from '@/lib/rates';
+import { serialiseRates } from '@/lib/rates-view';
 import { canonical } from '@/lib/seo';
+import { cn } from '@/lib/utils/cn';
 
 export const revalidate = 300;
 
@@ -60,6 +64,7 @@ function toHistoryRows(points: { at: string; rate: bigint }[]): HistoryRow[] {
 
 export default async function RatesPage() {
   const rates = await getCurrentRates();
+  const serialisedRates = serialiseRates(rates);
 
   const faces = await Promise.all(
     RATE_FACES.map(async ({ key, metal, purity, label, unit }) => {
@@ -87,6 +92,17 @@ export default async function RatesPage() {
     .sort()
     .at(-1);
 
+  /**
+   * The anchor's sparkline points, in the shape `LiveRateCard` reads.
+   *
+   * The page already fetched these for the cards it used to render one-per-metal; passing
+   * them here means the sparkline is drawn from the same 7-day window the homepage uses,
+   * with no extra query.
+   */
+  const sparklines = Object.fromEntries(
+    faces.map(({ key, points }) => [key, points.map((p) => p.toString())]),
+  ) as Record<'gold22' | 'gold18' | 'silver999', string[]>;
+
   const historyFaces: HistoryFace[] = faces.map(({ key, label, unit, rows }) => ({
     key,
     label,
@@ -98,7 +114,8 @@ export default async function RatesPage() {
     <>
       <Section className="pt-8 pb-0 md:pt-12">
         <div className="flex flex-col gap-2">
-          <h1 className="text-h1 font-semibold tracking-tight text-ink md:text-h1-lg">
+          {/* Editorial serif, matching the storefront's other page headings (Stage 4A). */}
+          <h1 className="font-display text-h1 font-medium tracking-tight text-ink md:text-h1-lg">
             Today&rsquo;s rates
           </h1>
           {/* Prominent, not a footnote — §4.6 asks for exactly this line. */}
@@ -117,25 +134,51 @@ export default async function RatesPage() {
         </div>
       </Section>
 
-      {/* Stacked on mobile — §4.6. Three across only once there is room for it. */}
+      {/*
+        One card, not three.
+
+        §4.6 asked for three cards stacked on mobile, and Phase 4 delivered exactly that.
+        The redesign replaces them with the same `LiveRateCard` the homepage uses: brief §5
+        wants a single anchor rate that reads in one second, and three equal cards give three
+        equal anchors and therefore none. `showHistoryLink` is off because this IS the
+        history page — brief §10's "no buttons that do nothing".
+
+        `LiveRateCard` carries its own disclaimer, which is what §4.6 requires of this page.
+        The jitter is switched off here by the same rule as before: MASTER-SPEC §8 scopes the
+        fluctuation to the homepage widget, and this is the page a customer opens to check a
+        figure before walking into the shop. See the note in `live-rate-card.tsx`.
+      */}
       <Section className="py-8 md:py-12">
-        <div className="grid gap-4 md:grid-cols-3">
-          {faces.map(({ key, label, unit, face, points }) => (
-            <RateCard
-              key={key}
-              label={label}
-              display={face.display}
-              unit={unit}
-              change={face.change}
-              effectiveAt={face.effectiveAt}
-              points={points}
-            />
-          ))}
-        </div>
+        <LiveRateCard
+          initialRates={serialisedRates}
+          history={sparklines}
+          showHistoryLink={false}
+          // The page's h1 already says this; see the prop's note.
+          heading={null}
+        />
       </Section>
 
-      <Section eyebrow="History" heading={`Last ${HISTORY_DAYS} days`}>
+      <Section display eyebrow="History" heading={`Last ${HISTORY_DAYS} days`}>
         <RateHistoryTable faces={historyFaces} days={HISTORY_DAYS} />
+      </Section>
+
+      {/* The page's one outward action. §11 puts the calculator CTA last, and it is the
+          thing a customer who has just read a rate actually wants next. */}
+      <Section className="pb-16">
+        <div className="surface-wine flex flex-col items-start gap-4 rounded-card bg-wine p-6 text-cream md:flex-row md:items-center md:justify-between md:p-8">
+          <div className="flex flex-col gap-1">
+            <p className="font-display text-h2 font-medium">Price a piece at this rate</p>
+            <p className="text-body text-cream/70">
+              Add weight and making charge for an itemised estimate.
+            </p>
+          </div>
+          <Link
+            href="/calculator"
+            className={cn(buttonClasses({ variant: 'onWine' }), 'shrink-0')}
+          >
+            Open the calculator
+          </Link>
+        </div>
       </Section>
     </>
   );

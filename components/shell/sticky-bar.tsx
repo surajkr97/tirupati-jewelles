@@ -132,7 +132,14 @@ export function StickyBar({
         The measured height still comes from the OUTER element, so it continues to include
         the reserved nav band and the layout's footer clearance is unaffected.
       */}
-      <div className="pointer-events-auto border-t border-line bg-cream/90 backdrop-blur-md">
+      {/*
+        Opaque, for the same reason `BottomNav` is (Stage 4E).
+
+        `cream/90` over the wine footer composites to #E7E0E0, where `muted` measures
+        4.02:1 — below AA, on the bar carrying the total. It only appeared at `tablet-768`,
+        where the bottom nav is hidden and this bar is the thing sitting over the footer.
+      */}
+      <div className="pointer-events-auto border-t border-line bg-cream">
         <div className="mx-auto flex w-full max-w-[1200px] items-center gap-4 px-[20px] py-4 md:px-[40px]">
           {children}
         </div>

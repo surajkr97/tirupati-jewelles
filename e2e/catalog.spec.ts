@@ -458,13 +458,20 @@ test.describe('§6 DESIGN and §6.5 images', () => {
   test('every image container has a fixed aspect ratio — no CLS', async ({ page }) => {
     await page.goto('/collections/rings');
 
-    // §6.5: "Fixed aspect ratios on every image container — no CLS." Asserted as computed
-    // style, so a container that lost its ratio fails here rather than in a Lighthouse run.
-    // The image frame is the element carrying the ratio; a card's text block sits beside
-    // it and legitimately has `auto`.
+    /**
+     * §6.5: "Fixed aspect ratios on every image container — no CLS." Asserted as computed
+     * style, so a container that lost its ratio fails here rather than in a Lighthouse run.
+     *
+     * Located by `[data-image-frame]`, the seam `ImageFrame` publishes for exactly this,
+     * rather than by `> div:first-child`. Stage 4C wrapped the frame in an `overflow-hidden`
+     * box so the hover push-in crops instead of resizing the card — a positional selector
+     * then measured the wrapper (`auto`) and reported a CLS regression that did not exist.
+     * The frame's own comment says a class selector would be "quietly brittle"; a positional
+     * one is worse.
+     */
     const ratios = await page.evaluate(() =>
       [
-        ...document.querySelectorAll('[data-testid="product-card"] > div:first-child'),
+        ...document.querySelectorAll('[data-testid="product-card"] [data-image-frame]'),
       ].map((el) => getComputedStyle(el).aspectRatio),
     );
 

@@ -1989,3 +1989,231 @@ This is the right layer for the rule because both callers read it: the post-auth
 redirect in the three forms, and the signed-in bounce in the two pages. Putting it in either
 one would have left the other looping. It is also correct on its own terms: someone who has
 just finished authenticating has no business being handed a sign-in form.
+
+---
+
+## D-069 — the rate card shows all three metals; the metal toggle is gone
+
+Phase 4's ticker showed ONE metal behind a segmented control. `LiveRateCard` shows all
+three, with 22K as the anchor — brief §5's hierarchy and the reference's composition.
+
+It is strictly more information. The two secondary rates previously required an interaction
+to see, so a customer comparing gold against silver had to toggle twice and hold the first
+number in their head.
+
+### What the removal cost, and what it did not
+
+Two tests guarded the control and are retired rather than patched, because the behaviour they
+guarded cannot occur any more:
+
+- *"switching metal shows the new truth, not a value drifted from the old one"* — there is no
+  switch. **Replaced** with the case that CAN still happen: a background refetch landing on a
+  new true rate must reset the jitter walk rather than drift on from the old one.
+- *"switching metal does not shift the layout"* — the CLS criterion survives, measured
+  against the thing that still changes: three seconds of jitter must not resize the card.
+
+`e2e/keyboard.spec.ts`'s radiogroup test now runs against `/rates`. It was never about the
+homepage — it is about the `SegmentedControl` primitive's keyboard contract, and that
+primitive is unchanged and still used by the rate-history selector, the calculator and the
+catalogue filters.
+
+### Jitter now applies to the anchor only
+
+It used to follow the selection, so silver jittered when silver was on screen. Only the 22K
+headline moves now; the secondary rows show the true rate, sitting still. MASTER-SPEC §8
+scopes the fluctuation to "the homepage widget" and this is that widget's headline figure.
+**That is less invented movement than before, not more.**
+
+---
+
+## D-070 — no rate range selector, because the data cannot distinguish the ranges
+
+Brief §11 lists a range selector in the /rates hierarchy and §12 describes 1W/1M/6M/1Y.
+It is not built, and the reason is a measurement rather than a preference.
+
+`/api/rates/history` accepts `days` from 1 to 365, so the endpoint would support it. The
+shop's data would not:
+
+```
+metalRate rows: 16   oldest: 2026-08-04   newest: 2026-08-07   span: 3 days
+gold22 points in the last 7d / 30d / 180d / 365d:  12 / 12 / 12 / 12
+```
+
+Every range returns the same twelve points. A selector over that is four buttons that look
+like they filter and do nothing — brief §10's "no buttons that do nothing" and §25's "do not
+invent data", in one control. §12 is also phrased conditionally: *"if the existing
+implementation supports 1W/1M/6M/1Y, retain it."* It does not.
+
+This is not a dev-database artefact to be waved away, either: **every new shop starts here.**
+A control that is inert for the first months of a shop's life is worse than one that appears
+when it means something.
+
+Recorded as UI_REDESIGN_DEBT-007 with its trigger: build it once a metal has more than ~60
+days of recorded rates, at which point 1M and 6M genuinely differ.
+
+---
+
+## D-071 — the homepage ticker's jitter is kept, and flagged rather than removed
+
+Stage 4B's brief is emphatic — §7 *"do not invent movement"*, §25 *"do not invent price
+movement"*. The homepage rate figure does exactly that, and has since Phase 4.
+
+`lib/ticker-jitter.ts` walks the DISPLAYED price by ±₹101–199 every second, clamped to ±2% of
+the true rate. On a ₹1,50,000 gold rate that is up to ₹3,000 away from the number the shop
+will quote. It is presentation-only — the calculator and every bill read `/api/rates`, and
+`true-rate.test.tsx` proves no calculator module can even import the jitter — and screen
+readers are given the true rate, never the shimmer.
+
+**It is kept, for now, because removing it is a product decision and not a visual one.** It
+was specified by the client ("±₹101–199 per tick, as the client specified"), signed off in
+Phase 4, is covered by a dozen tests, ships with an off-switch
+(`NEXT_PUBLIC_TICKER_JITTER=false`), is disabled under reduced motion, and is disclaimed
+everywhere it appears. Deleting all of that quietly, inside a stage whose remit is "visual
+redesign", would be exactly the silent behaviour change §18 forbids.
+
+### OWNER DECISION, 12 Aug 2026 — keep it for the redesign, revisit after Stage 4
+
+The owner reviewed the conflict and ruled: **the jitter stays unchanged through the
+redesign.** It is existing signed-off behaviour, and removing it is a product decision rather
+than a visual one, to be taken separately once Stage 4 is finished.
+
+Four invariants are conditions of keeping it. Each already holds and each is covered by a
+test, so a regression fails rather than ships:
+
+| Invariant | Enforced by |
+| :--- | :--- |
+| Never affects the stored/actual rate | The walk lives in component state only; `lib/rates.ts` never sees it |
+| Never affects calculator or pricing logic | `true-rate.test.tsx` greps every calculator and pricing module and fails if one so much as *imports* `ticker-jitter` or `live-rate-card` |
+| Accessibility exposes the TRUE rate | `screen-reader.spec.ts` — the shimmer is `aria-hidden`, and an `sr-only` live region announces the true figure, verified against `/api/rates` |
+| The displayed value stays within ±2% | `ticker-jitter.test.ts` over 10,000 ticks, plus a 300-tick assertion in a real render |
+
+Stage 4B narrowed the blast radius without touching the mechanism: the jitter now moves only
+the 22K anchor, so the 18K and silver figures sit still (D-069). Removal remains a one-line
+environment change (`NEXT_PUBLIC_TICKER_JITTER=false`) whenever the owner wants it.
+
+**UI_REDESIGN_DEBT-008** — revisit jitter removal as its own product decision after Stage 4.
+
+---
+
+## D-072 — the product card loses its chrome, and the price moves above the metadata
+
+Two changes to `ProductCard`, both from brief §11/§12.
+
+**No card surface.** A white box behind a product photograph — which is itself usually shot
+on white — adds a border and subtracts contrast. The piece reads better sitting directly on
+the cream page with air around it, which is what "use whitespace and image composition
+instead of floating rounded rectangles" asks for. The hover is a 1.03 push-in cropped by an
+`overflow-hidden` wrapper, so the card never resizes; `motion-reduce` cancels it.
+
+**Price above purity/weight.** Phase 6 ordered it name → purity/weight → price. The price is
+what a shopper scans a grid for, and burying it under the specification made every card read
+the same at a glance.
+
+That wrapper broke `catalog.spec.ts`'s CLS assertion, which located the ratio box by
+`[data-testid="product-card"] > div:first-child` and measured the new wrapper instead. Fixed
+by locating it as `[data-image-frame]` — the seam `ImageFrame` publishes precisely so
+measurement does not depend on position. Its own comment warns that a class selector would be
+"quietly brittle"; a positional one is worse.
+
+---
+
+## D-073 — the calculator's breakdown splits the subtotal, and a test proves it reconciles
+
+Brief §16 asks the summary to separate metal value, making charges, stone charges and GST.
+Phase 5 showed Subtotal → GST → Grand total, which is the arithmetic but not the explanation:
+a customer asking "why does 48 g of gold cost this?" could not see what was metal and what
+was labour.
+
+`calculateTotal` already computes all four **per line** and simply does not roll them up, so
+`lib/calculator/summary.ts` sums the engine's own `LineResult` fields. It performs no
+arithmetic of its own: nothing is recomputed from weights or rates, no rounding happens, no
+percentage is applied.
+
+**Because it is money, the invariant is asserted rather than assumed.** `summary.test.ts`
+checks `metal + making + stone === subtotal` and `subtotal + GST === grandTotal` across
+fractional weights, 0% and 100% making, zero-weight lines, stone-only charges, mixed purities
+and twenty-line totals. If a future engine change adds a component to `subtotal` that this
+does not sum, the test fails instead of the UI quietly showing lines that do not add up.
+
+`ItemCard` and `ItemList` were left structurally alone: §8.1 shares them with the admin bill
+builder, and Stage 4 §1 excludes admin.
+
+---
+
+## D-074 — one transactional email exists, and the brief's other two are not built
+
+An audit of every outbound path found a single template — `sendOtp`, reached from signup,
+password reset and phone confirmation. It was **plain text only**.
+
+The brief describes order and bill emails. **They are not built**, because they would be new
+features rather than restyled ones: MASTER-SPEC §1 sends the bill PDF over **WhatsApp**, and
+no code path emails an order. Inventing an email nobody triggers is inventing a feature.
+
+Password reset is likewise not a link-based flow here — it is the same six-digit code as
+everything else. So it gets its own heading and its own security line, not a "Reset password"
+button pointing at a token URL that does not exist.
+
+### What the redesign added
+
+A branded HTML part alongside the existing text, and a `purpose` so the three call sites read
+correctly: *Verify your account*, *Reset your password*, *Confirm your mobile number*. One
+heading for all three made the reset mail — the one a worried customer reads most carefully —
+the vaguest of them.
+
+Email HTML is not web HTML, and the template is written accordingly: tables not divs, inline
+styles only, no `<style>` block, no class attribute, no webfont (Georgia is named first rather
+than pretending Playfair will load), no CSS custom properties, hex colours written out. The
+palette is imported from `lib/design/tokens.ts` so the mail cannot drift from the site.
+
+`text` is still sent on every message. It is not a fallback nicety — it is what plain-text
+clients render and what spam filters score, and an HTML-only transactional mail is a
+deliverability problem before it is an accessibility one.
+
+**No OTP mechanic moved.** Generation, hashing, TTL, attempt limits, rate limiting, triggers
+and recipients are untouched. The expiry sentence is built from `OTP_TTL_SECONDS` rather than
+typed, so the copy cannot claim five minutes after someone changes the constant.
+
+---
+
+## D-075 — order status is shown from columns that exist, and no others
+
+Brief §18 asks orders to show a status. This shop records exactly two facts about an order
+after it is written: whether it was voided (`voidedAt`) and whether a bill PDF exists
+(`billPdfKey`). There is no fulfilment pipeline — no packing, no dispatch, no delivery —
+because there is no checkout (MASTER-SPEC §1).
+
+So the list shows a "Cancelled" badge when `voidedAt` is set, and nothing otherwise. A
+"Processing" or "Delivered" chip would be a promise the shop never made and cannot keep, and
+§18's "do not invent order actions" applies to state as much as to buttons.
+
+---
+
+## D-076 — fixed navigation chrome is opaque, because the page now has dark sections
+
+Phase 2 gave `BottomNav` and `StickyBar` a frosted treatment — `bg-cream/85` and
+`bg-cream/90` over `backdrop-blur-md`. That was safe while every page was cream from top to
+bottom. Stage 4E made the footer wine and it stopped being safe.
+
+axe found it within one run of the suite:
+
+| Surface | Composite over wine | `muted` | Verdict |
+| :--- | :--- | ---: | :--- |
+| `BottomNav` at `cream/85` | `#DED4D5` | **3.61** | fails AA |
+| `StickyBar` at `cream/90` | `#E7E0E0` | **4.02** | fails AA |
+
+Both are primary chrome — the application's main navigation, and the bar carrying the
+calculator total — so this was AA failing on the two things a customer looks at most.
+
+Raising the alpha clears it: 0.97 measures 4.63. It was rejected anyway. At 0.97 the surface
+is visually opaque, so the `backdrop-blur` behind it renders nothing observable — a
+compositing layer paid for and not seen — and it leaves 0.13 of headroom against a ground
+that could get darker. Opaque measures 4.91 and does not depend on what is scrolling beneath.
+
+**The general rule this establishes:** translucent chrome cannot promise contrast, because
+what passes under it is arbitrary. Any surface that must stay readable regardless of position
+is opaque. The header is the deliberate exception and stays translucent: its solid state uses
+`ink` and `roseDeep`, which measure 13.4 and 4.63 over the same composite, and its
+transparent state is the hero treatment, which is a known wine ground by construction.
+
+The tablet breakpoint is what made `StickyBar` visible as a separate defect — it is the width
+where the bottom nav is hidden and the sticky bar is the thing sitting over the footer.

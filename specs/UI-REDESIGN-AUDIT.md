@@ -364,6 +364,25 @@ link rather than from the auth screens, so nobody sees the two treatments side b
 `(auth)` was considered and rejected: it is a storefront destination and the shell it has is
 the right one.
 
+**UI_REDESIGN_DEBT-007 — the /rates range selector waits on data, not on code.**
+*Problem:* brief §11/§12 ask for a 1W/1M/6M/1Y selector. `/api/rates/history` already accepts
+`days` 1–365, so the code side is free — but the shop has **16 rate rows spanning 3 days**, and
+every range returns the identical twelve points. Four buttons that appear to filter and do not.
+*Affected:* `app/(app)/rates/page.tsx`, `components/rates/rate-history-table.tsx`.
+*Severity:* LOW — nothing is broken; a control is absent.
+*Recommended fix:* build it when a metal has more than ~60 days of recorded rates, so 1M and
+6M genuinely differ. Until then the fixed 30-day window says something true. D-070.
+
+**UI_REDESIGN_DEBT-008 — revisit the homepage ticker jitter after Stage 4.**
+*Problem:* the homepage rate figure walks ±₹101–199/second, clamped to ±2% of the true rate —
+up to ₹3,000 on a ₹1,50,000 gold rate. Stage 4B's brief forbids invented price movement; Phase
+4 specified it at the client's request. Both cannot be right.
+*Affected:* `lib/ticker-jitter.ts`, `components/rates/live-rate-card.tsx`.
+*Severity:* MEDIUM — presentation only, disclaimed, off-switchable, and fenced by four tested
+invariants (D-071). Not a defect; an open product question.
+*Recommended fix:* none during the redesign — **owner ruled on 12 Aug to keep it and revisit
+after Stage 4.** Removal is `NEXT_PUBLIC_TICKER_JITTER=false` plus deleting the walk. D-071.
+
 **UI_REDESIGN_DEBT-005 — client-side errors are not reported.**
 *Problem:* `app/error.tsx` renders a recovery UI but captures nothing. A SERVER render error
 is already reported by `onRequestError` in `instrumentation.ts` before the boundary paints, so

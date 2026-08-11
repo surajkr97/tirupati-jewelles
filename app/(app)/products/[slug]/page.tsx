@@ -19,7 +19,7 @@ import { ProductCard, ProductGrid } from '@/components/product/product-card';
 import { TrustBlock } from '@/components/product/trust-block';
 import { JsonLd } from '@/components/seo/json-ld';
 import { Section } from '@/components/shell';
-import { Card } from '@/components/ui';
+import { buttonClasses, Card } from '@/components/ui';
 import {
   activeProductSlugs,
   getProductBySlug,
@@ -154,7 +154,7 @@ export default async function ProductPage({ params }: { params: Params }) {
               >
                 {product.categoryName}
               </Link>
-              <h1 className="text-h1 font-semibold tracking-tight text-ink">
+              <h1 className="font-display text-h1 font-medium tracking-tight text-ink">
                 {product.name}
               </h1>
               {product.description && (
@@ -203,7 +203,7 @@ export default async function ProductPage({ params }: { params: Params }) {
             */}
             <Link
               href={`/calculator?purity=${product.purity}&weight=${grams(product.weightMg)}&making=${product.makingPct}&stone=${(Number(product.stoneCharge) / 100).toFixed(2)}&label=${encodeURIComponent(product.name)}`}
-              className="inline-flex h-control items-center justify-center self-start rounded-pill bg-ink px-6 text-body font-semibold text-white transition-transform duration-fast ease-standard active:scale-[0.98]"
+              className={buttonClasses({ variant: 'primary', className: 'self-start' })}
               data-testid="calculate-link"
             >
               Calculate with current rates
@@ -213,7 +213,7 @@ export default async function ProductPage({ params }: { params: Params }) {
       </Section>
 
       {related.length > 0 && (
-        <Section eyebrow="More from" heading={product.categoryName}>
+        <Section display eyebrow="More from" heading={product.categoryName}>
           <ProductGrid>
             {related.map((item) => (
               <li key={item.id}>

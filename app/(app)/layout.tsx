@@ -55,8 +55,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
      */
     <div className="flex min-h-dvh flex-col has-data-sticky-bar:pb-[var(--sticky-bar-height,0px)]">
       <JsonLd data={localBusinessJsonLd(shop)} />
-      {/* `overlay` stays off until Stage 4's wine hero exists — cream marks over the
-          current photographic hero is a contrast failure, not a treatment. D-062. */}
+      {/* The header infers its hero treatment from the route — see OVERLAY_ROUTES. */}
       <AppHeader ownerWhatsApp={ownerWhatsApp} />
       <main className="flex-1">{children}</main>
       <Footer ownerWhatsApp={ownerWhatsApp} />
