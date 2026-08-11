@@ -8,6 +8,7 @@
 'use client';
 
 import { Sheet } from '@/components/ui';
+import { summariseTotal } from '@/lib/calculator/summary';
 import type { CalculatorItem } from '@/lib/calculator/types';
 import { formatINR } from '@/lib/money';
 import type { TotalResult } from '@/lib/pricing';
@@ -23,6 +24,8 @@ export function TotalSheet({
   items: CalculatorItem[];
   total: TotalResult | null;
 }) {
+  const summary = total ? summariseTotal(total) : null;
+
   return (
     <Sheet
       open={open}
@@ -30,7 +33,7 @@ export function TotalSheet({
       title="Price breakdown"
       description="Indicative. Final price confirmed in store."
     >
-      {total && total.lines.length > 0 ? (
+      {total && summary && total.lines.length > 0 ? (
         <div className="flex flex-col gap-6">
           <ul className="flex flex-col gap-4">
             {total.lines.map((line, index) => {
@@ -50,7 +53,7 @@ export function TotalSheet({
                       {item?.weightGrams || 0} g · making {item?.makingPct || 0}%
                     </span>
                   </span>
-                  <span className="shrink-0 text-body font-semibold text-ink tabular">
+                  <span className="shrink-0 text-body font-semibold text-ink num">
                     {formatINR(line.lineTotal, true)}
                   </span>
                 </li>
@@ -58,10 +61,24 @@ export function TotalSheet({
             })}
           </ul>
 
+          {/*
+            Brief §16: metal value, making charges, stone charges, GST and TOTAL, separated.
+
+            Phase 5 showed Subtotal → GST → Grand total, which is the arithmetic but not the
+            explanation: a customer asking "why does 48 g of gold cost this?" could not see
+            what was metal and what was labour. Every figure here is summed from the engine's
+            own per-line results — `summariseTotal` does no arithmetic of its own, and
+            `summary.test.ts` asserts the parts reconcile with the total beneath them.
+          */}
           <dl className="flex flex-col gap-2 text-body">
-            <Row label="Subtotal" value={total.subtotal} />
-            <Row label="GST" value={total.totalGst} />
-            <Row label="Grand total" value={total.grandTotal} emphasis />
+            <Row label="Metal value" value={summary.metalValue} />
+            <Row label="Making charges" value={summary.makingCharge} />
+            {/* Hidden rather than shown as ₹0 — a line nobody was charged for is noise. */}
+            {summary.hasStoneCharge && (
+              <Row label="Stone / other charges" value={summary.stoneCharge} />
+            )}
+            <Row label="GST" value={summary.gst} />
+            <Row label="Total" value={summary.grandTotal} emphasis />
           </dl>
 
           {/*
@@ -96,12 +113,12 @@ function Row({
     <div
       className={
         emphasis
-          ? 'flex items-baseline justify-between gap-4 border-t border-line pt-2 text-h3 font-semibold text-ink'
+          ? 'mt-2 flex items-baseline justify-between gap-4 border-t border-line pt-4 text-h2 font-semibold text-ink'
           : 'flex items-baseline justify-between gap-4'
       }
     >
       <dt className={emphasis ? undefined : 'text-muted'}>{label}</dt>
-      <dd className="tabular">{formatINR(value, true)}</dd>
+      <dd className="num">{formatINR(value, true)}</dd>
     </div>
   );
 }

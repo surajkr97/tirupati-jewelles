@@ -1,10 +1,24 @@
 /**
- * Footer — links, BIS/hallmark trust strip, contact, WhatsApp.
- * Created by Phase 2 (specs/02-design-system.md §2.3).
+ * Footer — the storefront's closing section.
+ * Created by Phase 2 (specs/02-design-system.md §2.3), restyled by Stage 4E (brief §19).
  *
- * The trust strip is not decoration. Phase 6 §6.2 notes Indian buyers actively check
- * hallmarking and that missing it costs conversions, so it appears site-wide, not only on
- * product pages.
+ * ── Wine, because the page began there ──
+ *
+ * The homepage opens on a wine hero and closes on a wine trust band; a cream footer under
+ * that read as the page giving up rather than ending. On wine it is the last editorial
+ * section, which is what §19 asks for — and it is also the one surface besides the hero and
+ * trust band where `gold` is usable at all (6.84:1 on wine, 2.27:1 on cream — D-057).
+ *
+ * ── Real routes only ──
+ *
+ * `/policies/privacy` and `/policies/terms` were listed here from Phase 2 and **did not
+ * exist until §9.6 wrote them** — the footer of every storefront page carried two links to a
+ * 404 for three phases. Every href here is now resolved against the real `app/` tree by
+ * `lib/navigation.test.ts`, and `e2e/seo.spec.ts` fetches each one.
+ *
+ * There is deliberately no About or Contact: those routes do not exist, and D-060 records
+ * the decision not to invent copy for them. The shop's real address and phone reach the page
+ * through the `LocalBusiness` structured data in the layout, from the §7.9 Settings row.
  */
 import { BadgeCheck, MessageCircle, ShieldCheck } from 'lucide-react';
 import Link from 'next/link';
@@ -19,15 +33,6 @@ const SHOP_LINKS = [
   { href: '/search', label: 'Search' },
 ] as const;
 
-/**
- * §9.6's legal pages.
- *
- * `/policies/privacy` and `/policies/terms` were listed here from Phase 2 and **did not
- * exist until §9.6 wrote them** — the footer of every storefront page carried two links to a
- * 404. Phase 6 hit the identical defect in the trust block, fixed it there, and added an E2E
- * that fetches every link IN THE TRUST BLOCK; the footer was never covered, so the same bug
- * sat one component away for three phases. `e2e/seo.spec.ts` now fetches these too.
- */
 const POLICY_LINKS = [
   { href: '/policies/privacy', label: 'Privacy' },
   { href: '/policies/terms', label: 'Terms' },
@@ -36,20 +41,29 @@ const POLICY_LINKS = [
   { href: '/policies/exchange', label: 'Buyback & exchange' },
 ] as const;
 
+/**
+ * The trust strip is not decoration. Phase 6 §6.2 notes Indian buyers actively check
+ * hallmarking and that missing it costs conversions, so it appears site-wide.
+ *
+ * Two items, not three: the homepage's `TrustBand` now carries the full set, and repeating
+ * four claims a screen apart makes both read as filler. These are the two that belong on
+ * every page, including the ones the trust band never appears on.
+ */
 const TRUST = [
-  { icon: ShieldCheck, label: 'BIS Hallmarked' },
+  { icon: ShieldCheck, label: 'BIS hallmarked' },
   { icon: BadgeCheck, label: 'Certified purity' },
-  { icon: MessageCircle, label: 'Buyback & exchange' },
 ] as const;
 
 export function Footer({ ownerWhatsApp }: { ownerWhatsApp: string }) {
   return (
-    <footer className="mt-12 border-t border-line bg-white/50">
+    // `.surface-wine` inverts the focus ring to cream — an ink ring is 1.05:1 here (D-057).
+    <footer className="surface-wine mt-16 bg-wine text-cream">
       <Container>
-        <div className="grid gap-8 py-12 md:grid-cols-3">
-          <div className="flex flex-col gap-4">
-            <span className="font-semibold tracking-[0.12em] text-ink">TIRUPATI</span>
-            <p className="max-w-2xs text-small text-muted">
+        <div className="grid gap-12 py-16 md:grid-cols-[1.5fr_1fr_1fr] md:gap-8">
+          <div className="flex flex-col gap-6">
+            <span className="font-display text-h2 font-medium">Tirupati</span>
+            {/* cream/70 on wine is 7.99:1 — set back, still body text (D-057). */}
+            <p className="max-w-2xs text-body text-cream/70">
               Hallmark-certified gold and silver jewellery. Rates updated daily; final
               price confirmed in store.
             </p>
@@ -57,53 +71,59 @@ export function Footer({ ownerWhatsApp }: { ownerWhatsApp: string }) {
               href={`https://wa.me/${ownerWhatsApp}`}
               target="_blank"
               rel="noopener noreferrer"
-              className={buttonClasses({ variant: 'accent', className: 'w-fit text-small' })}
+              className={buttonClasses({ variant: 'onWine', className: 'w-fit' })}
             >
               <MessageCircle className="size-4" aria-hidden="true" />
               Chat on WhatsApp
             </a>
           </div>
 
-          <nav aria-label="Shop" className="flex flex-col gap-2">
-            <h2 className="text-small font-semibold text-ink">Shop</h2>
-            {SHOP_LINKS.map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                className="flex h-tap items-center text-small text-muted hover:text-ink"
-              >
-                {label}
-              </Link>
-            ))}
-          </nav>
-
-          <nav aria-label="Policies" className="flex flex-col gap-2">
-            <h2 className="text-small font-semibold text-ink">Policies</h2>
-            {POLICY_LINKS.map(({ href, label }) => (
-              <Link
-                key={href}
-                href={href}
-                className="flex h-tap items-center text-small text-muted hover:text-ink"
-              >
-                {label}
-              </Link>
-            ))}
-          </nav>
+          <FooterNav label="Shop" links={SHOP_LINKS} />
+          <FooterNav label="Policies" links={POLICY_LINKS} />
         </div>
 
-        <ul className="flex flex-wrap justify-center gap-6 border-t border-line py-8">
-          {TRUST.map(({ icon: Icon, label }) => (
-            <li key={label} className="flex items-center gap-2 text-small text-muted">
-              <Icon className="size-4 text-rose-deep" aria-hidden="true" />
-              {label}
-            </li>
-          ))}
-        </ul>
+        <div className="flex flex-col gap-6 border-t border-cream/15 py-8 md:flex-row md:items-center md:justify-between">
+          <ul className="flex flex-wrap gap-6">
+            {TRUST.map(({ icon: Icon, label }) => (
+              <li key={label} className="flex items-center gap-2 text-small text-cream/70">
+                {/* Gold is legible here and nowhere on a light surface (D-057). */}
+                <Icon className="size-4 text-gold" aria-hidden="true" strokeWidth={1.5} />
+                {label}
+              </li>
+            ))}
+          </ul>
 
-        <p className="pb-8 text-center text-small text-muted">
-          © {new Date().getFullYear()} Tirupati Jewelles. All rights reserved.
-        </p>
+          <p className="text-small text-cream/70">
+            © <span className="num">{new Date().getFullYear()}</span> Tirupati Jewelles.
+            All rights reserved.
+          </p>
+        </div>
       </Container>
     </footer>
+  );
+}
+
+function FooterNav({
+  label,
+  links,
+}: {
+  label: string;
+  links: readonly { href: string; label: string }[];
+}) {
+  return (
+    <nav aria-label={label} className="flex flex-col gap-2">
+      <h2 className="mb-2 text-small font-semibold tracking-[0.08em] text-cream/50 uppercase">
+        {label}
+      </h2>
+      {links.map(({ href, label: text }) => (
+        <Link
+          key={href}
+          href={href}
+          className="flex h-tap items-center text-body text-cream/70 transition-colors duration-fast ease-standard hover:text-cream"
+        >
+          {text}
+        </Link>
+      ))}
+    </nav>
   );
 }

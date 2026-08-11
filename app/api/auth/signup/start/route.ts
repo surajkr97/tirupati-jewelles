@@ -64,7 +64,7 @@ export async function POST(request: Request) {
 
     if (!alreadyRegistered) {
       const { code } = await issueOtp(email, OtpPurpose.SIGNUP, Channel.EMAIL);
-      await sendOtp(Channel.EMAIL, email, code);
+      await sendOtp(Channel.EMAIL, email, code, 'signup');
     }
 
     await padTo(startedAt);

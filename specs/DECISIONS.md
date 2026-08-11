@@ -2092,3 +2092,128 @@ the 22K anchor, so the 18K and silver figures sit still (D-069). Removal remains
 environment change (`NEXT_PUBLIC_TICKER_JITTER=false`) whenever the owner wants it.
 
 **UI_REDESIGN_DEBT-008** — revisit jitter removal as its own product decision after Stage 4.
+
+---
+
+## D-072 — the product card loses its chrome, and the price moves above the metadata
+
+Two changes to `ProductCard`, both from brief §11/§12.
+
+**No card surface.** A white box behind a product photograph — which is itself usually shot
+on white — adds a border and subtracts contrast. The piece reads better sitting directly on
+the cream page with air around it, which is what "use whitespace and image composition
+instead of floating rounded rectangles" asks for. The hover is a 1.03 push-in cropped by an
+`overflow-hidden` wrapper, so the card never resizes; `motion-reduce` cancels it.
+
+**Price above purity/weight.** Phase 6 ordered it name → purity/weight → price. The price is
+what a shopper scans a grid for, and burying it under the specification made every card read
+the same at a glance.
+
+That wrapper broke `catalog.spec.ts`'s CLS assertion, which located the ratio box by
+`[data-testid="product-card"] > div:first-child` and measured the new wrapper instead. Fixed
+by locating it as `[data-image-frame]` — the seam `ImageFrame` publishes precisely so
+measurement does not depend on position. Its own comment warns that a class selector would be
+"quietly brittle"; a positional one is worse.
+
+---
+
+## D-073 — the calculator's breakdown splits the subtotal, and a test proves it reconciles
+
+Brief §16 asks the summary to separate metal value, making charges, stone charges and GST.
+Phase 5 showed Subtotal → GST → Grand total, which is the arithmetic but not the explanation:
+a customer asking "why does 48 g of gold cost this?" could not see what was metal and what
+was labour.
+
+`calculateTotal` already computes all four **per line** and simply does not roll them up, so
+`lib/calculator/summary.ts` sums the engine's own `LineResult` fields. It performs no
+arithmetic of its own: nothing is recomputed from weights or rates, no rounding happens, no
+percentage is applied.
+
+**Because it is money, the invariant is asserted rather than assumed.** `summary.test.ts`
+checks `metal + making + stone === subtotal` and `subtotal + GST === grandTotal` across
+fractional weights, 0% and 100% making, zero-weight lines, stone-only charges, mixed purities
+and twenty-line totals. If a future engine change adds a component to `subtotal` that this
+does not sum, the test fails instead of the UI quietly showing lines that do not add up.
+
+`ItemCard` and `ItemList` were left structurally alone: §8.1 shares them with the admin bill
+builder, and Stage 4 §1 excludes admin.
+
+---
+
+## D-074 — one transactional email exists, and the brief's other two are not built
+
+An audit of every outbound path found a single template — `sendOtp`, reached from signup,
+password reset and phone confirmation. It was **plain text only**.
+
+The brief describes order and bill emails. **They are not built**, because they would be new
+features rather than restyled ones: MASTER-SPEC §1 sends the bill PDF over **WhatsApp**, and
+no code path emails an order. Inventing an email nobody triggers is inventing a feature.
+
+Password reset is likewise not a link-based flow here — it is the same six-digit code as
+everything else. So it gets its own heading and its own security line, not a "Reset password"
+button pointing at a token URL that does not exist.
+
+### What the redesign added
+
+A branded HTML part alongside the existing text, and a `purpose` so the three call sites read
+correctly: *Verify your account*, *Reset your password*, *Confirm your mobile number*. One
+heading for all three made the reset mail — the one a worried customer reads most carefully —
+the vaguest of them.
+
+Email HTML is not web HTML, and the template is written accordingly: tables not divs, inline
+styles only, no `<style>` block, no class attribute, no webfont (Georgia is named first rather
+than pretending Playfair will load), no CSS custom properties, hex colours written out. The
+palette is imported from `lib/design/tokens.ts` so the mail cannot drift from the site.
+
+`text` is still sent on every message. It is not a fallback nicety — it is what plain-text
+clients render and what spam filters score, and an HTML-only transactional mail is a
+deliverability problem before it is an accessibility one.
+
+**No OTP mechanic moved.** Generation, hashing, TTL, attempt limits, rate limiting, triggers
+and recipients are untouched. The expiry sentence is built from `OTP_TTL_SECONDS` rather than
+typed, so the copy cannot claim five minutes after someone changes the constant.
+
+---
+
+## D-075 — order status is shown from columns that exist, and no others
+
+Brief §18 asks orders to show a status. This shop records exactly two facts about an order
+after it is written: whether it was voided (`voidedAt`) and whether a bill PDF exists
+(`billPdfKey`). There is no fulfilment pipeline — no packing, no dispatch, no delivery —
+because there is no checkout (MASTER-SPEC §1).
+
+So the list shows a "Cancelled" badge when `voidedAt` is set, and nothing otherwise. A
+"Processing" or "Delivered" chip would be a promise the shop never made and cannot keep, and
+§18's "do not invent order actions" applies to state as much as to buttons.
+
+---
+
+## D-076 — fixed navigation chrome is opaque, because the page now has dark sections
+
+Phase 2 gave `BottomNav` and `StickyBar` a frosted treatment — `bg-cream/85` and
+`bg-cream/90` over `backdrop-blur-md`. That was safe while every page was cream from top to
+bottom. Stage 4E made the footer wine and it stopped being safe.
+
+axe found it within one run of the suite:
+
+| Surface | Composite over wine | `muted` | Verdict |
+| :--- | :--- | ---: | :--- |
+| `BottomNav` at `cream/85` | `#DED4D5` | **3.61** | fails AA |
+| `StickyBar` at `cream/90` | `#E7E0E0` | **4.02** | fails AA |
+
+Both are primary chrome — the application's main navigation, and the bar carrying the
+calculator total — so this was AA failing on the two things a customer looks at most.
+
+Raising the alpha clears it: 0.97 measures 4.63. It was rejected anyway. At 0.97 the surface
+is visually opaque, so the `backdrop-blur` behind it renders nothing observable — a
+compositing layer paid for and not seen — and it leaves 0.13 of headroom against a ground
+that could get darker. Opaque measures 4.91 and does not depend on what is scrolling beneath.
+
+**The general rule this establishes:** translucent chrome cannot promise contrast, because
+what passes under it is arbitrary. Any surface that must stay readable regardless of position
+is opaque. The header is the deliberate exception and stays translucent: its solid state uses
+`ink` and `roseDeep`, which measure 13.4 and 4.63 over the same composite, and its
+transparent state is the hero treatment, which is a known wine ground by construction.
+
+The tablet breakpoint is what made `StickyBar` visible as a separate defect — it is the width
+where the bottom nav is hidden and the sticky bar is the thing sitting over the footer.

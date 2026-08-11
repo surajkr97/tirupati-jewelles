@@ -103,7 +103,7 @@ export default async function CategoryPage({
           >
             ← All collections
           </Link>
-          <h1 className="text-h1 font-semibold tracking-tight text-ink md:text-h1-lg">
+          <h1 className="font-display text-h1 font-medium tracking-tight text-ink md:text-h1-lg">
             {category.name}
           </h1>
         </div>

@@ -124,9 +124,8 @@ The audit's highest-value fixes. Each is small and independently shippable.
       About/Contact omitted per D-060: no fake hrefs.
 - [x] **07 Mobile bottom nav** — now renders from `lib/navigation.ts`. Structure, safe-area
       handling and `BottomNavSpacer` untouched, as planned; only the source of the list moved.
-- [x] **08 Footer** — **not restyled.** It already consumes the Stage 1 tokens and its links
-      all resolve. A wine footer belongs with the wine hero and trust band in Stage 4; doing
-      it here would have been a visual change with no defect behind it.
+- [x] **08 Footer** — deferred from Stage 2 on purpose, **restyled in Stage 4E**: a wine
+      footer belongs with the wine hero and trust band, not on its own.
 - [x] **09 Route states** — `not-found.tsx`, `error.tsx`, `global-error.tsx` at the root;
       `loading.tsx` for `/search`, `/account/orders`, `/rates`. **Fixes C-2.**
       - [x] **`/collections/[slug]` and `/products/[slug]` deliberately have NO
@@ -330,15 +329,20 @@ API contracts; or the schema. The enumeration-safe generic error is unchanged an
       with **stacked records on mobile and a table from `md`** (§14), wine calculator CTA.
       - [!] **Range selector NOT built** — the shop has 3 days of history, so 1W/1M/6M/1Y all
             return the same points. UI_REDESIGN_DEBT-007, D-070.
-- [ ] **18 Homepage sections** — disclaimer, new arrivals, trust band (wine, restrained, small
-      type — not an icon grid).
-- [ ] **19 Product listing** — `ProductCard` re-skin; whole card navigates; 2-up at 390px.
-- [ ] **20 Product detail** — gallery, breakdown, sticky enquiry bar.
-      **Do not hardcode `--sticky-bar-height`** — audit §H.
-- [ ] **21 Calculator** — re-skin only. Reducer, pricing and share logic untouched.
-- [ ] **22 Account** — quiet sign-out, real empty states. (The **admin shortcut link** for
-      C-3 shipped in Stage 2; the rest of this item is still Stage 4's.)
-- [ ] **23 Orders** — list + detail re-skin.
+- [x] **18 Homepage sections** — **4A.** Hero, rates, disclaimer (carried by the rate card),
+      new arrivals, collections, wine trust band. Trust claims are only ones the shop keeps:
+      the reference's "Live Updated Rates" is replaced by "Rates updated daily".
+- [x] **19 Product listing** — **4C.** `ProductCard` loses its card surface, price moves above
+      purity/weight, 1.03 hover push-in cropped so nothing resizes. 2-up at 390px. D-072.
+- [x] **20 Product detail** — **4C.** Playfair name, editorial gallery, `buttonClasses` on the
+      calculator link, `display` heading on related products. `--sticky-bar-height` untouched.
+- [x] **21 Calculator** — **4D.** Playfair heading, `.num` on the total, and the breakdown now
+      splits metal / making / stone / GST / total. `ItemCard` and `ItemList` left structurally
+      alone — §8.1 shares them with the admin bill builder. D-073.
+- [x] **22 Account** — **4E.** `display` heading; the quiet sign-out and the C-3 admin
+      shortcut shipped in Stage 3.
+- [x] **23 Orders** — **4E.** Playfair heading, `.num`, and a "Cancelled" badge from
+      `voidedAt`. No invented statuses — there is no fulfilment pipeline. D-075.
 
 ---
 

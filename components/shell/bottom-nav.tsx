@@ -23,7 +23,21 @@ export function BottomNav() {
       aria-label="Primary"
       className={cn(
         'fixed inset-x-0 bottom-0 z-30 md:hidden',
-        'bg-cream/85 backdrop-blur-md',
+        /**
+         * Opaque, not `bg-cream/85 backdrop-blur-md`.
+         *
+         * A translucent bar cannot promise contrast, because what scrolls under it is
+         * arbitrary. Stage 4E made the footer wine, and axe caught the consequence
+         * immediately: `cream/85` over wine composites to #DED4D5, where the inactive
+         * labels (`muted`) measure **3.61:1** and the active one (`roseDeep`) 4.16 — both
+         * below AA, on the application's primary navigation.
+         *
+         * Raising the alpha to 0.97 clears it at 4.63, but by then the surface is visually
+         * opaque and the blur behind it renders nothing — paying a compositing layer for an
+         * effect nobody can see, and keeping only 0.13 of headroom. Opaque gives 4.91 and
+         * does not depend on what is beneath.
+         */
+        'bg-cream',
         'pb-[env(safe-area-inset-bottom)]',
       )}
     >

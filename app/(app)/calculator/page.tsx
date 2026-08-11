@@ -42,7 +42,7 @@ export default async function CalculatorPage() {
     <Section className="pt-8 pb-0 md:pt-12">
       <div className="flex flex-col gap-6">
         <div className="flex flex-col gap-2">
-          <h1 className="text-h1 font-semibold tracking-tight text-ink md:text-h1-lg">
+          <h1 className="font-display text-h1 font-medium tracking-tight text-ink md:text-h1-lg">
             Price calculator
           </h1>
           <p className="text-lead text-muted">

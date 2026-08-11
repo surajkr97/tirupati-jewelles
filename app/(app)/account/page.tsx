@@ -33,7 +33,7 @@ export default async function AccountPage() {
     user.phone && !user.phoneVerified ? await countClaimableOrders(user.phone) : 0;
 
   return (
-    <Section heading="Your account">
+    <Section display heading="Your account">
       <div className="flex flex-col gap-6">
         <Card className="flex flex-col gap-4">
           <div className="flex items-start justify-between gap-4">

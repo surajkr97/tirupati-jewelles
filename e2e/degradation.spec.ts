@@ -95,9 +95,10 @@ test.describe('image CDN down', () => {
     expect(overflows, 'the page must not scroll sideways with the CDN down').toBe(false);
 
     // The ticker is the reason people visit (§4.5) and owes nothing to the CDN.
-    await expect(
-      page.getByRole('radiogroup', { name: 'Metal and purity' }),
-    ).toBeVisible();
+    // Stage 4B replaced the metal toggle with a card showing all three rates at once, so
+    // the card itself is the thing that must survive a dead image CDN.
+    await expect(page.getByTestId('rate-ticker')).toBeVisible();
+    await expect(page.getByTestId('ticker-value')).toBeVisible();
     await expect(page.getByText(/Indicative rate/)).toBeVisible();
   });
 
