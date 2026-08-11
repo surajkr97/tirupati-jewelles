@@ -37,11 +37,16 @@ jobs:
       # CI-only throwaway values. lib/env.ts throws at boot on anything missing, so the
       # full MASTER-SPEC §9 set has to be present even for a unit-test run.
       DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
+      # `schema.prisma` resolves `directUrl = env("MIGRATE_DATABASE_URL")`, so EVERY prisma
+      # command needs it — not only the ones that migrate. Phase 9 §9.1 split the runtime and
+      # migration roles (SEC-029) and this file was not updated to match, so `migrate deploy`
+      # died with P1012 before a single test ran. CI has one database and one user, so both
+      # URLs point at it; the split is a production control, not a CI one.
+      MIGRATE_DATABASE_URL: postgresql://ci:ci@localhost:5432/ci
       REDIS_URL: redis://localhost:6379/0
       SESSION_SECRET: ci-session-secret-that-is-long-enough-32b
       OTP_PEPPER: ci-otp-pepper-that-is-long-enough-32-bytes
       EMAIL_FROM: Tirupati Jewelles <ci@example.com>
-      UPLOAD_PROVIDER_KEY: ci-placeholder
       ALLOWED_IMAGE_HOSTS: res.cloudinary.com,utfs.io
       SEED_ADMIN_EMAIL: admin@example.com
       SEED_ADMIN_PASSWORD: ci-admin-password
@@ -68,7 +73,10 @@ jobs:
       - name: Create and migrate the test database
         run: |
           PGPASSWORD=ci psql -h localhost -U ci -d postgres -c 'CREATE DATABASE ci_test;'
-          DATABASE_URL="$TEST_DATABASE_URL" pnpm exec prisma migrate deploy
+          # Both URLs, for the same reason as above: overriding only DATABASE_URL would
+          # migrate the test database while `directUrl` still pointed at the other one.
+          DATABASE_URL="$TEST_DATABASE_URL" MIGRATE_DATABASE_URL="$TEST_DATABASE_URL" \
+            pnpm exec prisma migrate deploy
 
       - name: Seed (twice — must be idempotent, Phase 1 §1.6)
         run: |
