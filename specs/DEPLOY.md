@@ -45,30 +45,87 @@ if it fails here, it would have failed on Render too, and this is the cheaper pl
 
 ---
 
-## Part 2 — create the backing services
+## Part 2 — the backing services (Supabase + Upstash)
 
-In the Render dashboard. Names are suggestions; use whatever makes them unmistakable.
+Postgres is on **Supabase**, Redis on **Upstash**, and only the web service is on Render. That
+is a normal split and needs no code change — but Supabase's connection model has one trap that
+catches almost everyone, and this application happens to be built for it already.
 
-**4. Create a PostgreSQL instance.** Version **16**, to match `docker-compose.yml`. Call it
-`tirupati-db`. Note the region — everything else should be in the same one, or every query
-crosses the internet.
+### 4. Supabase — you need BOTH connection strings, not one
 
-**5. Create a Redis / Key Value instance.** Version **7**. Same region. Call it
-`tirupati-redis`.
+Supabase gives you two ways in, and Prisma needs both:
 
-Redis holds sessions here, not just cache, so enable persistence if the plan offers it. Losing
-it signs everyone out — survivable, but avoidable. (§9.5 measured exactly this.)
+| Supabase calls it                    | Port   | Use it for                          |
+| :----------------------------------- | :----- | :---------------------------------- |
+| **Transaction pooler** (PgBouncer)   | `6543` | `DATABASE_URL` — the running app    |
+| **Direct connection** / session mode | `5432` | `MIGRATE_DATABASE_URL` — migrations |
 
-**6. Create the Web Service.** Point it at the GitHub repo, branch `master`.
+**Why both.** The pooler multiplexes many short queries onto few real connections, which is
+what a web app wants and what keeps Supabase's connection limit from being hit. But it cannot
+run the statements a migration needs — prepared statements and DDL in a transaction. Point
+migrations at the pooler and they fail in confusing ways.
+
+This project already splits those two variables for a different reason (SEC-029's owner/runtime
+role split), so the shape fits exactly. Find both under **Project → Settings → Database →
+Connection string**.
+
+Append `?pgbouncer=true&connection_limit=1` to the pooled URL. Without `pgbouncer=true` Prisma
+uses prepared statements the pooler cannot support, and you get intermittent
+`prepared statement "s0" already exists` errors under load — the kind that pass every test and
+fail on a busy afternoon.
+
+**One thing to check before you rely on it:** Supabase's _direct_ connection is IPv6-only on
+newer projects. If Render cannot reach it, the build fails at `pnpm db:deploy`. The fix is
+Supabase's **session pooler** (IPv4, also port 5432), which supports migrations. Test it before
+launch day rather than discovering it mid-deploy.
+
+Note the database is called `postgres`, not `tirupati` — which is exactly why
+`scripts/db-roles.sql` was fixed to use `current_database()` (SEC-043). The old version
+hardcoded `tirupati` and would have aborted here.
+
+### 5. Upstash — one setting, and one thing to verify
+
+Use the **`rediss://`** URL (two s's — it is TLS). No code change is needed; `ioredis` turns on
+TLS from the scheme, and `lib/env.ts` does not restrict it.
+
+**Set the eviction policy to `noeviction`.** This is the setting that matters. Upstash defaults
+some plans to evicting keys under memory pressure, and this instance is not only a cache — it
+holds **sessions** (§3.3). Eviction there means customers and the admin being signed out at
+random, which reads as a bug in the site and is impossible to reproduce.
+
+Two things to verify against your plan rather than assume:
+
+- **Per-command pricing.** This app talks to Redis on _every_ request — the proxy's rate limit,
+  session lookups, cached rates. If you are on a pay-per-command plan, watch the first week's
+  usage rather than the first month's bill.
+- **Blocking commands.** The optional worker (BullMQ) needs a persistent connection and
+  blocking commands, which some serverless tiers restrict. Not a launch blocker — skip the
+  worker for now and check later.
+
+### 6. Render — the Web Service
+
+This is the site itself: the process that receives a customer's request, reads Supabase and
+Upstash, and returns the page. Point it at the GitHub repo, branch `master`.
 
 - **Build command:** `pnpm install --frozen-lockfile && pnpm db:deploy && pnpm build`
 - **Start command:** `pnpm start`
-- **Region:** the same one as the database.
 
 `db:deploy` is `prisma migrate deploy` — forward-only, applies pending migrations, never
 resets. **Never put `db:migrate` here**; that one resets the database when it detects drift.
 
-Do not deploy yet. It will fail without the environment variables, which is the next part.
+Choose a Render region close to your Supabase region. Every query crosses that gap.
+
+Do not deploy yet — it will fail without the environment variables, which is next.
+
+### A note on the old website's data
+
+**Do not drop the old tables.** Create a **new Supabase project** (or at minimum a new
+database) for v2 and leave the old one alone until v2 has been live and proven for a week.
+
+v2's schema is not an upgrade of the old site's — Phase 1 deleted that application and rewrote
+everything, so the tables are unrelated. Migrating into a database that already holds old
+tables would work and leave junk behind; a clean database means everything in it is v2's.
+Dropping is irreversible and buys nothing today.
 
 ---
 
@@ -89,28 +146,28 @@ development problem; the same secret in production is a production one.
 `lib/env.ts` validates all of these at boot and throws with the name of anything missing, so a
 mistake here fails the deploy loudly rather than serving broken pages.
 
-| Variable                    | Value                                                          |
-| :-------------------------- | :------------------------------------------------------------- |
-| `DATABASE_URL`              | the Postgres **Internal** URL from Render — for now, the owner |
-| `MIGRATE_DATABASE_URL`      | the same URL. Needed at **build** time (`prisma generate`)     |
-| `REDIS_URL`                 | the Redis internal URL                                         |
-| `SESSION_SECRET`            | the first generated secret                                     |
-| `OTP_PEPPER`                | the second generated secret                                    |
-| `NEXT_PUBLIC_SITE_URL`      | the site's real address, e.g. `https://tirupatijewelles.com`   |
-| `NEXT_PUBLIC_OWNER_WA`      | `919507769218` — digits only, no `+`                           |
-| `NEXT_PUBLIC_TICKER_JITTER` | `true`                                                         |
-| `SEED_ADMIN_EMAIL`          | the admin's email                                              |
-| `SEED_ADMIN_PASSWORD`       | a strong password — this is how you first sign in              |
-| `EMAIL_FROM`                | e.g. `Tirupati Jewelles <noreply@yourdomain.com>`              |
-| `RESEND_API_KEY`            | from resend.com — required for customer sign-in codes          |
-| `ALLOWED_IMAGE_HOSTS`       | `res.cloudinary.com,utfs.io`                                   |
-| `CLOUDINARY_CLOUD_NAME`     | from your Cloudinary account                                   |
-| `CLOUDINARY_API_KEY`        | from Cloudinary                                                |
-| `CLOUDINARY_API_SECRET`     | from Cloudinary                                                |
-| `SENTRY_DSN`                | from Sentry                                                    |
-| `SENTRY_ENVIRONMENT`        | `production`                                                   |
-| `TRUSTED_PROXY_HOPS`        | `1`                                                            |
-| `WHATSAPP_SENDER`           | `deep-link`                                                    |
+| Variable                    | Value                                                                    |
+| :-------------------------- | :----------------------------------------------------------------------- |
+| `DATABASE_URL`              | Supabase **pooled** URL, port 6543, `?pgbouncer=true&connection_limit=1` |
+| `MIGRATE_DATABASE_URL`      | Supabase **direct** URL, port 5432. Needed at **build** time             |
+| `REDIS_URL`                 | Upstash **`rediss://`** URL (TLS)                                        |
+| `SESSION_SECRET`            | the first generated secret                                               |
+| `OTP_PEPPER`                | the second generated secret                                              |
+| `NEXT_PUBLIC_SITE_URL`      | the site's real address, e.g. `https://tirupatijewelles.com`             |
+| `NEXT_PUBLIC_OWNER_WA`      | `919507769218` — digits only, no `+`                                     |
+| `NEXT_PUBLIC_TICKER_JITTER` | `true`                                                                   |
+| `SEED_ADMIN_EMAIL`          | the admin's email                                                        |
+| `SEED_ADMIN_PASSWORD`       | a strong password — this is how you first sign in                        |
+| `EMAIL_FROM`                | e.g. `Tirupati Jewelles <noreply@yourdomain.com>`                        |
+| `RESEND_API_KEY`            | from resend.com — required for customer sign-in codes                    |
+| `ALLOWED_IMAGE_HOSTS`       | `res.cloudinary.com,utfs.io`                                             |
+| `CLOUDINARY_CLOUD_NAME`     | from your Cloudinary account                                             |
+| `CLOUDINARY_API_KEY`        | from Cloudinary                                                          |
+| `CLOUDINARY_API_SECRET`     | from Cloudinary                                                          |
+| `SENTRY_DSN`                | from Sentry                                                              |
+| `SENTRY_ENVIRONMENT`        | `production`                                                             |
+| `TRUSTED_PROXY_HOPS`        | `1`                                                                      |
+| `WHATSAPP_SENDER`           | `deep-link`                                                              |
 
 > **`NEXT_PUBLIC_*` is baked into the JavaScript at build time.** Changing one of those later
 > needs a **redeploy**, not a restart. The other variables take effect on restart.
@@ -141,11 +198,16 @@ what makes the six-year retention promise real rather than a convention.
 
 The tables have to exist first, which is why this comes after the first deploy.
 
-Copy the **External** database URL from Render's Postgres page, then on your laptop:
+Use the Supabase **direct** connection URL (the same one as `MIGRATE_DATABASE_URL`), which
+connects as `postgres` — the owner. On your laptop:
 
 ```bash
-psql "<external owner URL>" -v app_password=choose-a-strong-password -f scripts/db-roles.sql
+psql "<supabase direct URL>" -v app_password=choose-a-strong-password -f scripts/db-roles.sql
 ```
+
+If you would rather not install `psql`, Supabase's SQL editor works too — but it cannot take
+the `-v app_password` variable, so replace `:'app_password'` with a quoted password in the two
+lines that use it before pasting.
 
 It prints its own verification at the end. You want:
 
