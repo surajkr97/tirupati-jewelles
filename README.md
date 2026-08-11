@@ -74,19 +74,15 @@ pnpm test          # Vitest unit tests
 pnpm test:e2e      # Playwright at 375 / 768 / 1280
 ```
 
-### The Celery worker does nothing on purpose
+### Jobs run in Node
 
-`backend/celery_app/` connects to Redis, runs, and executes exactly one no-op task. It is
-**dormant infrastructure**, kept deliberately so Phase 9 can move PDF generation and rate
-rollups onto a broker that is already proven to work.
+The queue is BullMQ on the same Redis (`lib/queue/`), and the worker is `pnpm worker`
+(`scripts/worker.mts`). D-042 has the reasoning: three of the five jobs render React, post to
+Resend, or drive Cloudinary, so a Python worker would need a second invoice implementation.
 
-**Do not delete it.** See [`backend/celery_app/README.md`](backend/celery_app/README.md).
-
-```bash
-docker compose up -d --build worker
-docker compose exec worker python -c \
-  "from celery_app.tasks.health import ping; print(ping.delay().get(timeout=10))"   # → pong
-```
+A dormant Celery package lived at `backend/` until 2026-08-11, kept in case Phase 9 wanted a
+Python broker. Phase 9 chose Node, so it was removed. It is in git history if it is ever
+needed again.
 
 ## Layout
 
@@ -95,7 +91,7 @@ app/          (app)/ · admin/ · api/ · account/     Next.js App Router
 components/   ui/ · rates/ · calculator/ · product/ · admin/
 lib/          env.ts · db.ts · redis.ts · auth/ · utils/
 prisma/       schema.prisma · seed.ts · migrations/
-backend/      celery_app/ — dormant, do not delete
+scripts/      worker.mts · backup.mts · verify-*.mts
 specs/        the build specification and its logs
 e2e/          Playwright
 ```

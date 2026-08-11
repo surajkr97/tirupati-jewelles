@@ -70,13 +70,10 @@ describe('§9.1 item 4 — Dependabot is enabled', () => {
     expect(dependabot).toMatch(/version:\s*2/);
   });
 
+  // `pip` and `docker` were dropped with the Celery worker on 2026-08-11 — both watched
+  // /backend, and nothing in this repo is built from a Dockerfile any more.
   it.each([
     ['the Node dependencies the storefront ships', 'npm'],
-    [
-      'the dormant Celery worker (§1.3 keeps it, so it is still an attack surface)',
-      'pip',
-    ],
-    ['the container images', 'docker'],
     ['the CI workflow’s own actions', 'github-actions'],
   ])('covers %s', (_name, ecosystem) => {
     expect(dependabot).toContain(`package-ecosystem: ${ecosystem}`);

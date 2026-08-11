@@ -56,16 +56,26 @@ jobs:
       TEST_DATABASE_URL: postgresql://ci:ci@localhost:5432/ci_test
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: pnpm
 
       - run: pnpm install --frozen-lockfile
+
+      # Explicit, because the alternative is a coin flip. `pnpm seed` imports
+      # `@prisma/client`, which is a stub until `prisma generate` writes the real client into
+      # the store. That generation used to happen as a side effect of `pnpm install`'s
+      # postinstall, and pnpm caches package side effects — so whether the seed step found a
+      # generated client depended on whether the runner got a warm cache. It passed for
+      # months and then failed on dbc97d4→e7a0f90, a commit that touched no dependency.
+      # Generating here makes the run deterministic instead of cache-shaped.
+      - name: Generate the Prisma client
+        run: pnpm exec prisma generate
 
       - name: Apply migrations
         run: pnpm exec prisma migrate deploy
@@ -105,44 +115,14 @@ jobs:
 
       - name: Upload Playwright report
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
 
-  celery:
-    runs-on: ubuntu-latest
-    name: Celery worker (dormant infrastructure)
-
-    services:
-      redis:
-        image: redis:7-alpine
-        ports: ['6379:6379']
-        options: >-
-          --health-cmd "redis-cli ping" --health-interval 5s --health-timeout 5s --health-retries 10
-
-    env:
-      REDIS_URL: redis://localhost:6379/0
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - run: pip install -r backend/requirements.txt
-
-      # Guards specs/01-cleanup-scaffold.md acceptance criterion 3. If someone deletes the
-      # dormant worker as dead code, this job fails and says so.
-      - name: health.ping returns pong
-        working-directory: backend
-        run: |
-          celery -A celery_app.celery worker --loglevel=info --detach
-          sleep 8
-          python -c "
-          from celery_app.tasks.health import ping
-          assert ping.delay().get(timeout=20) == 'pong'
-          print('health.ping -> pong')
-          "
+  # A `celery` job ran here until 2026-08-11. It installed backend/requirements.txt and
+  # asserted `health.ping` returned "pong" — a tripwire guarding 01-cleanup-scaffold
+  # criterion 3, so that deleting the dormant worker as dead code would fail CI loudly.
+  # The worker was removed deliberately (MASTER-SPEC §2, D-042), so the tripwire went with
+  # it. Jobs run in Node now and are covered by the `test` job above.

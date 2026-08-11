@@ -26,7 +26,7 @@ compiles and runs on its own.
 
 ## Agent: DEV
 
-**Owns:** all files under `app/`, `components/`, `lib/`, `prisma/`, `backend/`.
+**Owns:** all files under `app/`, `components/`, `lib/`, `prisma/`, `scripts/`.
 
 ### Mandate
 
@@ -40,8 +40,9 @@ compiles and runs on its own.
 
 ### Hard rules
 
-- Do not delete `backend/celery_app/` or Redis config, even if unused. It is dormant
-  infrastructure kept for future async work.
+- Do not delete or weaken the Redis config. Sessions, rate limits and the BullMQ queue all
+  depend on it — losing it signs every user out. (The dormant Celery worker this rule also
+  covered was removed on 2026-08-11; jobs run in Node, see D-042.)
 - Do not add a dependency without noting it in the phase file's "Dependencies added" section.
 - Money is **integer paise**, never float. See MASTER-SPEC §4.
 - All admin-mutating routes go through `requireAdmin()`. No exceptions.

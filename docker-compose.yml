@@ -1,8 +1,8 @@
 # Rewritten by Phase 1 (specs/01-cleanup-scaffold.md §1.3).
 #
 # Replaces the pre-rebuild pair of compose files (root + server/) and their `include:`
-# indirection with one file. The FastAPI `api` service is gone; the Celery worker stays as
-# dormant infrastructure and must not be removed.
+# indirection with one file. The FastAPI `api` service is gone, and so is the dormant Celery
+# worker — removed 2026-08-11, see MASTER-SPEC §2.
 #
 # SEC-001: Postgres and Redis bind to 127.0.0.1 ONLY.
 #
@@ -89,27 +89,12 @@ services:
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD}
 
-  # Dormant infrastructure — specs/01-cleanup-scaffold.md §1.3 and
-  # backend/celery_app/README.md. It connects, logs "ready", and does nothing else.
-  # DO NOT DELETE. Phase 9 §9.3 gives it real work.
-  worker:
-    container_name: tirupati-worker
-    build:
-      context: ./backend
-    restart: unless-stopped
-    command: ['celery', '-A', 'celery_app.celery', 'worker', '--loglevel=info']
-    environment:
-      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-    depends_on:
-      redis:
-        condition: service_healthy
-
-  # Phase 9 §9.3. The Node job worker — see D-042 for why the jobs run here and not in
-  # `worker` above, which stays dormant and must not be deleted.
+  # Phase 9 §9.3. The Node job worker — the only worker. See D-042 for why the jobs run
+  # here: three of the five render React, post to Resend, or drive Cloudinary.
   #
   # Not built from a Dockerfile: there is no production image for the Next app in this repo
-  # (Render builds it), so this runs the same `pnpm worker` a developer runs, against the
-  # same compose network. It is here so `docker compose up` gives a complete local system.
+  # (Vercel builds it — D-055), so this runs the same `pnpm worker` a developer runs, against
+  # the same compose network. It is here so `docker compose up` gives a complete local system.
   jobs:
     container_name: tirupati-jobs
     image: node:24-alpine
@@ -121,7 +106,11 @@ services:
       REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
       DATABASE_URL: ${DATABASE_URL}
     volumes:
-      - ..:/app
+      # `.`, not `..`. This read `..:/app` until 2026-08-11, which mounted the PARENT of the
+      # repo — so /app held the checkout as a subdirectory, `pnpm install` found no
+      # package.json, and the service could never have started. It is profile-gated, so
+      # nothing ran it and nothing caught it.
+      - .:/app
     depends_on:
       redis:
         condition: service_healthy

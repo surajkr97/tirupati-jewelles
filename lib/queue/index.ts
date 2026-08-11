@@ -15,11 +15,11 @@
  * ═══════════════════════════════════════════════════════════════════════════
  *
  * ── Why this is Node and not Celery — read this before "fixing" it ──
- * §9.3 and MASTER-SPEC §2 both name Celery, and `backend/celery_app/` is dormant
- * infrastructure kept expressly for it. It is still there, still in `docker-compose`, still
- * connected, and **must not be deleted** (AGENTS.md hard rule).
+ * §9.3 and MASTER-SPEC §2 both originally named Celery, and `backend/celery_app/` was kept
+ * dormant expressly for it. It could not run these jobs, so it never got them, and it was
+ * removed on 2026-08-11 (MASTER-SPEC §2).
  *
- * It cannot run these jobs. Three of §9.3's five tasks are TypeScript by their nature, not
+ * Three of §9.3's five tasks are TypeScript by their nature, not
  * by accident:
  *
  *   `bills.generate_pdf`   `lib/bills/render.ts` renders through `@react-pdf/renderer` —

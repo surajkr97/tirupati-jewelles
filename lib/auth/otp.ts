@@ -214,7 +214,7 @@ export async function verifyOtp(
   return { ok: true };
 }
 
-/** Housekeeping. Phase 9 §9.3 moves this onto Celery. */
+/** Housekeeping. Phase 9 §9.3 moved this onto the BullMQ queue — `lib/queue/`. */
 export async function purgeExpiredOtps(olderThan: Date = new Date()): Promise<number> {
   const { count } = await db.otpCode.deleteMany({
     where: { expiresAt: { lt: olderThan } },

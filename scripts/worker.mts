@@ -7,12 +7,11 @@
  * Celery Beat. Run it alongside `next start` in production; `docker-compose` runs it as the
  * `jobs` service.
  *
- * ── Why this exists instead of `backend/celery_app/` doing the work ──
+ * ── Why this is Node and not Celery ──
  * D-042, and the header of `lib/queue/index.ts`. The short version: three of §9.3's five
  * tasks render React, post to Resend, or drive Cloudinary — TypeScript by nature — and a
  * Python worker would need a second invoice implementation, which §8 forbids outright. The
- * Celery package remains, dormant and connected, exactly as MASTER-SPEC §2 and AGENTS.md
- * require.
+ * dormant Celery package that §9.3 originally named was removed on 2026-08-11.
  *
  * ── Shutdown is graceful on purpose ──
  * A worker killed mid-render leaves a job in the active set until its lock expires, and the

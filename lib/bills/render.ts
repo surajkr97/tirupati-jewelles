@@ -233,7 +233,8 @@ export function buildBillData(
  * Render an order to PDF bytes.
  *
  * §8.3: "Generate synchronously for now (it takes ~1s). Phase 9 moves it to Celery if it
- * becomes a bottleneck." `backend/celery_app/` is already there, dormant, for exactly that.
+ * becomes a bottleneck." Phase 9 moved it to BullMQ instead, not Celery — see `lib/queue/`
+ * and D-042.
  */
 export async function renderBillPdf(order: OrderForPdf): Promise<Buffer> {
   const [shop, logo] = await Promise.all([loadShopIdentity(), getBillLogo()]);

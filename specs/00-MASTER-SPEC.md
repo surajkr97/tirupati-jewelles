@@ -31,25 +31,34 @@ Everything else (catalog, product pages, cart-like flow) is conventional, with o
 
 ## 2. Stack
 
-| Layer        | Choice                                     | Note                                           |
-| :----------- | :----------------------------------------- | :--------------------------------------------- |
-| Frontend     | Next.js 16, App Router, TypeScript strict  | D-002 — spec said 15                           |
-| Styling      | Tailwind CSS                               | tokens in §3                                   |
-| DB           | PostgreSQL + Prisma                        |                                                |
-| Cache        | Redis (ioredis)                            | rates, sessions, rate-limit, OTP               |
-| Backend jobs | **Celery — dormant**                       | keep configured, do not delete, do not use yet |
-| Auth         | custom (Argon2id + session cookie)         |                                                |
-| PDF          | `@react-pdf/renderer`                      | server-side                                    |
-| Images       | Next `<Image>` + Cloudinary or UploadThing |                                                |
-| Validation   | Zod on every boundary                      |                                                |
-| Tests        | Vitest + Playwright                        |                                                |
+| Layer        | Choice                                     | Note                                         |
+| :----------- | :----------------------------------------- | :------------------------------------------- |
+| Frontend     | Next.js 16, App Router, TypeScript strict  | D-002 — spec said 15                         |
+| Styling      | Tailwind CSS                               | tokens in §3                                 |
+| DB           | PostgreSQL + Prisma                        |                                              |
+| Cache        | Redis (ioredis)                            | rates, sessions, rate-limit, OTP             |
+| Backend jobs | **BullMQ on Node** (`lib/queue/`)          | D-042 — superseded the dormant Celery worker |
+| Auth         | custom (Argon2id + session cookie)         |                                              |
+| PDF          | `@react-pdf/renderer`                      | server-side                                  |
+| Images       | Next `<Image>` + Cloudinary or UploadThing |                                              |
+| Validation   | Zod on every boundary                      |                                              |
+| Tests        | Vitest + Playwright                        |                                              |
 
-### On Celery
+### On Celery — removed 2026-08-11
 
-The repo keeps `backend/celery_app/` with a working Redis broker connection and one no-op
-health task. It runs in `docker-compose` but does nothing yet. Phase 9 lists the jobs that
-will eventually move there (PDF generation, bulk WhatsApp, rate-history rollups). **Do not
-delete it. Do not build features on it yet.**
+> **Superseded.** This section originally required `backend/celery_app/` be kept as dormant
+> infrastructure with a live Redis broker connection and one no-op health task, on the
+> argument that Phase 9 would move PDF generation and rate rollups onto a broker already
+> proven to work.
+>
+> Phase 9 reached §9.3 and went the other way — **D-042**: `bills.generate_pdf` renders
+> through `@react-pdf/renderer`, so a Python worker would have meant a second GST-rounding
+> implementation, which §8 forbids outright. The queue is BullMQ in `lib/queue/` on the same
+> Redis, and the worker is `pnpm worker`.
+>
+> With the future it was reserved for now settled, the package, its compose service and its
+> Dependabot entries were deleted. The code is at the commit that removed it if a genuinely
+> Python-shaped job ever appears. **Redis itself stays — see AGENTS.md.**
 
 ---
 
