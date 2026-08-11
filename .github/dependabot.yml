@@ -68,6 +68,12 @@ updates:
         update-types: ['version-update:semver-major']
       - dependency-name: 'eslint'
         update-types: ['version-update:semver-major']
+      # ioredis is the client for sessions, rate limits, the cache and the BullMQ broker —
+      # every stateful path in the app goes through it. bullmq's peer range is `>=5.0.0`, so
+      # a 6.x would install cleanly and any incompatibility would surface at runtime, on the
+      # code that signs people in. Its own branch, with the queue exercised.
+      - dependency-name: 'ioredis'
+        update-types: ['version-update:semver-major']
 
   # The `pip` and `docker` ecosystems both watched /backend, which held the dormant Celery
   # worker. That worker was removed on 2026-08-11 (MASTER-SPEC §2) and there is no Dockerfile
