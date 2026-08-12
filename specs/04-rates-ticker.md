@@ -75,11 +75,16 @@ POST /api/admin/rates      ADMIN only
       the first paint must already show real numbers.
 - [ ] Refetches the true rate every 5 minutes via SWR to stay current.
 - [ ] Jitter loop, when `NEXT_PUBLIC_TICKER_JITTER === 'true'`:
-  - every 1000ms, pick delta = ±(101–199) rupees on the per-10g value
+  - every 3000ms, pick delta = ±(101–199) rupees on the per-10g value
+    (was 1000ms; the owner reset the cadence in Stage 6 — one second read as a stock ticker)
   - random direction; track it for colour
-  - the _displayed_ number drifts around the true rate but must **stay within ±2% of it** —
-    clamp it. Unbounded random walk will wander to absurd numbers within a few minutes of an
-    open tab.
+  - the _displayed_ number drifts around the true rate but must **stay within ±₹199 of it**
+    — bound it. Unbounded random walk will wander to absurd numbers within a few minutes of
+    an open tab.
+    (Was ±2%, reset to a flat ±₹199 by the owner in Stage 6: 2% of ₹1,18,420 is ₹2,368, and
+    the consumer-protection exposure in MASTER-SPEC §8 is a gap in rupees, not in percent.
+    The walk reflects off the band edges rather than clamping, or it would visibly freeze
+    there — see `lib/ticker-jitter.ts`.)
 - [ ] Up → `text-up` + ▲ ; down → `text-down` + ▼. Brief background tint pulse on change,
       fading over 400ms.
 - [ ] Number transitions use tabular-num and a slide animation on changed digits only — not
@@ -136,7 +141,7 @@ decorative line)_
 ## TEST
 
 - [ ] Unit: `perGramToPer10g` / `perGramToPerKg` round-trip without drift.
-- [ ] Unit: jitter clamp — simulate 10,000 ticks, assert the display value never exits ±2% of
+- [ ] Unit: jitter band — simulate 10,000 ticks, assert the display value never exits ±₹199 of
       the true rate.
 - [ ] Unit: sanity guard rejects a 10× rate without `confirmed`.
 - [ ] Integration: `setRate` → Redis key deleted → `getCurrentRates` returns the new value.

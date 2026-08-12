@@ -59,9 +59,18 @@ export function Section({
           <h2
             className={cn(
               'text-ink',
+              /**
+               * §14 — a section heading is not a hero.
+               *
+               * Both branches were fixed sizes, so a display heading rendered at 32px on a
+               * 390px screen: the same size as the page's own h1 on that device, four words
+               * to a line, and no hierarchy left between "the page" and "a part of it". They
+               * now start a step down and grow from `md`, where there is room for the
+               * editorial size the serif was chosen for.
+               */
               display
-                ? 'font-display text-h1 font-medium'
-                : 'text-h2 font-semibold',
+                ? 'font-display text-h2 font-medium md:text-h1'
+                : 'text-lead font-semibold md:text-h2',
             )}
           >
             {heading}

@@ -50,11 +50,22 @@ export const buttonClasses = cva(
         onWineOutline:
           'bg-transparent text-cream ring-1 ring-inset ring-cream/30 hover:bg-cream/10',
       },
+      /**
+       * Every size starts at the 44px minimum tap target and grows from `sm` — Stage 6 §3.
+       *
+       * The complaint was that buttons feel oversized on a phone, and the numbers agreed:
+       * the default was 52px and the large one 56px, on screens where 44px is already the
+       * comfortable floor. §3 draws the distinction this fix turns on — "touch target ≠
+       * visual size" — so nothing dropped below 44px anywhere. What changed is that the
+       * EXTRA height is now a desktop affordance, where a pointer is precise and a button
+       * can afford presence, rather than something a thumb pays for.
+       *
+       * Done here rather than per call site: one definition, and no page can drift.
+       */
       size: {
-        // Never below 44px — the minimum tap target (MASTER-SPEC §3).
         sm: 'h-tap px-4 text-small',
-        md: 'h-control px-6 text-body',
-        lg: 'h-control-lg px-8 text-body',
+        md: 'h-tap px-4 text-body sm:h-control sm:px-6',
+        lg: 'h-tap px-6 text-body sm:h-control-lg sm:px-8',
       },
       full: { true: 'w-full', false: '' },
     },

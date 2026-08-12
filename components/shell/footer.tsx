@@ -2,12 +2,16 @@
  * Footer — the storefront's closing section.
  * Created by Phase 2 (specs/02-design-system.md §2.3), restyled by Stage 4E (brief §19).
  *
- * ── Wine, because the page began there ──
+ * ── Light, because the page is ──
  *
- * The homepage opens on a wine hero and closes on a wine trust band; a cream footer under
- * that read as the page giving up rather than ending. On wine it is the last editorial
- * section, which is what §19 asks for — and it is also the one surface besides the hero and
- * trust band where `gold` is usable at all (6.84:1 on wine, 2.27:1 on cream — D-057).
+ * Stage 4E made this wine, reasoning that "the homepage opens on a wine hero and closes on a
+ * wine trust band; a cream footer under that read as the page giving up rather than ending".
+ * Stage 6 removed both of those surfaces (§1), so the premise is gone: the hero is a
+ * photograph and the trust band is sand. A dark footer under a light page is now the thing
+ * that would read as a non-sequitur.
+ *
+ * `gold` went with it. It measures 6.84:1 on wine and 2.27:1 on cream, so the trust marks
+ * use `rose` — this palette's small non-text accent (D-057).
  *
  * ── Real routes only ──
  *
@@ -56,14 +60,23 @@ const TRUST = [
 
 export function Footer({ ownerWhatsApp }: { ownerWhatsApp: string }) {
   return (
-    // `.surface-wine` inverts the focus ring to cream — an ink ring is 1.05:1 here (D-057).
-    <footer className="surface-wine mt-16 bg-wine text-cream">
+    /**
+     * Stage 6: was `surface-wine bg-wine text-cream`.
+     *
+     * Stage 4E made this wine because "the homepage opens on a wine hero and closes on a
+     * wine trust band; a cream footer under that read as the page giving up". Both of those
+     * premises are now false — the hero is a photograph and the trust band is sand — so the
+     * argument for a dark footer went with them. §20 asks for a natural ending to a light
+     * page, and the default ink focus ring is correct again on a light ground.
+     */
+    <footer className="mt-16 border-t border-line bg-sand text-ink">
       <Container>
         <div className="grid gap-12 py-16 md:grid-cols-[1.5fr_1fr_1fr] md:gap-8">
           <div className="flex flex-col gap-6">
-            <span className="font-display text-h2 font-medium">Tirupati</span>
-            {/* cream/70 on wine is 7.99:1 — set back, still body text (D-057). */}
-            <p className="max-w-2xs text-body text-cream/70">
+            <span className="font-display text-h2 font-medium tracking-[-0.01em]">
+              Tirupati J.
+            </span>
+            <p className="max-w-2xs text-body text-muted">
               Hallmark-certified gold and silver jewellery. Rates updated daily; final
               price confirmed in store.
             </p>
@@ -71,7 +84,7 @@ export function Footer({ ownerWhatsApp }: { ownerWhatsApp: string }) {
               href={`https://wa.me/${ownerWhatsApp}`}
               target="_blank"
               rel="noopener noreferrer"
-              className={buttonClasses({ variant: 'onWine', className: 'w-fit' })}
+              className={buttonClasses({ variant: 'outline', className: 'w-fit' })}
             >
               <MessageCircle className="size-4" aria-hidden="true" />
               Chat on WhatsApp
@@ -82,18 +95,20 @@ export function Footer({ ownerWhatsApp }: { ownerWhatsApp: string }) {
           <FooterNav label="Policies" links={POLICY_LINKS} />
         </div>
 
-        <div className="flex flex-col gap-6 border-t border-cream/15 py-8 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-6 border-t border-line py-8 md:flex-row md:items-center md:justify-between">
           <ul className="flex flex-wrap gap-6">
             {TRUST.map(({ icon: Icon, label }) => (
-              <li key={label} className="flex items-center gap-2 text-small text-cream/70">
-                {/* Gold is legible here and nowhere on a light surface (D-057). */}
-                <Icon className="size-4 text-gold" aria-hidden="true" strokeWidth={1.5} />
+              <li key={label} className="flex items-center gap-2 text-small text-muted">
+                {/* Gold measures 2.27:1 on a light ground (D-057) — rose is this palette's
+                    small non-text mark. */}
+                <Icon className="size-4 text-rose" aria-hidden="true" strokeWidth={1.5} />
                 {label}
               </li>
             ))}
           </ul>
 
-          <p className="text-small text-cream/70">
+          {/* The LEGAL name, unchanged — §15 keeps business identity accurate. */}
+          <p className="text-small text-muted">
             © <span className="num">{new Date().getFullYear()}</span> Tirupati Jewelles.
             All rights reserved.
           </p>
@@ -112,14 +127,14 @@ function FooterNav({
 }) {
   return (
     <nav aria-label={label} className="flex flex-col gap-2">
-      <h2 className="mb-2 text-small font-semibold tracking-[0.08em] text-cream/50 uppercase">
+      <h2 className="mb-2 text-small font-semibold tracking-[0.08em] text-muted uppercase">
         {label}
       </h2>
       {links.map(({ href, label: text }) => (
         <Link
           key={href}
           href={href}
-          className="flex h-tap items-center text-body text-cream/70 transition-colors duration-fast ease-standard hover:text-cream"
+          className="flex h-tap items-center text-body text-muted transition-colors duration-fast ease-standard hover:text-ink"
         >
           {text}
         </Link>

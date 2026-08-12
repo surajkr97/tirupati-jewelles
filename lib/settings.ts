@@ -220,3 +220,66 @@ export async function applyShopContactChange(): Promise<void> {
   await invalidateShopContact();
   revalidatePath('/', 'layout');
 }
+
+/**
+ * Ticker movement — the owner's override of `NEXT_PUBLIC_TICKER_JITTER`.
+ *
+ * ── This setting was stored and never read ──
+ *
+ * §7.9 asked for the env flag to be surfaced "so the owner can disable it without a deploy",
+ * and MASTER-SPEC §8 calls that off-switch the legal insurance. The admin screen wrote
+ * `Settings.tickerJitter`, the change was audited, and `revalidatePath('/')` ran with a
+ * comment saying the toggle "shows on the storefront" — but nothing on the storefront ever
+ * SELECTed the column. `LiveRateCard` read the environment variable directly, so the control
+ * moved a switch that was not wired to anything: setting it to Off left the rates moving.
+ *
+ * Same defect shape as DEBT-024 and as the deleted `text-caption` class — a thing that reads
+ * as working and is not — which is why this returns a resolved boolean rather than the
+ * nullable column, so no caller can forget the fallback.
+ */
+export const TICKER_JITTER_KEY = 'settings:ticker-jitter';
+
+/**
+ * True when the rate card may animate. Null in the database means "follow the env flag".
+ *
+ * ── Only the COLUMN is cached, never the resolved answer ──
+ *
+ * Caching `row ?? env` bakes one process's environment into a Redis key that every process
+ * shares. The E2E suite proved it: it runs a second server built with
+ * `NEXT_PUBLIC_TICKER_JITTER=false` to test the off-switch, and with the resolution cached,
+ * whichever server warmed the key first decided for both — the jitter-off server happily
+ * animated because the main one had already written `true` there. Two deployments against
+ * one Redis would have had the same bug in production, silently.
+ *
+ * So the cache holds a fact about the ROW and the fallback is applied per process, after.
+ * Wrapped in an object because `null` is a legitimate stored value here and a bare `null`
+ * is indistinguishable from a cache miss.
+ */
+export async function getTickerJitter(): Promise<boolean> {
+  const stored = await cached(TICKER_JITTER_KEY, TTL_SECONDS, async () => {
+    const row = await db.settings.findUnique({
+      where: { id: 'singleton' },
+      select: { tickerJitter: true },
+    });
+
+    return { tickerJitter: row?.tickerJitter ?? null };
+  });
+
+  return stored.tickerJitter ?? clientEnv.NEXT_PUBLIC_TICKER_JITTER;
+}
+
+/** Drop the cached flag. Call BEFORE revalidating, for D-012's reason. */
+export async function invalidateTickerJitter(): Promise<void> {
+  await invalidate(TICKER_JITTER_KEY);
+}
+
+/**
+ * Bust the cache and refresh both pages that render the card.
+ *
+ * `/` and `/rates` — the same two surfaces `RATE_SURFACES` covers, because the card is on
+ * both and the flag is now what decides whether either of them moves.
+ */
+export async function applyTickerJitterChange(): Promise<void> {
+  await invalidateTickerJitter();
+  for (const surface of RATE_SURFACES) revalidatePath(surface);
+}

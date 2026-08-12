@@ -24,10 +24,13 @@ import { getProductBySlug, PRODUCT_CARD_SELECT } from '@/lib/catalog/products';
 import { db } from '@/lib/db';
 import { calculateLine } from '@/lib/pricing';
 import { RATE_SURFACES, RATES_CACHE_KEY } from '@/lib/rates';
+import { clientEnv } from '@/lib/env';
 import { invalidate } from '@/lib/redis';
 import {
   getPricingDefaults,
+  getTickerJitter,
   invalidatePricingDefaults,
+  invalidateTickerJitter,
   PRICING_DEFAULTS_KEY,
   SETTINGS_SURFACES,
   SPEC_PRICING_DEFAULTS,
@@ -220,5 +223,65 @@ describe('SETTINGS_SURFACES', () => {
 describe('the two spec fallbacks', () => {
   it('agree, because they are the same figure written in two modules', () => {
     expect(SPEC_ITEM_DEFAULTS).toEqual(SPEC_PRICING_DEFAULTS);
+  });
+});
+
+/**
+ * Stage 6 — the ticker off-switch, which was DEBT-024's shape a second time.
+ *
+ * `Settings.tickerJitter` has existed since §7.9. The admin screen wrote it, the change was
+ * audited, `revalidatePath('/')` ran — and no storefront page ever SELECTed the column,
+ * because `LiveRateCard` read `NEXT_PUBLIC_TICKER_JITTER` on its own. Setting the toggle to
+ * Off left the rates moving. MASTER-SPEC §8 calls that switch the legal insurance, so a
+ * switch that does nothing is the most expensive version of this defect in the codebase.
+ *
+ * Written against a real row and a real cache for the same reason the tests above are: what
+ * is under test is cache-aside over a database column, and a mock would only prove itself.
+ */
+describeDb('the ticker off-switch is actually read', () => {
+  /**
+   * Restored to Default afterwards, and that is not politeness.
+   *
+   * This suite shares its database with the Playwright servers, and the storefront now READS
+   * this column — which is the entire point of the change. Leaving it set to `false` turns
+   * off the jitter for `e2e/rates.spec.ts`, whose positive control then fails somewhere
+   * completely unrelated to whatever is being worked on. Found exactly that way.
+   */
+  afterAll(async () => {
+    await setJitter(null);
+  });
+
+  async function setJitter(value: boolean | null) {
+    await db.settings.upsert({
+      where: { id: 'singleton' },
+      update: { tickerJitter: value },
+      create: { id: 'singleton', tickerJitter: value },
+    });
+    await invalidateTickerJitter();
+  }
+
+  it('returns false when the owner switches it off', async () => {
+    await setJitter(false);
+    expect(await getTickerJitter()).toBe(false);
+  });
+
+  it('returns true when the owner switches it on', async () => {
+    await setJitter(true);
+    expect(await getTickerJitter()).toBe(true);
+  });
+
+  it('falls back to the environment flag when the setting is Default', async () => {
+    // Null is "follow NEXT_PUBLIC_TICKER_JITTER" — the schema comment's contract.
+    await setJitter(null);
+    expect(await getTickerJitter()).toBe(clientEnv.NEXT_PUBLIC_TICKER_JITTER);
+  });
+
+  it('picks up a change without waiting for the cache to expire', async () => {
+    // The ordering `applyTickerJitterChange` uses: write, drop the cache, then revalidate.
+    await setJitter(true);
+    expect(await getTickerJitter()).toBe(true);
+
+    await setJitter(false);
+    expect(await getTickerJitter()).toBe(false);
   });
 });

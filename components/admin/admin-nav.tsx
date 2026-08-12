@@ -65,7 +65,7 @@ export function AdminSidebar() {
         href="/admin"
         className="flex h-header-lg shrink-0 items-center px-6 font-display text-h3 font-medium text-cream"
       >
-        Tirupati
+        Tirupati J.
       </Link>
 
       <ul className="flex flex-1 flex-col gap-1 overflow-y-auto px-4 py-4">

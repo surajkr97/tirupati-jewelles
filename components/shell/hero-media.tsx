@@ -97,8 +97,16 @@ export function HeroMedia({
   return (
     <div
       className={cn(
-        // The wine ground. Painted before anything is fetched.
-        'relative isolate overflow-hidden bg-wine',
+        /**
+         * The ground painted before anything is fetched.
+         *
+         * Was `bg-wine`. Stage 6 took wine off the storefront entirely (§1), and a hero
+         * that flashes near-black before its photograph arrives is the loudest possible
+         * contradiction of a light design. `sand` is the warm neutral the rest of the page
+         * uses, so the pre-load state now reads as part of the design rather than as a
+         * hole waiting to be filled.
+         */
+        'relative isolate overflow-hidden bg-sand',
         className,
       )}
     >

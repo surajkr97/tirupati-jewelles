@@ -108,14 +108,24 @@ export function EnquiryBar({
         onClick={logEnquiry}
         data-testid="enquire-cta"
         className={cn(
-          'inline-flex h-control shrink-0 items-center justify-center gap-2 rounded-pill px-6',
+          'inline-flex h-control shrink-0 items-center justify-center gap-2 rounded-pill px-4 sm:px-6',
           // roseDeep, not rose: white on plain rose is 4.13:1 and fails AA (D-057).
           'bg-rose-deep text-body font-semibold text-white',
           'transition-transform duration-fast ease-standard active:scale-[0.98]',
         )}
       >
-        <MessageCircle className="size-icon" aria-hidden="true" />
-        Enquire on WhatsApp
+        <MessageCircle className="size-icon-sm" aria-hidden="true" />
+        {/*
+          The label sheds a word on a phone, so the PRICE stops being the thing that gives
+          way.
+
+          At 390px "Enquire on WhatsApp" plus its icon took enough of the bar that
+          `formatINR` was truncated to "₹9,27,…" — the one number the page exists to show,
+          clipped by its own call to action. The accessible name is unchanged: the full
+          phrase stays in the DOM and only the second half is visually hidden, so a screen
+          reader and a voice-control user still get "Enquire on WhatsApp".
+        */}
+        Enquire<span className="sr-only sm:not-sr-only sm:ml-1">on WhatsApp</span>
       </a>
     </StickyBar>
   );

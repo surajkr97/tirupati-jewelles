@@ -93,7 +93,7 @@ Rendered CSR inside a static shell. Rates fetched once on mount from `/api/rates
 - [ ] Optional name field, placeholder `Item 1`.
 - [ ] Metal/purity segmented control: `22K` · `18K` · `Silver`.
 - [ ] Weight: numeric, `inputMode="decimal"`, unit suffix `g`, 3 decimals.
-- [ ] Making charge: numeric with `%` suffix, plus quick-pick chips (8% · 10% · 12% · 15%) —
+- [ ] Making charge: numeric with `%` suffix, plus quick-pick chips (12% · 15% · 18% · 22% — revised from 8/10/12/15 by the shop owner, Stage 6; see `lib/calculator/types.ts`) —
       most shops use a small set of standard rates and chips beat typing on mobile.
 - [ ] Stone/other charges: optional ₹ field, collapsed by default.
 - [ ] Per-item breakdown, collapsed by default, expanding to show metal value → making →

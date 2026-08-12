@@ -24,7 +24,7 @@
  */
 import '@testing-library/jest-dom/vitest';
 
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -65,7 +65,7 @@ vi.mock('swr', () => ({
 }));
 
 import { LiveRateCard, type SerialisedRates } from '@/components/rates/live-rate-card';
-import { JITTER_CLAMP } from '@/lib/ticker-jitter';
+import { JITTER_BAND_PAISE, TICK_INTERVAL_MS } from '@/lib/ticker-jitter';
 
 const GOLD_22_PER_10G = 11_842_000n; // ₹1,18,420
 
@@ -143,10 +143,18 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('the off-switch — NEXT_PUBLIC_TICKER_JITTER', () => {
-  it('holds the value constant for 10s when the flag is false', async () => {
-    clientEnv.NEXT_PUBLIC_TICKER_JITTER = false;
-    render(<LiveRateCard initialRates={RATES} />);
+/**
+ * The off-switch moved from an environment variable to a prop in Stage 6.
+ *
+ * The card used to read `NEXT_PUBLIC_TICKER_JITTER` itself, which is why the owner's
+ * dashboard toggle — stored, audited, revalidated — changed nothing on the storefront. The
+ * flag is now resolved on the server by `getTickerJitter` (setting first, env as fallback)
+ * and arrives here as `jitter`. These tests therefore drive the prop; `lib/settings.test.ts`
+ * covers the resolution behind it.
+ */
+describe('the off-switch — the `jitter` prop', () => {
+  it('holds the value constant for 10s when it is off', async () => {
+    render(<LiveRateCard initialRates={RATES} jitter={false} />);
 
     const seen = await runFor(10);
 
@@ -156,16 +164,21 @@ describe('the off-switch — NEXT_PUBLIC_TICKER_JITTER', () => {
     expect(seen[0]).toBe('₹1,18,420');
   });
 
-  it('creates no interval at all when the flag is false', async () => {
-    clientEnv.NEXT_PUBLIC_TICKER_JITTER = false;
-    render(<LiveRateCard initialRates={RATES} />);
+  it('creates no interval at all when it is off', async () => {
+    render(<LiveRateCard initialRates={RATES} jitter={false} />);
 
     // Not merely "the number did not change" — nothing is scheduled to change it.
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('the positive control: with the flag on, the value does move', async () => {
+  it('defaults to off, so a caller that forgets the prop gets the still card', async () => {
+    // The safe direction for a number MASTER-SPEC §8 governs: silence, not invented movement.
     render(<LiveRateCard initialRates={RATES} />);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it('the positive control: with it on, the value does move', async () => {
+    render(<LiveRateCard initialRates={RATES} jitter />);
 
     const seen = await runFor(10);
 
@@ -175,9 +188,9 @@ describe('the off-switch — NEXT_PUBLIC_TICKER_JITTER', () => {
 });
 
 describe('prefers-reduced-motion', () => {
-  it('produces no jitter even with the flag on', async () => {
+  it('produces no jitter even with the prop on', async () => {
     stubReducedMotion(true);
-    render(<LiveRateCard initialRates={RATES} />);
+    render(<LiveRateCard initialRates={RATES} jitter />);
 
     const seen = await runFor(10);
 
@@ -190,14 +203,91 @@ describe('prefers-reduced-motion', () => {
   });
 });
 
+describe('all three faces move, on one switch', () => {
+  /**
+   * The owner's Stage 6 request. Before it, only the 22K anchor walked and the 18K and
+   * silver rows rendered `BigInt(face.display)` — the true rate, sitting still — so the card
+   * showed one live figure beside two frozen ones.
+   *
+   * Read off the DOM rather than off state: the frozen rows were frozen because the render
+   * ignored the walk, which is a defect no assertion about internal state would have caught.
+   */
+  function secondaryTexts(): string[] {
+    return within(screen.getByTestId('rate-ticker'))
+      .getAllByRole('listitem')
+      .map((li) => li.textContent ?? '');
+  }
+
+  it('moves 18K and silver, not just the 22K anchor', async () => {
+    render(<LiveRateCard initialRates={RATES} jitter />);
+
+    const before = secondaryTexts();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TICK_INTERVAL_MS * 4);
+    });
+    const after = secondaryTexts();
+
+    expect(before.length, 'both secondary rows must be on screen').toBe(2);
+    for (let i = 0; i < before.length; i += 1) {
+      expect(after[i], `secondary row ${i} never moved`).not.toBe(before[i]);
+    }
+  });
+
+  it('holds every face still when the switch is off', async () => {
+    render(<LiveRateCard initialRates={RATES} jitter={false} />);
+
+    const before = secondaryTexts();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(TICK_INTERVAL_MS * 4);
+    });
+
+    // One switch, three faces — off must mean off for all of them.
+    expect(secondaryTexts()).toEqual(before);
+  });
+
+  it('keeps each face inside its OWN ±₹199 band', async () => {
+    /**
+     * Silver (₹15,890 per kg) is a far smaller number than gold (₹1,18,420 per 10g).
+     * Bounding every walk against the ANCHOR's truth would let silver wander a
+     * proportionally enormous distance, so each is measured against its own rate.
+     */
+    render(<LiveRateCard initialRates={RATES} jitter />);
+
+    const truths = [Number(RATES.gold18.display) / 100, Number(RATES.silver999.display) / 100];
+    const band = JITTER_BAND_PAISE / 100;
+
+    for (let tick = 0; tick < 60; tick += 1) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(TICK_INTERVAL_MS);
+      });
+
+      const shown = secondaryTexts().map((text) => {
+        // The row reads "Gold 18K · 10 g ₹96,930 …" — take the rupee figure, not the delta.
+        const match = /₹([\d,]+)/.exec(text);
+        return Number((match?.[1] ?? '').replace(/,/g, ''));
+      });
+
+      expect(shown).toHaveLength(truths.length);
+      truths.forEach((truth, i) => {
+        const value = shown[i] ?? Number.NaN;
+        expect(
+          Math.abs(value - truth),
+          `face ${i} showed ₹${value} against a true ₹${truth}`,
+        ).toBeLessThanOrEqual(band);
+      });
+    }
+  });
+});
+
 describe('the jitter loop', () => {
-  it('never leaves the ±2% band over 300 ticks in a real render', async () => {
-    render(<LiveRateCard initialRates={RATES} />);
+  it('never leaves the ±₹199 band over 300 ticks in a real render', async () => {
+    render(<LiveRateCard initialRates={RATES} jitter />);
 
     const seen = await runFor(300);
 
     const truth = Number(GOLD_22_PER_10G) / 100; // rupees
-    const drift = truth * JITTER_CLAMP;
+    // Flat rupees, not a fraction of the rate — ±2% of this rate was ₹2,368 (Stage 6).
+    const drift = JITTER_BAND_PAISE / 100;
 
     for (const text of seen) {
       const rupees = Number(text.replace(/[^\d]/g, ''));
@@ -207,7 +297,7 @@ describe('the jitter loop', () => {
   });
 
   it('pauses while the tab is hidden and resumes when it returns', async () => {
-    render(<LiveRateCard initialRates={RATES} />);
+    render(<LiveRateCard initialRates={RATES} jitter />);
     expect(vi.getTimerCount()).toBeGreaterThan(0);
 
     act(() => setTabHidden(true));
@@ -236,14 +326,14 @@ describe('the jitter loop', () => {
    * true rate must reset the walk rather than drift on from the old one.
    */
   it('a new true rate resets the walk instead of drifting from the old one', async () => {
-    const { rerender } = render(<LiveRateCard initialRates={RATES} />);
+    const { rerender } = render(<LiveRateCard initialRates={RATES} jitter />);
 
     // Let the value wander first, so a leaked previous value would be visible.
     await runFor(20);
 
     const moved = { ...RATES, gold22: { ...RATES.gold22, display: '15890000' } };
     await act(async () => {
-      rerender(<LiveRateCard initialRates={moved} />);
+      rerender(<LiveRateCard initialRates={moved} jitter />);
     });
 
     // ₹1,58,900. Anything near the old ₹1,18,420 would mean the walk survived the update.
@@ -253,7 +343,7 @@ describe('the jitter loop', () => {
 
 describe('timer leaks — §4.3 and the memory criterion', () => {
   it('clears every timer on unmount', async () => {
-    const { unmount } = render(<LiveRateCard initialRates={RATES} />);
+    const { unmount } = render(<LiveRateCard initialRates={RATES} jitter />);
 
     await runFor(3); // let the pulse timeout exist alongside the interval
     expect(vi.getTimerCount()).toBeGreaterThan(0);
@@ -265,7 +355,7 @@ describe('timer leaks — §4.3 and the memory criterion', () => {
 
   it('does not accumulate timers across 100 mount/unmount cycles', async () => {
     for (let i = 0; i < 100; i += 1) {
-      const { unmount } = render(<LiveRateCard initialRates={RATES} />);
+      const { unmount } = render(<LiveRateCard initialRates={RATES} jitter />);
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1000);
       });
@@ -280,7 +370,7 @@ describe('timer leaks — §4.3 and the memory criterion', () => {
 
 describe('the disclaimer — MASTER-SPEC §8', () => {
   it('is always present', () => {
-    render(<LiveRateCard initialRates={RATES} />);
+    render(<LiveRateCard initialRates={RATES} jitter />);
 
     expect(screen.getByText(/Indicative rate/)).toBeInTheDocument();
     expect(screen.getByText(/Final price confirmed in store/)).toBeInTheDocument();
@@ -288,13 +378,13 @@ describe('the disclaimer — MASTER-SPEC §8', () => {
 
   it('survives the off-switch — it is not part of the animation', () => {
     clientEnv.NEXT_PUBLIC_TICKER_JITTER = false;
-    render(<LiveRateCard initialRates={RATES} />);
+    render(<LiveRateCard initialRates={RATES} jitter />);
 
     expect(screen.getByText(/Final price confirmed in store/)).toBeInTheDocument();
   });
 
   it('renders the timestamp in the shop timezone, not the runtime one', () => {
-    render(<LiveRateCard initialRates={RATES} />);
+    render(<LiveRateCard initialRates={RATES} jitter />);
 
     // 06:12 UTC is 11:42 AM IST — the exact example §4.4 gives. Pinning the zone is what
     // keeps the SSR string and the hydrated string identical.

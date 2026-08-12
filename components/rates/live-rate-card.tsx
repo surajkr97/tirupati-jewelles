@@ -22,15 +22,25 @@
  * switch. Those tests are retired rather than patched; the jitter tests they sat beside are
  * untouched and still pass.
  *
- * ── Jitter now applies to the anchor only ──
+ * ── Jitter applies to all three faces, on one switch ──
  *
- * It used to follow the selection, so silver jittered when silver was on screen. Now only
- * the 22K headline moves. MASTER-SPEC §8 scopes the fluctuation to "the homepage widget"
- * and this is that widget's headline figure; the secondary rows show the true rate, sitting
- * still. That is less invented movement than before, not more.
+ * Phase 4 moved whichever metal was selected; Stage 4B narrowed that to the 22K anchor while
+ * 18K and silver sat still. The owner asked for all three to move together, so one walk runs
+ * per face — each bounded against ITS OWN true rate, so the ±₹199 band means the same thing
+ * on a ₹1.18L gold rate and a ₹95k silver one.
  *
- * `NEXT_PUBLIC_TICKER_JITTER=false` disables it everywhere, and reduced motion disables it
- * regardless of the flag.
+ * One switch, three faces, deliberately: a per-metal control would let the card show a
+ * moving gold rate beside a frozen silver one, which reads as a broken row rather than as a
+ * choice, and it would multiply the MASTER-SPEC §8 off-switch into three things to get wrong.
+ *
+ * ── What turns it off ──
+ *
+ * `jitter` — resolved on the server from `Settings.tickerJitter`, falling back to
+ * `NEXT_PUBLIC_TICKER_JITTER`. That column existed since §7.9 and nothing read it: this
+ * component consulted the environment variable directly, so the admin toggle wrote an
+ * audited value that changed nothing. See `getTickerJitter` in `lib/settings.ts`.
+ *
+ * Reduced motion disables it regardless, and `/rates` passes `jitter={false}` outright.
  */
 'use client';
 
@@ -43,7 +53,6 @@ import { RateDelta } from '@/components/rates/rate-delta';
 import { RateDisclaimer } from '@/components/rates/rate-disclaimer';
 import { Sparkline } from '@/components/rates/sparkline';
 import { Card } from '@/components/ui';
-import { clientEnv } from '@/lib/env';
 import { formatINR } from '@/lib/money';
 import { nextTick, TICK_INTERVAL_MS } from '@/lib/ticker-jitter';
 import { cn } from '@/lib/utils/cn';
@@ -86,6 +95,9 @@ const SHORT_UNIT: Record<string, string> = {
 const ANCHOR: FaceKey = 'gold22';
 const SECONDARY: FaceKey[] = ['gold18', 'silver999'];
 
+/** Every face, anchor first. The jitter loop walks all of them. */
+const FACES: FaceKey[] = [ANCHOR, ...SECONDARY];
+
 const fetcher = (url: string) =>
   fetch(url).then((r) => r.json() as Promise<SerialisedRates>);
 
@@ -112,6 +124,15 @@ export interface LiveRateCardProps {
    * itself.
    */
   heading?: string | null;
+  /**
+   * Whether the displayed rates may walk around the true ones.
+   *
+   * Resolved on the server (`getTickerJitter`) so the owner's dashboard setting is what
+   * decides, rather than the build-time environment variable this component used to read on
+   * its own. Defaults to `false`: a caller that has not thought about it gets the still,
+   * truthful card, which is the safe direction for a number MASTER-SPEC §8 governs.
+   */
+  jitter?: boolean;
 }
 
 export function LiveRateCard({
@@ -119,6 +140,7 @@ export function LiveRateCard({
   history = NO_HISTORY,
   showHistoryLink = true,
   heading = "Today's rates",
+  jitter = false,
 }: LiveRateCardProps) {
   /**
    * True rates. Seeded from the ISR'd server page so the FIRST PAINT already shows real
@@ -133,24 +155,42 @@ export function LiveRateCard({
 
   const rates = data ?? initialRates;
   const anchor = rates[ANCHOR];
-  const truth = useMemo(() => BigInt(anchor.display), [anchor.display]);
 
-  const [displayed, setDisplayed] = useState<bigint>(truth);
+  /**
+   * The true rate for every face, not just the anchor — each walk is bounded against its own.
+   *
+   * That is the whole reason this is a record rather than three variables: the ±₹199 band is
+   * measured per face, so silver never borrows gold's headroom.
+   */
+  const truths = useMemo(
+    () =>
+      Object.fromEntries(FACES.map((key) => [key, BigInt(rates[key].display)])) as Record<
+        FaceKey,
+        bigint
+      >,
+    [rates],
+  );
+  const truth = truths[ANCHOR];
+
+  const [displayed, setDisplayed] = useState<Record<FaceKey, bigint>>(truths);
   const [pulse, setPulse] = useState(false);
 
   /**
    * A refetch that lands on a new rate resets the walk to it rather than drifting from the
    * old one. Adjusted during render, not in an effect: an effect would paint the previous
    * value first and then correct it, which is a visible flash of the wrong price.
+   *
+   * Compared per face and reset wholesale — the three rates are saved together, so a partial
+   * reset would leave two faces walking from the previous morning's numbers.
    */
-  const [seenTruth, setSeenTruth] = useState(truth);
-  if (truth !== seenTruth) {
-    setSeenTruth(truth);
-    setDisplayed(truth);
+  const [seenTruths, setSeenTruths] = useState(truths);
+  if (FACES.some((key) => truths[key] !== seenTruths[key])) {
+    setSeenTruths(truths);
+    setDisplayed(truths);
   }
 
   /**
-   * The interval reads the latest displayed value without being re-created every tick.
+   * The interval reads the latest displayed values without being re-created every tick.
    * Written in an effect, never during render — a ref mutated during render breaks
    * concurrent rendering, where React may render a tree it then discards.
    */
@@ -160,7 +200,7 @@ export function LiveRateCard({
   }, [displayed]);
 
   useEffect(() => {
-    if (!clientEnv.NEXT_PUBLIC_TICKER_JITTER) return;
+    if (!jitter) return;
 
     /**
      * Reduced motion switches the jitter off entirely (§4.3), not just its transition. The
@@ -174,8 +214,14 @@ export function LiveRateCard({
     const start = () => {
       if (timer) return;
       timer = setInterval(() => {
-        const tick = nextTick(displayedRef.current, truth);
-        setDisplayed(tick.value);
+        // One tick advances every face, so the three rows move together rather than
+        // shimmering out of step with each other.
+        const current = displayedRef.current;
+        setDisplayed(
+          Object.fromEntries(
+            FACES.map((key) => [key, nextTick(current[key], truths[key]).value]),
+          ) as Record<FaceKey, bigint>,
+        );
         setPulse(true);
       }, TICK_INTERVAL_MS);
     };
@@ -200,7 +246,7 @@ export function LiveRateCard({
       stop();
       document.removeEventListener('visibilitychange', onVisibility);
     };
-  }, [truth]);
+  }, [jitter, truths]);
 
   useEffect(() => {
     if (!pulse) return;
@@ -294,7 +340,7 @@ export function LiveRateCard({
                 pulse && 'opacity-90',
               )}
             >
-              {formatINR(displayed)}
+              {formatINR(displayed[ANCHOR])}
             </p>
 
             <RateDelta
@@ -342,8 +388,13 @@ export function LiveRateCard({
                   </span>
                 </p>
                 <div className="flex shrink-0 items-center gap-4">
-                  <p className="text-h3 font-semibold text-ink num">
-                    {formatINR(BigInt(face.display))}
+                  <p
+                    className={cn(
+                      'text-h3 font-semibold text-ink num transition-opacity duration-fast',
+                      pulse && 'opacity-90',
+                    )}
+                  >
+                    {formatINR(displayed[key])}
                   </p>
                   <RateDelta
                     change={BigInt(face.change)}

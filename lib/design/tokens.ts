@@ -11,8 +11,13 @@ export const COLORS = {
   cream: '#FAF7F5',
   ink: '#1A1A1A',
   /** Corrected from the brief's #8B888F, which failed on all four light surfaces. D-057. */
-  muted: '#6E6B72',
-  line: '#F0EEF0',
+  /** Stage 6: darkened from #6E6B72 so every ratio improves and the hairline can move. */
+  muted: '#605D64',
+  /** Stage 6: darkened from #F0EEF0, which measured 1.15:1 on white — invisible, not subtle. */
+  line: '#E4DDD8',
+
+  /** Warm neutral band — the page is cream, a card is white, a quiet section is sand. */
+  sand: '#F4EFEA',
 
   /** Wine — the primary luxury surface. D-056. */
   wine: '#3D0C1E',

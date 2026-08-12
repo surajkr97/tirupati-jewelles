@@ -42,6 +42,7 @@ import { extendTailwindMerge } from 'tailwind-merge';
  * read a stylesheet off disk. The test is what keeps it honest.
  */
 export const TEXT_SIZES = [
+  'caption',
   'small',
   'body',
   'lead',

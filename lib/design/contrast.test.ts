@@ -39,11 +39,23 @@ describe('token contrast on the cream page background', () => {
     expect(contrastRatio(fg, COLORS.cream)).toBeGreaterThanOrEqual(AA_LARGE);
   });
 
-  it('muted is the corrected value, not the one the brief supplied', () => {
+  it('muted is a corrected value, never the one the brief supplied', () => {
     // #8B888F measures 3.27:1 — kept here so nobody reverts the token by copying the
     // redesign brief's palette block verbatim. D-057.
     expect(contrastRatio('#8B888F', COLORS.cream)).toBeLessThan(AA_BODY);
-    expect(COLORS.muted).toBe('#6E6B72');
+
+    /**
+     * Stage 6 moved it again, from #6E6B72 to #605D64, and the assertion is now stated as
+     * a floor rather than as one pinned string.
+     *
+     * Pinning the exact value made the token unmovable in the safe direction: Stage 6
+     * needed the headroom to darken `line` into a hairline anybody can see, and darkening
+     * `muted` improves every ratio it has. A test that forbids an improvement is testing
+     * the wrong thing. What must never happen is `muted` drifting LIGHTER, so that is what
+     * is asserted — against the strictest surface it lands on.
+     */
+    expect(contrastRatio(COLORS.muted, COLORS.line)).toBeGreaterThanOrEqual(AA_BODY);
+    expect(contrastRatio(COLORS.muted, COLORS.cream)).toBeGreaterThanOrEqual(AA_BODY);
   });
 });
 
@@ -59,6 +71,10 @@ describe('tokens on the surfaces they are actually drawn on', () => {
     ['muted on a card', COLORS.muted, COLORS.white],
     ['muted on the rose tint', COLORS.muted, COLORS.roseTint],
     ['muted on a hairline surface', COLORS.muted, COLORS.line],
+    // Stage 6's warm neutral band. A section surface, so it carries body text.
+    ['muted on the sand band', COLORS.muted, COLORS.sand],
+    ['ink on the sand band', COLORS.ink, COLORS.sand],
+    ['roseDeep on the sand band', COLORS.roseDeep, COLORS.sand],
     ['ink on the rose tint (badge)', COLORS.ink, COLORS.roseTint],
     ['roseDeep on a card', COLORS.roseDeep, COLORS.white],
     ['roseDeep on the rose tint (delta chip)', COLORS.roseDeep, COLORS.roseTint],
@@ -77,6 +93,8 @@ describe('tokens on the surfaces they are actually drawn on', () => {
     ['up on cream', COLORS.up, COLORS.cream],
     ['up on a card', COLORS.up, COLORS.white],
     ['up on the rose tint', COLORS.up, COLORS.roseTint],
+    ['up on the sand band', COLORS.up, COLORS.sand],
+    ['down on the sand band', COLORS.down, COLORS.sand],
     ['up on its own 10% badge over white', COLORS.up, composite(COLORS.up, COLORS.white, 0.1)],
     ['up on its own 10% badge over cream', COLORS.up, composite(COLORS.up, COLORS.cream, 0.1)],
     ['down on cream', COLORS.down, COLORS.cream],

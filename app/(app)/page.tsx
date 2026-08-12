@@ -36,6 +36,8 @@ import { db } from '@/lib/db';
 import { getCurrentRates, getRateHistory, RATE_FACES } from '@/lib/rates';
 import { serialiseRates } from '@/lib/rates-view';
 import { canonical } from '@/lib/seo';
+import { ogImageFrom, OG_HEIGHT, OG_WIDTH } from '@/lib/seo/og-image';
+import { getTickerJitter } from '@/lib/settings';
 
 import Link from 'next/link';
 
@@ -43,17 +45,54 @@ import type { Metadata } from 'next';
 
 /**
  * The home page inherits its title and description from the root layout — it IS the site.
- * What it needs of its own is the canonical: `/` is reachable as `/?utm_source=…` from every
- * link the shop shares on WhatsApp, and without this each of those is a separate URL.
+ *
+ * What it needs of its own is two things. The CANONICAL, because `/` is reachable as
+ * `/?utm_source=…` from every link the shop shares on WhatsApp and without this each of
+ * those is a separate URL. And the SOCIAL CARD (§14): the root layout declared
+ * `twitter.card: 'summary_large_image'` with no `og:image` behind it, so every one of those
+ * WhatsApp links reserved a large preview and filled it with blank.
+ *
+ * `generateMetadata` rather than a static object — and it replaces that export rather than
+ * sitting beside it, because Next allows one or the other and never both. Dynamic because the image lives in the
+ * `HERO_BANNER` slot and the owner can change it from `/admin/media` without a deploy. The
+ * page is already ISR at 300s and this query is the same one the page body runs, so it costs
+ * a cached read rather than a round trip per share.
+ *
+ * Next merges this with the root layout's `openGraph`, so the title, description, locale and
+ * `siteName` set there are untouched — only the images are added.
  */
-export const metadata: Metadata = {
-  ...canonical('/'),
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const hero = await db.mediaSlot.findUnique({
+    where: { slotKey: 'HERO_BANNER' },
+    select: { imageUrl: true, headline: true, isActive: true },
+  });
+
+  // A cleared or deactivated slot means no image, not a broken one.
+  const image = hero?.isActive ? ogImageFrom(hero.imageUrl) : null;
+  if (!image) return { ...canonical('/') };
+
+  const images = [
+    {
+      url: image,
+      width: OG_WIDTH,
+      height: OG_HEIGHT,
+      // The owner's own headline when they have set one; otherwise what the picture is.
+      alt: hero?.headline?.trim() || 'Hallmarked gold and silver jewellery at Tirupati Jewelles',
+    },
+  ];
+
+  return {
+    ...canonical('/'),
+    openGraph: { images },
+    twitter: { images },
+  };
+}
 
 export const revalidate = 300;
 
 /** How many new arrivals the strip shows. Six fills the grid at every breakpoint. */
 const NEW_ARRIVALS = 6;
+
 
 async function loadTickerData() {
   const rates = await getCurrentRates();
@@ -72,8 +111,10 @@ async function loadTickerData() {
 }
 
 export default async function HomePage() {
-  const [{ serialised, history }, categories, hero, arrivals] = await Promise.all([
+  const [{ serialised, history }, tickerJitter, categories, hero, arrivals] = await Promise.all([
     loadTickerData(),
+    // The owner's switch. Fetched with everything else — it is a cached read, not a round trip.
+    getTickerJitter(),
     db.category.findMany({
       where: { isActive: true },
       orderBy: { sortOrder: 'asc' },
@@ -134,6 +175,9 @@ export default async function HomePage() {
         <LiveRateCard
           initialRates={serialised}
           history={history as Record<'gold22' | 'gold18' | 'silver999', string[]>}
+          /* The owner's dashboard switch, resolved here rather than read from the
+             environment inside the card — see `getTickerJitter`. */
+          jitter={tickerJitter}
         />
       </Section>
 
@@ -155,26 +199,64 @@ export default async function HomePage() {
         </Section>
       )}
 
+      {/*
+        The trust band sits BETWEEN the two product sections rather than closing the page.
+
+        As a full-bleed `sand` band it breaks the run of white sections in half, so the page
+        alternates surface rather than presenting two grids back to back — and the four facts
+        it carries (hallmarking, making charges, itemised pricing, a rate set each morning)
+        land while somebody is still looking at pieces, which is when they matter.
+      */}
+      <TrustBand />
+      {/*
+        ── Collections (§6) ──
+
+        Every category carries a real photograph — Stage 5F made `Category.imageUrl`
+        settable and the shop has filled all six. The first tile is wider and squarer than
+        the rest so the row has a subject instead of six identical squares.
+      */}
       <Section display heading="Collections" seeAllHref="/collections">
-        <ul className="grid grid-cols-2 gap-4 md:grid-cols-3">
-          {categories.map((category) => (
-            <li key={category.id}>
+        {/*
+          Two wide tiles, then four narrow ones — varied sizes, but every tile in a row
+          shares a ratio so the labels sit on one line. The first attempt mixed a 4/3 tile
+          with 4/5 neighbours in the same row and their captions floated at three different
+          heights, which is the failure mode §10's "intentional alignment" is about.
+        */}
+        <ul className="grid grid-cols-2 gap-4 md:grid-cols-12 md:gap-6">
+          {categories.map((category, index) => {
+            const wide = index < 2;
+            return (
+            <li
+              key={category.id}
+              className={wide ? 'col-span-2 md:col-span-6' : 'md:col-span-3'}
+            >
               <Link href={`/collections/${category.slug}`} className="group block">
-                <ImageFrame
-                  src={category.imageUrl}
-                  alt={category.name}
-                  ratio="1/1"
-                  blurDataURL={category.blurDataUrl ?? undefined}
-                />
-                <p className="mt-2 text-body font-medium text-ink">{category.name}</p>
+                <div className="overflow-hidden rounded-card">
+                  <ImageFrame
+                    src={category.imageUrl}
+                    /* Decorative: the name is printed directly beneath, and a screen
+                       reader announcing it twice helps nobody. */
+                    alt=""
+                    ratio={wide ? '3/2' : '4/5'}
+                    sizes={
+                      wide
+                        ? '(max-width: 768px) 100vw, 50vw'
+                        : '(max-width: 768px) 50vw, 25vw'
+                    }
+                    blurDataURL={category.blurDataUrl ?? undefined}
+                    className="transition-transform duration-slow ease-standard group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+                  />
+                </div>
+                <p className="mt-2 text-body font-medium text-ink group-hover:text-rose-deep">
+                  {category.name}
+                </p>
               </Link>
             </li>
-          ))}
+            );
+          })}
         </ul>
       </Section>
 
-      {/* The last thing before the footer, on wine — the page closes the way it opened. */}
-      <TrustBand />
     </>
   );
 }

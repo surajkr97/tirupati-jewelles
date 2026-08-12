@@ -45,8 +45,29 @@
      The taupe → rose rename is D-058: one-to-one, same semantics. */
   --color-cream: #faf7f5;
   --color-ink: #1a1a1a;
-  --color-muted: #6e6b72;
-  --color-line: #f0eef0;
+
+  /* Stage 6 darkened both of these, and both moves are in the accessibility-improving
+     direction — §23: "The lighter palette must NOT reduce contrast."
+
+     `muted` #6E6B72 → #605D64. Every ratio it has improves: cream 4.91 → 6.06, white
+     5.24 → 6.47, roseTint 4.65 → 5.74. It buys the headroom the hairline below needs.
+
+     `line` #F0EEF0 → #E4DDD8. The old value measured 1.15:1 against white and 1.08:1
+     against cream — it was not a subtle hairline, it was an invisible one, and the same
+     defect showed up in the invoice (D-114). §1 lists "subtle borders" among the things a
+     light design is meant to feel premium THROUGH, and a rule nobody can see cannot do
+     structural work that dark surfaces used to do. 1.34:1 on white is present without
+     being a box.
+
+     `muted` on the new `line` measures 4.81 — the contrast suite's worst-case pair still
+     clears AA body, which is why `muted` had to move first. */
+  --color-muted: #605d64;
+  --color-line: #e4ddd8;
+
+  /* Warm neutral band. The third light surface an editorial page needs: cream is the page,
+     white is a card, and `sand` is a section that wants to sit back without going dark.
+     4.58:1 for muted, so it is a text surface and not only a decoration. */
+  --color-sand: #f4efea;
 
   /* Wine — the primary luxury surface. Hero, trust band, footer, admin rail. */
   --color-wine: #3d0c1e;
@@ -104,12 +125,27 @@
      codebase was already asking for. */
   --spacing-icon: 20px;
 
+  /* Navigation chrome. §4 and §12 of the Stage 6 brief both say the icons dominate on a
+     phone, and 20px in a 44px target is the reason: the glyph reads as the control. 18px
+     keeps the icon legible while letting the TARGET stay 44px, which is the distinction
+     §3 draws — touch target is not visual size. Its own token so the header, the bottom
+     bar and the mobile menu cannot drift apart. */
+  --spacing-icon-sm: 18px;
+
+  /* The bottom bar's glyph, deliberately NOT `--spacing-icon-sm`.
+
+     The two were the same 18px until Stage 6 tuned the bar up a step, and sharing the token
+     would have quietly resized the header's search and account marks and the WhatsApp icon
+     on the product page — three surfaces nobody asked to change. A nav-specific dimension
+     gets a nav-specific token, the same way `--spacing-bottom-nav` does. */
+  --spacing-icon-nav: 19px;
+
   /* Control heights. 44px is the minimum tap target (MASTER-SPEC §3). */
   --spacing-tap: 44px;
   /* Single source of truth for the mobile bottom nav. BottomNav sets its height from
      this and BottomNavSpacer reserves exactly the same amount, so the two cannot drift
      apart and let the nav cover the footer. */
-  --spacing-bottom-nav: 64px;
+  --spacing-bottom-nav: 56px;
   --spacing-control: 52px;
   --spacing-control-lg: 56px;
   --spacing-header: 56px;
@@ -136,6 +172,13 @@
      closer to Playfair and ships on every target platform, so a failed webfont
      degrades to a similar shape instead of a much wider Times. */
   --font-display: var(--font-playfair), Georgia, 'Times New Roman', serif;
+
+  /* Navigation labels only. Body copy never goes below 15px (see the note above) and this
+     is not body copy — it is a label under an icon, where 14px reads as a sentence and
+     crowds five destinations at 320px. §12 asks that the bar not consume excessive
+     vertical space; this and `--spacing-icon-sm` are how it stops. */
+  --text-caption: 11px;
+  --text-caption--line-height: 14px;
 
   --text-small: 14px;
   --text-small--line-height: 20px;

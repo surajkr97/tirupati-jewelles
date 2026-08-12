@@ -49,8 +49,18 @@ export const PURITY_OPTIONS = [
   unit: string;
 }[];
 
-/** §5.4: "quick-pick chips (8% · 10% · 12% · 15%)". */
-export const MAKING_CHIPS = ['8', '10', '12', '15'] as const;
+/**
+ * The quick-pick making-charge chips (§5.4).
+ *
+ * The spec wrote these as 8 · 10 · 12 · 15. The shop owner corrected them to 12 · 15 · 18 · 22
+ * during the Stage 6 review — 8% and 10% are below anything actually quoted here, so two of
+ * the four chips were dead and the rates people do use needed typing. This is the shop's own
+ * domain knowledge overriding a written figure, so the spec is the thing that is out of date.
+ *
+ * Chips only: they prefill the Making field and nothing else. Every rate stays editable, and
+ * no calculation reads this list — `SPEC_PRICING_DEFAULTS.makingPct` is the separate default.
+ */
+export const MAKING_CHIPS = ['12', '15', '18', '22'] as const;
 
 export function metalForPurity(purity: PurityKey): MetalKey {
   return purity === 'SILVER_999' ? 'SILVER' : 'GOLD';

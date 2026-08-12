@@ -153,6 +153,11 @@ export default async function RatesPage() {
           initialRates={serialisedRates}
           history={sparklines}
           showHistoryLink={false}
+          /* Explicit, because it used to be a claim in a comment with nothing behind it: the
+             note above said the jitter was "switched off here" while the card read the env
+             flag on its own and moved regardless. `jitter` now defaults to false, and this
+             says so at the call site rather than relying on that default. */
+          jitter={false}
           // The page's h1 already says this; see the prop's note.
           heading={null}
         />
@@ -165,16 +170,20 @@ export default async function RatesPage() {
       {/* The page's one outward action. §11 puts the calculator CTA last, and it is the
           thing a customer who has just read a rate actually wants next. */}
       <Section className="pb-16">
-        <div className="surface-wine flex flex-col items-start gap-4 rounded-card bg-wine p-6 text-cream md:flex-row md:items-center md:justify-between md:p-8">
+        {/* Stage 6: was a wine block. §1 takes wine off the storefront; the section still
+            reads as the page's one outward action through type and a hairline border. */}
+        <div className="flex flex-col items-start gap-4 rounded-card border border-line bg-sand p-6 md:flex-row md:items-center md:justify-between md:p-8">
           <div className="flex flex-col gap-1">
-            <p className="font-display text-h2 font-medium">Price a piece at this rate</p>
-            <p className="text-body text-cream/70">
+            <p className="font-display text-h2 font-medium text-ink">
+              Price a piece at this rate
+            </p>
+            <p className="text-body text-muted">
               Add weight and making charge for an itemised estimate.
             </p>
           </div>
           <Link
             href="/calculator"
-            className={cn(buttonClasses({ variant: 'onWine' }), 'shrink-0')}
+            className={cn(buttonClasses({ variant: 'primary' }), 'shrink-0')}
           >
             Open the calculator
           </Link>

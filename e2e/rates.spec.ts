@@ -29,10 +29,16 @@ function tickerValue(page: Page) {
  * to land back on the true rate at second 10 would pass a first-vs-last comparison.
  */
 async function sample(page: Page, seconds: number): Promise<string[]> {
+  /**
+   * Polled twice a second rather than once, because the ticker moves every 3s since Stage 6
+   * (`TICK_INTERVAL_MS`) and a 6-sample-at-1s window covered barely one tick — the positive
+   * control below started failing for a reason that had nothing to do with the off-switch.
+   * The `seconds` argument still means wall-clock seconds.
+   */
   const seen: string[] = [];
-  for (let i = 0; i < seconds; i += 1) {
+  for (let i = 0; i < seconds * 2; i += 1) {
     seen.push((await tickerValue(page).innerText()).trim());
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(500);
   }
   return seen;
 }
@@ -50,7 +56,8 @@ test.describe('ticker jitter — the off-switch', () => {
     await page.goto('/');
     await expect(tickerValue(page)).toBeVisible();
 
-    const seen = await sample(page, 6);
+    // 13s covers several 3s ticks with room for scheduling slack.
+    const seen = await sample(page, 13);
     expect(new Set(seen).size).toBeGreaterThan(1);
   });
 
