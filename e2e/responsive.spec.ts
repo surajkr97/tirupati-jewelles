@@ -252,7 +252,7 @@ test.describe('the admin shell across the breakpoint', () => {
       if (width >= 768) {
         await expect(rail).toBeVisible();
       } else {
-        await expect(page.getByRole('button', { name: 'More admin pages' })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'All admin pages' })).toBeVisible();
       }
     });
   }

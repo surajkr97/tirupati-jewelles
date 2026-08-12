@@ -383,6 +383,141 @@ invariants (D-071). Not a defect; an open product question.
 *Recommended fix:* none during the redesign — **owner ruled on 12 Aug to keep it and revisit
 after Stage 4.** Removal is `NEXT_PUBLIC_TICKER_JITTER=false` plus deleting the walk. D-071.
 
+**UI_REDESIGN_DEBT-009 — the rate field puts ₹ after the number.**
+*Problem:* `RateEditor` renders `suffix="₹"`, so the field reads `149840  ₹`. Indian
+convention puts the symbol first. `Input` supports `prefix`, but its prefix padding is a
+fixed `pl-16` (64px), measured for `+91` — a single ₹ would sit in a large gap.
+*Affected:* `components/admin/rate-editor.tsx`, `components/ui/input.tsx`.
+*Severity:* LOW — cosmetic; the label already says "New rate (per 10 grams)" and the value is
+unambiguous.
+*Recommended fix:* make `Input`'s prefix padding size to its content. Not done in 5C because
+that padding carries a documented measured bug (`pl-14` emitted nothing and `+91` overlapped
+the typed number by 27px), and re-deriving it for marginal gain is the wrong trade inside a
+sub-stage about rates.
+
+**UI_REDESIGN_DEBT-010 — four hand-written purity label maps.**
+*Problem:* `K22_916` is turned into readable text in four places — `lib/rates.ts`'s
+`RATE_FACES` ("Gold 22K"), `components/product/product-card.tsx`, `lib/catalog/whatsapp.ts`
+and `lib/bills/render.ts` (both "22K (916)"). Nothing keeps them in step, so the same piece
+can be described differently on the shop, in a WhatsApp enquiry and on its own invoice.
+*Affected:* the four files above, plus `components/admin/bill-builder.tsx`, which Stage 5E
+gave a fifth (`RATE_FACE_LABEL`) — a client component cannot import `RATE_FACES`, because
+`lib/rates.ts` is `server-only`.
+*Severity:* LOW — every copy is currently correct; the risk is drift, not a live defect. Stage
+5E did remove one class of drift: the bill screen now imports `BILL_PURITY_LABEL` from
+`lib/bills/render.ts` instead of rendering `String(item.purity).replace('_', ' ')`, which
+showed an admin "K22 916" where their customer's invoice said "22K (916)".
+*Recommended fix:* one exported map, derived from `RATE_FACES` so the admin's rate page and
+the customer's product page cannot disagree. Not done in 5D: three of the four are storefront
+and bill files, which this sub-stage must not touch. The admin list already reads
+`RATE_FACES` rather than adding a fifth copy.
+
+**UI_REDESIGN_DEBT-011 — ten of the twelve media slots are read by nothing.**
+*Problem:* §7.6 planned eleven surfaces and the application renders two: `HERO_BANNER`
+(`app/(app)/page.tsx`) and `BILL_LOGO` (`lib/bills/logo.ts`). `OFFER_STRIP`,
+`CATEGORY_TILE_1…6`, `FEATURE_BANNER`, `ABOUT_IMAGE` and `FOOTER_BG` accept an upload,
+validate it, audit it, store it and show it to nobody. Until Stage 5D the admin screen named
+a specific place on the site for each — including "The about page", which does not exist
+(specs/ROUTE-MAP.md, D-060).
+*Affected:* `lib/media/slots.ts`, `app/admin/media/page.tsx`; the storefront surfaces that
+would consume them.
+*Severity:* MEDIUM as found (the owner was told an upload would appear somewhere it never
+would); LOW now that the screen says "Not shown on the site yet" and `lib/media/slots.test.ts`
+fails if a `live` flag stops matching the code.
+*Recommended fix:* either build the surfaces or drop the rows. Both are product decisions —
+one adds sections to the homepage, the other is a schema change — and neither belongs in a
+sub-stage about admin UI. Note `CATEGORY_TILE_*` is doubly dead: the collections grid reads
+`Category.imageUrl`, not a slot. See DEBT-014.
+
+**UI_REDESIGN_DEBT-012 — the product editor has no unsaved-changes guard.**
+*Problem:* the edit form is the longest in the application and the admin rail sits beside it
+on every screen ≥768px. A click on "Rates" discards everything typed, with no prompt.
+*Affected:* `components/admin/product-form.tsx`.
+*Severity:* MEDIUM — a real way to lose work, mitigated but not solved by 5D's dirty-aware
+save button, which at least makes "there are unsaved changes" visible before you navigate.
+*Recommended fix:* deliberately NOT built in 5D, per brief §13. `beforeunload` is the cheap
+half and it is the wrong half: it fires on a tab close or a reload and does nothing at all for
+an in-app `<Link>`, which is how this is actually lost. A correct guard needs router
+interception, which the App Router does not expose cleanly — its own task, with its own
+decision about which navigations it covers.
+
+**UI_REDESIGN_DEBT-013 — two product server actions have no UI.**
+*Problem:* `deactivateProduct` and `bulkUpdateProducts` are implemented, authorised, audited
+and unit-tested in `lib/admin/admin.test.ts`, and nothing in the application calls them.
+§7.4's "bulk actions: activate, deactivate, change category" has a back end and no front end.
+*Affected:* `app/admin/products/actions.ts`.
+*Severity:* LOW — the outcome is reachable: `deactivateProduct`'s effect is exactly the
+"Visible on the site" switch on the edit form, which is where the §7.4 soft-delete note lives.
+Only the bulk path is genuinely missing.
+*Recommended fix:* selection checkboxes on the list plus a bulk bar. Not added in 5D: brief §5
+says show the actions that exist, and a multi-select surface is a new feature rather than a
+redesign of one. It also needs a decision about whether bulk deactivation should confirm.
+
+**UI_REDESIGN_DEBT-016 — the invoice has no QR or verification mark.**
+*Problem:* §13 of the Stage 5G brief assumes one exists. Nothing in this repository
+generates, encodes or verifies a QR code — the string does not appear in the application.
+The only verification artefact is the signed, expiring URL the PDF is served from
+(`lib/bills/storage.ts`): an unguessable key plus an HMAC over key and deadline, good for
+seven days. That is a capability credential, and printing it on a customer's copy would put
+a secret on paper that stops working after a week.
+*Affected:* `lib/bills/pdf.tsx`, and a public verification route that does not exist.
+*Severity:* LOW — Indian tax invoices do not require one below the e-invoicing turnover
+threshold, and this shop is well under it. It becomes real if the shop ever crosses it, at
+which point the QR content is prescribed by the IRP rather than chosen.
+*Recommended fix:* not a visual cleanup. It needs a decision about what is encoded, a public
+route that verifies a bill without leaking it, and a QR dependency. Stage 5G deliberately
+added none of those (D-119).
+
+**UI_REDESIGN_DEBT-017 — the bill E2E suites trip the app's own rate limiter when run together.**
+*Problem:* `e2e/bills.spec.ts`, `e2e/admin-bills.spec.ts` and `e2e/claim.spec.ts` each pass
+cleanly on their own (40 and 29 passed in Stage 5G). Run together across the three viewport
+projects they fail with **HTTP 429** — `/admin/bills*` and `/bills/*` match the `bill` tier
+in `lib/security/global-limit.ts`, which is 60 requests per IP per 60 seconds, and every
+worker shares `127.0.0.1`. The first failure is a security assertion expecting 404 and
+receiving 429, after which everything downstream looks broken.
+*Affected:* `playwright.config.ts` sharding/parallelism; `lib/security/global-limit.ts` is
+the thing being tripped and is **not** the thing to change.
+*Severity:* MEDIUM for CI legibility — the application is behaving exactly as designed, so
+the risk is that a green-CI push loosens a flood control to make tests pass.
+*Recommended fix:* serialise the bill specs, or give them their own project/shard, so the
+burst stays under the tier. Do not raise the limit, do not exempt a path, and do not add a
+test-only bypass header: §9.1's wall is one of the few controls that protects the whole app
+at once. Left for whoever tunes the Stage 6 CI run, which is where the full suite lives.
+
+**UI_REDESIGN_DEBT-015 — the audit log cannot be filtered by actor.**
+*Problem:* §7.10 asks for "filterable by actor, action, entity, date". Action, entity and date
+exist; actor does not. The log stores `actorId` and the screen resolves it to a name, so
+answering "what did this person change last Tuesday" means reading the page and filtering by
+eye.
+*Affected:* `app/admin/audit/page.tsx`.
+*Severity:* LOW — one admin account exists today, so every entry has the same actor. It
+becomes real the moment the shop has a second staff login.
+*Recommended fix:* an actor `<select>` built from a `groupBy` on `actorId` joined to the user
+names, exactly as the action and entity lists now are. Not added in Stage 5F: §15 says do not
+invent backend filtering, and this is a filter the current data cannot make useful.
+
+**UI_REDESIGN_DEBT-014 — a collection's image cannot be set anywhere.** ✅ **CLOSED in 5F.**
+*Problem:* `Category.imageUrl` is selected by the homepage and the collections grid, is never
+written by the seed, and has no field in `/admin/categories`. Every collection tile on the
+site therefore renders the branded monogram, permanently, and the owner has no way to change
+that — while six `CATEGORY_TILE_*` media slots sit on `/admin/media` looking like the place
+they would do it.
+*Affected:* `prisma/schema.prisma` (`Category.imageUrl`), `app/admin/categories/actions.ts`,
+`components/admin/category-manager.tsx`.
+*Severity:* MEDIUM — a visible, permanent gap in the storefront with no admin route to it.
+*Fix, applied in Stage 5F (D-109):* the image field was added to the category form, through
+the same `checkImageUrl` path products and slots use. §8 of the 5F brief asked whether the
+correct fix was UI exposure or missing infrastructure — it was UI exposure, and no new media
+architecture was built. `imageUrl` is now a three-state field on `saveCategory` (`undefined`
+leaves it alone, `''` clears it, a URL is validated and the verified result stored), asserted
+in `lib/admin/admin.test.ts`.
+
+*What is still open, deliberately:* `Category.blurDataUrl` remains unwritten — exactly as it
+is for media slots. Generating a blur placeholder means fetching and downsampling the image
+server-side, which is the "unrelated media system" §9 of the 5F brief says not to build in
+order to close this. The column stays null and `ImageFrame` renders without a placeholder,
+which is the behaviour every other admin-set image already has.
+
 **UI_REDESIGN_DEBT-005 — client-side errors are not reported.**
 *Problem:* `app/error.tsx` renders a recovery UI but captures nothing. A SERVER render error
 is already reported by `onRequestError` in `instrumentation.ts` before the boundary paints, so

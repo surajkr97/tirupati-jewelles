@@ -60,10 +60,21 @@ const schema = z.object({
    */
   billPrefix: z
     .string()
-    .min(1)
-    .max(8)
+    .min(1, 'The invoice prefix cannot be empty.')
+    .max(8, 'Keep the invoice prefix to 8 characters or fewer.')
     .regex(/^[A-Za-z0-9-]+$/, 'Use letters, numbers and hyphens only.'),
-  billSequence: z.coerce.number().int().min(1).max(9_999_999),
+  /**
+   * Messages added by Stage 5F (§7: "Do not expose technical/server errors").
+   *
+   * The rules are Phase 7's and are unchanged. What changed is that a cleared field used to
+   * surface Zod's own "Too small: expected number to be >=1" to a shop owner, which reads
+   * like a crash rather than like a form.
+   */
+  billSequence: z.coerce
+    .number({ message: 'The next invoice number must be a whole number.' })
+    .int('The next invoice number must be a whole number.')
+    .min(1, 'The next invoice number must be at least 1.')
+    .max(9_999_999, 'That invoice number is too large.'),
   /** null = follow the env flag; true/false override it (§7.9). */
   tickerJitter: z.enum(['default', 'on', 'off']),
   businessHours: z.string().max(200),

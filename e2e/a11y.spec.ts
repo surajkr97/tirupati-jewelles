@@ -251,9 +251,22 @@ test.describe('§9.7 — axe on the admin panel', () => {
     page,
   }) => {
     await page.goto('/admin/products');
-    // The whole row is the link; there is no separate "Edit" control to name.
-    await page.locator('a[href^="/admin/products/"]').first().click();
-    await expect(page).toHaveURL(/\/admin\/products\/[^/]+$/);
+
+    /**
+     * The id, not merely the prefix.
+     *
+     * `a[href^="/admin/products/"]` also matches the **Add piece** link, which is first in
+     * the DOM — so this test scanned `/admin/products/new` while its name and its `toHaveURL`
+     * regex both claimed otherwise, and the editor's gallery (thumbnails, reorder controls,
+     * the remove confirmation, the upload label) has never been through axe. Found by Stage
+     * 5D, when a screenshot probe using the same selector produced two copies of the create
+     * page. `/admin/products/new` is covered by ADMIN_ROUTES above regardless.
+     */
+    await page
+      .locator('a[href^="/admin/products/"]:not([href$="/new"])')
+      .first()
+      .click();
+    await expect(page).toHaveURL(/\/admin\/products\/[0-9a-f-]{36}$/);
 
     await expectNoViolations(page, 'axe violations on the product editor');
   });

@@ -17,7 +17,7 @@
  *
  * The fifth slot used to be a direct link to /admin/media labelled "More", which is a label
  * that lies about where it goes. It now opens a sheet holding every secondary destination
- * and "Back to site", which is strictly more than the dashboard card it replaces — the
+ * and "Back to shop", which is strictly more than the dashboard card it replaces — the
  * condition Stage 2 §6 set for changing it.
  */
 'use client';
@@ -30,6 +30,7 @@ import { useState } from 'react';
 import { Sheet } from '@/components/ui';
 import {
   ADMIN_ALL,
+  ADMIN_MENU,
   ADMIN_PRIMARY,
   ADMIN_SECONDARY,
   BACK_TO_SITE,
@@ -137,12 +138,14 @@ export function AdminNav() {
         aria-label="Admin"
         className={cn(
           'fixed inset-x-0 bottom-0 z-30 md:hidden',
-          'bg-cream/90 backdrop-blur-md',
+          // Opaque, for the reason D-076 gives: translucent chrome cannot promise contrast
+          // when what scrolls under it is arbitrary.
+          'bg-cream',
           'pb-[env(safe-area-inset-bottom)]',
         )}
       >
         <ul className="flex h-bottom-nav items-stretch justify-around border-t border-line">
-          {ADMIN_PRIMARY.map(({ href, label, icon: Icon }) => {
+          {ADMIN_PRIMARY.map(({ href, label, shortLabel, icon: Icon }) => {
             const active = isActiveHref(pathname, href);
             return (
               <li key={href} className="flex-1">
@@ -161,7 +164,8 @@ export function AdminNav() {
                     aria-hidden="true"
                     strokeWidth={active ? 2.2 : 1.8}
                   />
-                  {label}
+                  {/* The bar abbreviates where it must; see `shortLabel`. */}
+                  {shortLabel ?? label}
                 </Link>
               </li>
             );
@@ -172,7 +176,7 @@ export function AdminNav() {
               type="button"
               onClick={() => setMoreOpen(true)}
               aria-expanded={moreOpen}
-              aria-label="More admin pages"
+              aria-label="All admin pages"
               className={cn(
                 'flex h-full w-full flex-col items-center justify-center gap-1 px-1',
                 'text-small font-medium transition-colors duration-fast ease-standard',
@@ -184,15 +188,24 @@ export function AdminNav() {
                 aria-hidden="true"
                 strokeWidth={moreActive ? 2.2 : 1.8}
               />
-              More
+              Menu
             </button>
           </li>
         </ul>
       </nav>
 
-      <Sheet open={moreOpen} onOpenChange={setMoreOpen} title="More">
-        <nav aria-label="Secondary admin pages" className="flex flex-col gap-1 pb-4">
-          {ADMIN_SECONDARY.map(({ href, label, icon: Icon, description }) => {
+      {/*
+        The sheet is the COMPLETE menu, not the overflow.
+
+        It used to list only the four destinations the bottom bar could not fit, which meant
+        no single surface on a phone showed the admin everything they could reach — the four
+        in the bar were only ever discoverable by looking at the bar. Stage 5 §11 asks the
+        drawer to expose every destination plus the way back to the shop, so it does; the bar
+        stays as the fast path to the four used daily (D-063).
+      */}
+      <Sheet open={moreOpen} onOpenChange={setMoreOpen} title="All admin pages">
+        <nav aria-label="All admin pages" className="flex flex-col gap-1 pb-4">
+          {ADMIN_MENU.map(({ href, label, icon: Icon, description }) => {
             const active = isActiveHref(pathname, href);
             return (
               <Link

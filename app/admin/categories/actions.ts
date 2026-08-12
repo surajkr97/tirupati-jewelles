@@ -16,6 +16,7 @@ import { z } from 'zod';
 
 import { adminAction, slugify, type ActionResult } from '@/lib/admin/actions';
 import { db } from '@/lib/db';
+import { checkImageUrl, FAILURE_MESSAGE } from '@/lib/media/fetch-image';
 
 /** MASTER-SPEC §6 names `categories` among the revalidation tags. */
 const CATEGORIES_TAG = 'categories';
@@ -32,6 +33,27 @@ const upsertSchema = z.object({
   name: z.string().min(1, 'Name is required.').max(80),
   slug: z.string().max(80).optional(),
   isActive: z.boolean(),
+  /**
+   * §7.5's "category image", finally reachable — UI_REDESIGN_DEBT-014.
+   *
+   * `Category.imageUrl` has existed since Phase 3 and is SELECTED by the homepage and the
+   * collections grid. Nothing has ever written it: the seed leaves it null and Phase 7's
+   * form had no field, so every collection tile on the storefront has rendered the branded
+   * monogram permanently, with no admin route to change that. Stage 5D found the gap; §8 of
+   * the 5F brief asks whether the fix is UI exposure or missing infrastructure.
+   *
+   * It is UI exposure. Nothing new is built here: the URL goes through `checkImageUrl` —
+   * the same §7.7 SSRF-and-magic-bytes guard that product images and media slots already
+   * use — and the verified final URL is stored in the column that was always there.
+   *
+   * Three states, and the distinction matters:
+   *   `undefined` — not sent. Leave the image alone. This is what the visibility toggle and
+   *                 the reorder path send, and treating it as "clear" would delete an image
+   *                 every time somebody hid a collection.
+   *   `''`        — clear it, back to the branded frame.
+   *   a URL       — validate, then store what was actually verified.
+   */
+  imageUrl: z.string().max(2048).optional(),
 });
 
 export async function saveCategory(
@@ -47,8 +69,32 @@ export async function saveCategory(
       };
     }
 
-    const { id, name, isActive } = parsed.data;
+    const { id, name, isActive, imageUrl } = parsed.data;
     const slug = slugify(parsed.data.slug?.trim() || name);
+
+    /**
+     * The image, validated exactly once — on save, never at render time (§7.7).
+     *
+     * `undefined` leaves the column untouched; see the schema note above for why that
+     * distinction is load-bearing rather than tidy.
+     */
+    let imagePatch: { imageUrl: string | null } | Record<string, never> = {};
+    if (imageUrl !== undefined) {
+      if (imageUrl.trim() === '') {
+        imagePatch = { imageUrl: null };
+      } else {
+        const check = await checkImageUrl(imageUrl.trim());
+        if (!check.ok) {
+          return {
+            ok: false,
+            error: `${FAILURE_MESSAGE[check.reason]} ${check.detail}`.trim(),
+            field: 'imageUrl',
+          };
+        }
+        // The URL that was verified, after redirects — not the one that was typed.
+        imagePatch = { imageUrl: check.url };
+      }
+    }
 
     if (!slug) {
       return {
@@ -78,15 +124,25 @@ export async function saveCategory(
 
       const after = await db.category.update({
         where: { id },
-        data: { name, slug, isActive },
+        data: { name, slug, isActive, ...imagePatch },
       });
 
       await audit({
         action: 'CATEGORY_EDIT',
         entity: 'Category',
         entityId: id,
-        before: { name: before.name, slug: before.slug, isActive: before.isActive },
-        after: { name: after.name, slug: after.slug, isActive: after.isActive },
+        before: {
+          name: before.name,
+          slug: before.slug,
+          isActive: before.isActive,
+          imageUrl: before.imageUrl,
+        },
+        after: {
+          name: after.name,
+          slug: after.slug,
+          isActive: after.isActive,
+          imageUrl: after.imageUrl,
+        },
       });
 
       await revalidateCategories();
@@ -100,14 +156,14 @@ export async function saveCategory(
     });
 
     const created = await db.category.create({
-      data: { name, slug, isActive, sortOrder: (last?.sortOrder ?? -1) + 1 },
+      data: { name, slug, isActive, sortOrder: (last?.sortOrder ?? -1) + 1, ...imagePatch },
     });
 
     await audit({
       action: 'CATEGORY_CREATE',
       entity: 'Category',
       entityId: created.id,
-      after: { name, slug, isActive },
+      after: { name, slug, isActive, imageUrl: created.imageUrl },
     });
 
     await revalidateCategories();
