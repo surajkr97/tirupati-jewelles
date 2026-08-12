@@ -40,12 +40,28 @@ test.describe('the invoice book', () => {
     const row = page.getByTestId('bill-row').first();
     await expect(row).toBeVisible();
 
-    // The identifier the shop and the customer both quote.
-    await expect(row).toContainText(/[A-Z]{1,8}-\d{4}-\d{4,}/);
     // A total, with its currency.
     await expect(row).toContainText(/₹/);
     // And a customer — a name, a number, or both.
     await expect(row).toContainText(/\+91\d{10}/);
+
+    /**
+     * The identifier, checked against the bill it opens rather than against a format.
+     *
+     * This asserted `/[A-Z]{1,8}-\d{4}-\d{4,}/` — the shape of a production invoice number,
+     * `JW-2026-0041`. CI's fixture bill is `E2E-FIXTURE-0001`, which is a perfectly good
+     * identifier and does not match, so the test failed over one shop's numbering scheme
+     * rather than over anything §1 asks for.
+     *
+     * What the row actually has to do is name the bill it leads to. Comparing the two is
+     * format-agnostic and asserts something real: the list and the detail page agree.
+     */
+    const href = await row.getByRole('link').first().getAttribute('href');
+    const identifier = (await row.locator('p').first().innerText()).trim();
+    expect(identifier.length).toBeGreaterThan(0);
+
+    await page.goto(href!);
+    await expect(page.getByRole('heading', { level: 1 })).toHaveText(identifier);
   });
 
   test('the page says what the totals mean — §4', async ({ page }) => {

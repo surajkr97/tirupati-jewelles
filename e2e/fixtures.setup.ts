@@ -29,6 +29,8 @@
 import { PrismaClient, Metal, Purity, Role } from '@prisma/client';
 import { test as setup, expect } from '@playwright/test';
 
+import { calculateLine } from '@/lib/pricing';
+
 const db = new PrismaClient();
 
 /** Served from `public/`, so it resolves without leaving the process. */
@@ -152,15 +154,44 @@ setup('the shop has at least one bill', async () => {
   const admin = await db.user.findFirst({ where: { role: Role.ADMIN } });
   expect(admin, 'no admin seeded — a bill has no author').not.toBeNull();
 
+  /**
+   * Priced by the engine, not by hand — and that is a correction, not a preference.
+   *
+   * The figures here were written as literals: `lineTotal: 25_40_399_21n` against a line of
+   * 20 g at the seeded ₹11,842/g, which is ₹2,73,218.62 once making and GST are applied.
+   * The fixture bill was about ten times its own contents.
+   *
+   * Nothing noticed for two phases, because nothing recomputed it. `buildBillData` does —
+   * it recovers the metal/making split from each line's snapshot and refuses to print a bill
+   * whose stored total does not reproduce — so **this fixture's PDF has never been
+   * renderable**, and Stage 5E's bill screen, which now shows the same breakdown, put the
+   * mismatch on the page in words.
+   *
+   * `calculateLine` is the function `createBill` itself uses. Deriving from it means the
+   * fixture cannot drift from the engine again, and it stays correct when the seeded rate
+   * changes — which a literal never could, since the rate is read from the database above.
+   */
+  const line = calculateLine(
+    {
+      metal: Metal.GOLD,
+      purity: Purity.K22_916,
+      weightMg: 20_000,
+      makingPct: 12,
+      stoneCharge: 0n,
+      gstPct: 3,
+    },
+    rate!.ratePerGram,
+  );
+
   await db.order.create({
     data: {
       orderNo: 'E2E-FIXTURE-0001',
       customerPhone: '+919999900010',
       customerName: 'E2E Fixture',
       createdByUserId: admin!.id,
-      subtotal: 24_66_407_00n,
-      gstAmount: 73_992_21n,
-      grandTotal: 25_40_399_21n,
+      subtotal: line.subtotal,
+      gstAmount: line.gstAmount,
+      grandTotal: line.lineTotal,
       ratesSnapshot: { [Purity.K22_916]: rate!.ratePerGram.toString() },
       items: {
         create: [
@@ -172,11 +203,65 @@ setup('the shop has at least one bill', async () => {
             ratePerGram: rate!.ratePerGram,
             makingPct: 12,
             gstPct: 3,
-            lineTotal: 25_40_399_21n,
+            lineTotal: line.lineTotal,
           },
         ],
       },
     },
+  });
+});
+
+/**
+ * The audit log needs entries to be a log.
+ *
+ * `/admin/audit` builds its action and record-type filters with `groupBy` over the whole
+ * table, and Stage 5F's tests assert that choosing one action does not collapse the list of
+ * the others. On a shop that has been trading there are hundreds of entries; on a freshly
+ * seeded CI database there are none, so the dropdown holds one option and the assertions
+ * fail for lack of data rather than for a defect — DEBT-040's exact shape.
+ *
+ * Written straight to the table rather than through `adminAction`: this is a log of things
+ * that happened, the page reads nothing else, and driving real mutations here would change
+ * the shop's rates and catalogue as a side effect of setting up a test.
+ */
+setup('the audit log has entries', async () => {
+  const admin = await db.user.findFirst({ where: { role: Role.ADMIN } });
+  expect(admin, 'no admin seeded — an audit entry has no actor').not.toBeNull();
+
+  // Ensure, do not overwrite: a real shop's log is left exactly as it is.
+  const distinct = await db.auditLog.groupBy({ by: ['action'] });
+  if (distinct.length >= 3) return;
+
+  await db.auditLog.createMany({
+    data: [
+      {
+        actorId: admin!.id,
+        action: 'RATE_SET',
+        entity: 'MetalRate',
+        entityId: `${Metal.GOLD}:${Purity.K22_916}`,
+        before: { ratePerGram: '1150000' },
+        after: { ratePerGram: '1184200' },
+        ip: '203.0.113.5',
+      },
+      {
+        actorId: admin!.id,
+        action: 'PRODUCT_EDIT',
+        entity: 'Product',
+        entityId: 'e2e-fixture-product',
+        before: { name: 'Fixture piece', isActive: true },
+        after: { name: 'Fixture piece', isActive: false },
+        ip: '203.0.113.5',
+      },
+      {
+        actorId: admin!.id,
+        action: 'SETTINGS_UPDATE',
+        entity: 'Settings',
+        entityId: 'singleton',
+        before: { billSequence: 1 },
+        after: { billSequence: 2 },
+        ip: '203.0.113.5',
+      },
+    ],
   });
 });
 
