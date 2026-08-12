@@ -632,6 +632,93 @@ describeDb('admin mutations', () => {
       expect(await db.category.findUnique({ where: { id: created.data.id } })).toBeNull();
     });
 
+    /**
+     * §7.5's "category image", reachable at last — UI_REDESIGN_DEBT-014, closed in Stage 5F.
+     *
+     * `Category.imageUrl` has been selected by the homepage since Phase 3 and written by
+     * nothing, so every collection tile on the storefront rendered the branded monogram
+     * permanently. The column now goes through the same `checkImageUrl` guard product images
+     * and media slots use.
+     *
+     * The third test is the one that matters. `imageUrl` has three meanings and the
+     * difference between two of them is a data-loss bug: the visibility toggle and the
+     * reorder path do not send the field, and if `undefined` were treated as "clear" then
+     * hiding a collection would silently delete its picture.
+     */
+    describe('the category image', () => {
+      it('stores the URL that was VERIFIED, not the one that was typed', async () => {
+        const result = await saveCategory({
+          id: ringsId,
+          name: 'Rings',
+          isActive: true,
+          imageUrl: 'https://res.cloudinary.com/typed.jpg',
+        });
+
+        expect(result.ok).toBe(true);
+        expect(
+          (await db.category.findUniqueOrThrow({ where: { id: ringsId } })).imageUrl,
+          // `checkImageUrl` follows redirects and reports where it actually landed.
+        ).toBe('https://res.cloudinary.com/ok.jpg');
+      });
+
+      it('clears the image back to the branded frame on an empty string', async () => {
+        await saveCategory({
+          id: ringsId,
+          name: 'Rings',
+          isActive: true,
+          imageUrl: 'https://res.cloudinary.com/a.jpg',
+        });
+
+        const cleared = await saveCategory({
+          id: ringsId,
+          name: 'Rings',
+          isActive: true,
+          imageUrl: '',
+        });
+
+        expect(cleared.ok).toBe(true);
+        // Null is what `ImageFrame` renders the monogram for.
+        expect(
+          (await db.category.findUniqueOrThrow({ where: { id: ringsId } })).imageUrl,
+        ).toBeNull();
+      });
+
+      it('LEAVES the image alone when the field is not sent', async () => {
+        await saveCategory({
+          id: ringsId,
+          name: 'Rings',
+          isActive: true,
+          imageUrl: 'https://res.cloudinary.com/keep.jpg',
+        });
+
+        // Exactly what the visibility toggle sends: no `imageUrl` at all.
+        const hidden = await saveCategory({ id: ringsId, name: 'Rings', isActive: false });
+
+        expect(hidden.ok).toBe(true);
+        const after = await db.category.findUniqueOrThrow({ where: { id: ringsId } });
+        expect(after.isActive).toBe(false);
+        expect(after.imageUrl).toBe('https://res.cloudinary.com/ok.jpg');
+      });
+
+      it('refuses an image the guard rejects, and says which field', async () => {
+        urlCheck.result = { ok: false, reason: 'host_not_allowed', detail: 'evil.example' };
+
+        const result = await saveCategory({
+          id: ringsId,
+          name: 'Rings',
+          isActive: true,
+          imageUrl: 'https://evil.example/x.jpg',
+        });
+
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.field).toBe('imageUrl');
+        // And nothing was written.
+        expect(
+          (await db.category.findUniqueOrThrow({ where: { id: ringsId } })).imageUrl,
+        ).toBeNull();
+      });
+    });
+
     it('reorders, and refuses a partial list', async () => {
       const second = await saveCategory({ name: 'Bangles', isActive: true });
       if (!second.ok) throw new Error('unreachable');

@@ -111,3 +111,53 @@ describe('parseBillFilters — the other fields', () => {
     expect(parseBillFilters({ q: 'x'.repeat(500) }).q).toHaveLength(80);
   });
 });
+
+/**
+ * Searching by name must not return the whole ledger — Stage 5E.
+ *
+ * `filters.q.replace(/\D/g, '')` is `''` for a term with no digits, and Prisma's
+ * `contains: ''` compiles to `LIKE '%%'`, which matches every row. So the `OR` always
+ * contained one clause that was true for every bill in the shop, and §8.5's "search by
+ * customer name" silently returned everything — on the screen AND in the accountant's CSV,
+ * which shares this function.
+ *
+ * Verified against the real database before it was fixed: `q=zzzznotabill` matched 120 of
+ * 120 active orders. Asserted on the shape of the `where` rather than through a query,
+ * because the defect is structural and a fixture-dependent count would rot.
+ */
+describe('billsWhere — the search term', () => {
+  const clauses = (q: string) =>
+    (billsWhere(parseBillFilters({ q })).OR ?? []) as Record<string, unknown>[];
+
+  const phoneSubstring = (q: string) =>
+    clauses(q).find(
+      (clause) =>
+        typeof clause.customerPhone === 'object' && clause.customerPhone !== null,
+    ) as { customerPhone: { contains: string } } | undefined;
+
+  it('never asks the database for `customerPhone contains ""`', () => {
+    for (const q of ['zzzznotabill', 'Priya', 'Priya Sharma', 'JW-', '  name  ']) {
+      const clause = phoneSubstring(q);
+      expect(clause?.customerPhone.contains, `"${q}" produced a match-everything clause`)
+        .not.toBe('');
+    }
+  });
+
+  it('a name search looks at the name and the invoice number, and nothing else', () => {
+    const keys = clauses('Priya Sharma').map((clause) => Object.keys(clause)[0]);
+    expect(keys).toEqual(['orderNo', 'customerName']);
+  });
+
+  it('a number still searches the phone, both as typed and normalised', () => {
+    const keys = clauses('98765 43210').map((clause) => Object.keys(clause)[0]);
+    // orderNo, customerName, the digit substring, and the E.164 form.
+    expect(keys).toEqual(['orderNo', 'customerName', 'customerPhone', 'customerPhone']);
+    expect(phoneSubstring('98765 43210')?.customerPhone.contains).toBe('9876543210');
+  });
+
+  it('a mixed term keeps its digits', () => {
+    // "JW-2026-0041" is an invoice number, and its digits are still a usable phone
+    // substring — the OR is a union, so an extra clause costs nothing but a miss does.
+    expect(phoneSubstring('JW-2026-0041')?.customerPhone.contains).toBe('20260041');
+  });
+});

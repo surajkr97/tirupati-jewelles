@@ -32,8 +32,15 @@ import { db } from '@/lib/db';
 import { calculateLine, type PurityKey } from '@/lib/pricing';
 import { toDisplayUnit } from '@/lib/rates';
 
-/** How the purity reads on a legal document — the caratage and the fineness. */
-const PURITY_LABEL: Record<PurityKey, string> = {
+/**
+ * How the purity reads on a legal document — the caratage and the fineness.
+ *
+ * Exported by Stage 5E for the admin's bill screen, which was rendering
+ * `String(item.purity).replace('_', ' ')` and so showed an admin the raw Prisma enum:
+ * "K22 916" on screen against "22K (916)" on the invoice for the same line. A fifth
+ * hand-written copy would have been the wrong fix (UI_REDESIGN_DEBT-010).
+ */
+export const BILL_PURITY_LABEL: Record<PurityKey, string> = {
   K22_916: '22K (916)',
   K18_750: '18K (750)',
   SILVER_999: 'Silver (999)',
@@ -114,13 +121,59 @@ function percent(value: { toString(): string }): string {
 }
 
 /**
+ * The metal / making / stone split for one stored line, recovered from its own snapshot.
+ *
+ * Exported by Stage 5E so the admin's bill screen shows the same breakdown the customer's
+ * invoice does — from the same call, not from a second one written beside it. §8/§9 of the
+ * 5E brief ask the detail page to show where the money went, and the schema stores only
+ * `lineTotal`; the alternative to this was arithmetic in a component, which is precisely
+ * what this module's header exists to forbid.
+ *
+ * Same engine, same snapshotted inputs, so `line.lineTotal` equals the stored
+ * `item.lineTotal`. If it ever does not, the stored value is authoritative and something
+ * upstream is broken — so it is checked rather than trusted, and the caller decides what to
+ * do about it. `buildBillData` refuses to print; the screen degrades to the stored figures
+ * and says why.
+ */
+export function splitStoredLine(
+  item: OrderForPdf['items'][number],
+  orderNo: string,
+): ReturnType<typeof calculateLine> {
+  const line = calculateLine(
+    {
+      metal: item.metal,
+      purity: item.purity as PurityKey,
+      weightMg: item.weightMg,
+      makingPct: Number(item.makingPct),
+      stoneCharge: item.stoneCharge,
+      gstPct: Number(item.gstPct),
+    },
+    item.ratePerGram,
+  );
+
+  if (line.lineTotal !== item.lineTotal) {
+    throw new Error(
+      `Bill ${orderNo}: stored line total ${item.lineTotal} does not match the ` +
+        `snapshot recomputation ${line.lineTotal}. Refusing to print a bill that ` +
+        `disagrees with itself.`,
+    );
+  }
+
+  return line;
+}
+
+/**
  * The rate reference block.
  *
  * Reads `ratesSnapshot` when the order carries one. Orders written before the snapshot
  * column existed fall back to the rates that were actually applied to their own lines,
  * which is less complete but never wrong.
+ *
+ * Exported by Stage 5E: §7 of that brief puts the rate snapshot in the detail page's
+ * hierarchy, and it was on the invoice and nowhere on the screen — so an admin answering
+ * "what rate did we bill this at?" had to open the PDF.
  */
-function ratesFor(order: OrderForPdf): BillPdfData['rates'] {
+export function billRateReference(order: OrderForPdf): BillPdfData['rates'] {
   const snapshot =
     order.ratesSnapshot && typeof order.ratesSnapshot === 'object'
       ? (order.ratesSnapshot as Record<string, unknown>)
@@ -153,39 +206,15 @@ export function buildBillData(
   const items: BillPdfItem[] = order.items.map((item) => {
     const purity = item.purity as PurityKey;
 
-    /**
-     * The split, recovered from the snapshot.
-     *
-     * Same engine, same inputs, so `line.lineTotal` equals the stored `item.lineTotal`. If
-     * it ever does not, the stored value is authoritative and something upstream is broken
-     * — so it is checked rather than trusted.
-     */
-    const line = calculateLine(
-      {
-        metal: item.metal,
-        purity,
-        weightMg: item.weightMg,
-        makingPct: Number(item.makingPct),
-        stoneCharge: item.stoneCharge,
-        gstPct: Number(item.gstPct),
-      },
-      item.ratePerGram,
-    );
-
-    if (line.lineTotal !== item.lineTotal) {
-      throw new Error(
-        `Bill ${order.orderNo}: stored line total ${item.lineTotal} does not match the ` +
-          `snapshot recomputation ${line.lineTotal}. Refusing to print a bill that ` +
-          `disagrees with itself.`,
-      );
-    }
+    // The split, recovered from the snapshot — and asserted against the stored total.
+    const line = splitStoredLine(item, order.orderNo);
 
     return {
       // Every free-text field goes through `pdfText` — see its header. An emoji in a
       // product name printed as `=O` on a live render, which is the kind of thing only a
       // rendered page shows you.
       name: pdfText(item.name, 'Item'),
-      purityLabel: PURITY_LABEL[purity] ?? String(item.purity),
+      purityLabel: BILL_PURITY_LABEL[purity] ?? String(item.purity),
       weight: grams(item.weightMg),
       ratePerGram: item.ratePerGram,
       metalValue: line.metalValue,
@@ -197,6 +226,25 @@ export function buildBillData(
       bisCertNo: pdfTextOrNull(item.bisCertNo),
     };
   });
+
+  /**
+   * The component totals §10 of the Stage 5G brief asks for — metal, making, stones.
+   *
+   * Summed from the per-line split above, which `splitStoredLine` already produced from each
+   * line's own snapshot and already asserted against its stored `lineTotal`. Nothing is
+   * recomputed: this adds up figures the engine produced, exactly as `summariseTotal` does
+   * for the calculator and as `/admin/bills/[id]` does for the same three rows.
+   *
+   * Null when the parts do not add up to the stored taxable total. A breakdown that does not
+   * reconcile with the figure beneath it is worse than no breakdown on a screen and far worse
+   * on a tax document — the invoice falls back to the stored totals alone. It cannot happen
+   * without a line already having thrown above, and it is checked anyway.
+   */
+  const metal = items.reduce((sum, item) => sum + item.metalValue, 0n);
+  const making = items.reduce((sum, item) => sum + item.makingCharge, 0n);
+  const stone = items.reduce((sum, item) => sum + item.stoneCharge, 0n);
+  const components =
+    metal + making + stone === order.subtotal ? { metal, making, stone } : null;
 
   return {
     shopName: pdfText(shop.shopName, 'Tirupati Jewelles'),
@@ -218,8 +266,9 @@ export function buildBillData(
     customerPhone: pdfText(order.customerPhone),
     note: pdfTextOrNull(order.note),
     ratesAppliedOn: formatShopDate(order.ratesAt ?? order.createdAt).toUpperCase(),
-    rates: ratesFor(order),
+    rates: billRateReference(order),
     items,
+    components,
     taxableTotal: order.subtotal,
     gstTotal: order.gstAmount,
     grandTotal: order.grandTotal,

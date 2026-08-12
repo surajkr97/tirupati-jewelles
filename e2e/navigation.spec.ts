@@ -99,8 +99,9 @@ test.describe('sign-in destination', () => {
 
     // The defect: this used to be /account, with an "Admin" badge and no link onward.
     await expect(page).toHaveURL(/\/admin$/);
-    // 'Shop admin' is a <p> in the admin shell, not a heading — locate it as text.
-    await expect(page.getByText('Shop admin')).toBeVisible();
+    // Stage 5A removed the generic "Shop admin" line from the shell — every admin page now
+    // carries its own `h1`, so the dashboard's is what proves we arrived.
+    await expect(page.getByRole('heading', { level: 1, name: 'Dashboard' })).toBeVisible();
   });
 
   test('a customer lands on /account', async ({ page, context }) => {
@@ -213,8 +214,8 @@ test.describe('admin navigation', () => {
     if (testInfo.project.name === 'mobile-375') {
       // On a phone they live behind "More", which is a real menu rather than the old
       // direct link to /admin/media that was labelled "More" and went somewhere else.
-      await page.getByRole('button', { name: 'More admin pages' }).click();
-      const sheet = page.getByRole('navigation', { name: 'Secondary admin pages' });
+      await page.getByRole('button', { name: 'All admin pages' }).click();
+      const sheet = page.getByRole('navigation', { name: 'All admin pages' });
       await expect(sheet.getByRole('link', { name: /Settings/ })).toBeVisible();
       await expect(sheet.getByRole('link', { name: /Audit log/ })).toBeVisible();
       await sheet.getByRole('link', { name: /Settings/ }).click();
@@ -232,10 +233,10 @@ test.describe('admin navigation', () => {
     await page.goto('/admin');
 
     if (testInfo.project.name === 'mobile-375') {
-      await page.getByRole('button', { name: 'More admin pages' }).click();
+      await page.getByRole('button', { name: 'All admin pages' }).click();
     }
 
-    await page.getByRole('link', { name: 'Back to site' }).click();
+    await page.getByRole('link', { name: 'Back to shop' }).click();
     await expect(page).toHaveURL(/\/$/);
   });
 
@@ -267,7 +268,8 @@ test.describe('admin navigation', () => {
 
     await page.goto('/admin');
     const rail = page.getByRole('navigation', { name: 'Admin' });
-    const heading = page.getByText('Shop admin');
+    // The page's own h1, now that the shell no longer prints a generic one.
+    const heading = page.getByRole('heading', { level: 1, name: 'Dashboard' });
 
     const railBox = await rail.boundingBox();
     const headingBox = await heading.boundingBox();

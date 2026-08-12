@@ -124,10 +124,28 @@ export function billsWhere(filters: BillFilters): Prisma.OrderWhereInput {
   if (filters.q) {
     const asPhone = normalisePhone(filters.q);
 
+    /**
+     * ── The digits clause only exists when there ARE digits (Stage 5E) ──
+     *
+     * `filters.q.replace(/\D/g, '')` is `''` for any term without a number in it, and
+     * `contains: ''` is `LIKE '%%'` — which matches every row in the table. So searching the
+     * invoice book by CUSTOMER NAME, one of the three things §8.5 promises, returned the
+     * entire ledger: the header read "120 bills", every bill was listed, and it looked like
+     * no filter had been applied rather than like a broken one.
+     *
+     * The same `billsWhere` backs `/admin/bills/export`, so the accountant's CSV for a name
+     * search was also the whole book.
+     *
+     * Measured against the real database before changing anything: `q=zzzznotabill` matched
+     * 120 of 120 active orders. A name search now matches on `customerName` and `orderNo`
+     * alone, which is what it was always meant to do.
+     */
+    const digits = filters.q.replace(/\D/g, '');
+
     where.OR = [
       { orderNo: { contains: filters.q, mode: 'insensitive' } },
       { customerName: { contains: filters.q, mode: 'insensitive' } },
-      { customerPhone: { contains: filters.q.replace(/\D/g, '') } },
+      ...(digits ? [{ customerPhone: { contains: digits } }] : []),
       ...(asPhone ? [{ customerPhone: asPhone }] : []),
     ];
   }

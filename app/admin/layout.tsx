@@ -17,6 +17,8 @@
  * will use this on a phone, standing in a shop, between customers." Same tokens as the
  * storefront, same bottom nav pattern — no dense enterprise chrome.
  */
+import Link from 'next/link';
+
 import type { Metadata } from 'next';
 
 import { AdminNav, AdminNavSpacer, AdminSidebar } from '@/components/admin/admin-nav';
@@ -59,11 +61,36 @@ export default async function AdminLayout({ children }: { children: React.ReactN
         the page — the mechanism `--spacing-bottom-nav` already uses for the bottom bar.
       */}
       <div className="flex min-h-dvh flex-col md:pl-admin-rail md:[--sticky-bar-left:var(--spacing-admin-rail)] has-data-sticky-bar:pb-[var(--sticky-bar-height,0px)]">
-        <header className="sticky top-0 z-20 border-b border-line bg-cream/90 backdrop-blur-md">
+        {/*
+          Compact by design (§12): who you are, and — on a phone, where there is no rail —
+          which product you are in. The page title is NOT here; every admin page renders its
+          own `h1`, and repeating a generic "Shop admin" above it gave each screen two
+          headings, the larger of which said nothing.
+
+          There is no menu trigger here either. The bottom bar carries one, in the half of
+          the screen a thumb reaches; a second control opening the same sheet from the
+          furthest corner would be redundant rather than convenient.
+
+          Opaque, per D-076 — a translucent header over an admin table has the same
+          unpredictable-contrast problem the storefront's chrome had over the wine footer.
+        */}
+        <header className="sticky top-0 z-20 border-b border-line bg-cream">
           <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between gap-4 px-[20px] py-4 md:px-[40px]">
-            {/* The rail carries the wordmark on desktop, so this is the page-level label. */}
-            <p className="text-h3 font-semibold text-ink">Shop admin</p>
-            <p className="truncate text-small text-muted">{admin.email ?? admin.name}</p>
+            <Link
+              href="/admin"
+              className="font-display text-h3 font-medium text-ink md:hidden"
+            >
+              Tirupati
+            </Link>
+            {/* Holds the row's right edge on desktop, where the rail shows the wordmark. */}
+            <span className="hidden md:block" />
+
+            <p
+              className="truncate text-small text-muted"
+              title={admin.email ?? admin.name ?? undefined}
+            >
+              {admin.email ?? admin.name}
+            </p>
           </div>
         </header>
 

@@ -22,6 +22,26 @@ export interface SlotDefinition {
   ratio: string;
   /** Slots where a headline and link make sense; a category tile is just an image. */
   supportsText: boolean;
+  /**
+   * Does anything actually render this slot today?
+   *
+   * Added by the UI redesign, Stage 5D, and it is a correction rather than a feature.
+   * §7.6's table was written as a plan for eleven surfaces; two of them were built. Traced
+   * through the repository rather than through the spec:
+   *
+   *   HERO_BANNER → `app/(app)/page.tsx` (image, headline, subtext, `isActive`)
+   *   BILL_LOGO   → `lib/bills/logo.ts`, on every invoice
+   *
+   * and the other ten are read by nothing. The admin page told the owner each one appeared
+   * somewhere specific — "Below the hero, above the rates", "Behind the footer", "The about
+   * page", a page that does not exist at all (see specs/ROUTE-MAP.md). Uploading to them is
+   * accepted, audited, stored, and invisible.
+   *
+   * The rows are NOT removed: they are seeded, they hold data an owner may already have put
+   * there, and deleting a slot is a schema decision rather than a redesign one. What
+   * changes is that the screen stops claiming they are live. UI_REDESIGN_DEBT-011.
+   */
+  live: boolean;
 }
 
 export const MEDIA_SLOTS: SlotDefinition[] = [
@@ -32,46 +52,55 @@ export const MEDIA_SLOTS: SlotDefinition[] = [
     recommended: '1600×900',
     ratio: '16/9',
     supportsText: true,
+    live: true,
   },
   {
     key: 'OFFER_STRIP',
     label: 'Offer strip',
-    where: 'Below the hero, above the rates',
+    where: 'Not shown on the site yet',
     recommended: '1200×400',
     ratio: '3/1',
     supportsText: true,
+    live: false,
   },
   ...Array.from({ length: 6 }, (_, index) => ({
     key: `CATEGORY_TILE_${index + 1}`,
     label: `Category tile ${index + 1}`,
-    where: 'The collections grid on the homepage',
+    // The homepage collections grid reads each collection's own image, not this slot.
+    where: 'Not shown on the site yet',
     recommended: '800×800',
     ratio: '1/1',
     supportsText: false,
+    live: false,
   })),
   {
     key: 'FEATURE_BANNER',
     label: 'Feature banner',
-    where: 'Mid homepage',
+    where: 'Not shown on the site yet',
     recommended: '1200×600',
     ratio: '2/1',
     supportsText: true,
+    live: false,
   },
   {
     key: 'ABOUT_IMAGE',
     label: 'About image',
-    where: 'The about page',
+    // There is no about page — specs/ROUTE-MAP.md, and D-060 records the decision not to
+    // invent one. This slot has never had anywhere to appear.
+    where: 'Not shown on the site yet',
     recommended: '1200×800',
     ratio: '3/2',
     supportsText: false,
+    live: false,
   },
   {
     key: 'FOOTER_BG',
     label: 'Footer background',
-    where: 'Behind the footer',
+    where: 'Not shown on the site yet',
     recommended: '1600×400',
     ratio: '4/1',
     supportsText: false,
+    live: false,
   },
   /**
    * Added by Phase 8 (specs/08-billing-whatsapp.md §8.3: "Logo from a MediaSlot").
@@ -92,6 +121,7 @@ export const MEDIA_SLOTS: SlotDefinition[] = [
     recommended: '600×200 (PNG or JPEG)',
     ratio: '3/1',
     supportsText: false,
+    live: true,
   },
 ];
 

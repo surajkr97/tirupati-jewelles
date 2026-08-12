@@ -103,8 +103,14 @@ test.describe('the admin panel', () => {
      *
      * The `Update →` half was fixed at 427012d and the rate-label half was not, so this
      * failed again 48 hours later. Both are exact now.
+     *
+     * Stage 5B promoted that shortcut from a corner text link to the page's primary action
+     * (§5), so the name changed with it. The "Rates … Update" alert link still exists and is
+     * still a different control, which is why this stays exact.
      */
-    await expect(page.getByRole('link', { name: 'Update →' })).toBeVisible();
+    // A regex, because the label renders `&rsquo;` — asserting on which apostrophe won is
+    // not what this test is about.
+    await expect(page.getByRole('link', { name: /Set today.s rates/ })).toBeVisible();
     await expect(page.getByText('Gold 22K', { exact: true })).toBeVisible();
     await expect(page.getByText('Sold today')).toBeVisible();
   });
@@ -185,7 +191,22 @@ test.describe('the admin panel', () => {
     expect(Number(previewed)).toBeGreaterThan(0);
 
     await page.getByTestId('save-product').click();
-    await expect(page.getByText(/Piece added/)).toBeVisible({ timeout: 10_000 });
+
+    /**
+     * Stage 5D: the create form ends in a success panel, not only a toast.
+     *
+     * Asserted on the panel because it is the stronger claim. A toast says the write
+     * happened; the panel says the owner has somewhere to go next — a create used to leave
+     * them on a form that still read "Add this piece" holding the values they had just
+     * saved, so a second tap failed on the slug they had themselves created, and the photo
+     * upload they now needed was on a page nothing linked to (§19).
+     */
+    const created = page.getByTestId('product-created');
+    await expect(created).toBeVisible({ timeout: 10_000 });
+    await expect(created.getByRole('link', { name: 'Add photos' })).toHaveAttribute(
+      'href',
+      /^\/admin\/products\/[0-9a-f-]{36}$/,
+    );
 
     // It appears in the admin list…
     await page.goto('/admin/products');
@@ -206,8 +227,17 @@ test.describe('the admin panel', () => {
   test('a category with pieces in it cannot be deleted — §7.5', async ({ page }) => {
     await page.goto('/admin/categories');
 
-    // Rings has seeded products, so this is the blocked path.
-    await page.getByRole('button', { name: /Delete Rings/i }).click();
+    /**
+     * Rings has seeded products, so this is the blocked path.
+     *
+     * Stage 5F put delete behind the row's editor and behind a confirmation that names the
+     * collection — a trash icon 4px from the reorder controls used to delete on one tap. The
+     * assertion this test exists to make is unchanged: the refusal carries the count and the
+     * way out, not just "failed".
+     */
+    await page.getByRole('button', { name: /^Edit Rings$/ }).click();
+    await page.getByRole('button', { name: 'Delete this collection' }).click();
+    await page.getByRole('button', { name: /^Delete Rings$/ }).click();
 
     const error = page.getByTestId('category-error');
     await expect(error).toBeVisible();
@@ -225,6 +255,16 @@ test.describe('the admin panel', () => {
 
     const save = page.getByTestId('save-settings');
     // Disabled until a password is typed — the control is not merely advisory.
+    await expect(save).toBeDisabled();
+
+    /**
+     * Stage 5F made Save dirty-aware, so a change is now needed as well as a password.
+     *
+     * The assertion this test exists for is unchanged and is the one that matters: a WRONG
+     * password is refused by the server. The change is deliberately the most harmless field
+     * on the screen, and it is never written — the password below is wrong on purpose.
+     */
+    await page.getByLabel('Business hours').fill('Mon–Sat, 10am–8pm');
     await expect(save).toBeDisabled();
 
     await page.getByLabel('Your password').fill('definitely-not-the-password');
@@ -369,7 +409,7 @@ test.describe('§7 DESIGN — usable one-handed at 375px', () => {
      *
      * The fifth slot used to be a direct link to /admin/media labelled "More", a label that
      * lied about where it went. It is now a button opening a sheet with every secondary
-     * destination plus "Back to site". The assertion this test exists to make — every target
+     * destination plus "Back to shop". The assertion this test exists to make — every target
      * in the bar is at least 44px — is unchanged and now covers the button too.
      */
     const targets = [
@@ -384,8 +424,8 @@ test.describe('§7 DESIGN — usable one-handed at 375px', () => {
     }
 
     // And the sheet it opens must reach the destinations the bar gave up.
-    await nav.getByRole('button', { name: 'More admin pages' }).click();
-    const sheet = page.getByRole('navigation', { name: 'Secondary admin pages' });
+    await nav.getByRole('button', { name: 'All admin pages' }).click();
+    const sheet = page.getByRole('navigation', { name: 'All admin pages' });
     for (const label of [/Settings/, /Audit log/, /Media/, /Collections/]) {
       await expect(sheet.getByRole('link', { name: label })).toBeVisible();
     }

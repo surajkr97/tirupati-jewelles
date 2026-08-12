@@ -49,6 +49,15 @@ export interface NavItem {
   icon: LucideIcon;
   /** Longer label for the sidebar, where there is room and ambiguity is costlier. */
   description?: string;
+  /**
+   * A shorter label for the mobile bottom bar, where a cell is ~57px at 320px.
+   *
+   * "Bills & orders" wraps to two lines there, and the second line falls out of the 64px
+   * row — pushing the icon up and leaving the item visibly broken next to its neighbours.
+   * Measured, not guessed. The full label is what the rail and the drawer show, because
+   * both have the room and both are where someone goes looking.
+   */
+  shortLabel?: string;
 }
 
 /**
@@ -103,7 +112,18 @@ export const ADMIN_PRIMARY: readonly NavItem[] = [
   { href: '/admin', label: 'Dashboard', icon: LayoutDashboard, description: 'Today at a glance' },
   { href: '/admin/rates', label: 'Rates', icon: TrendingUp, description: "Set today's rate" },
   { href: '/admin/products', label: 'Products', icon: Package, description: 'Catalogue' },
-  { href: '/admin/bills', label: 'Bills', icon: ReceiptText, description: 'Bills and orders' },
+  {
+    href: '/admin/bills',
+    // "Bills & orders", because that is what the page is. There is no /admin/orders:
+    // an Order row is written by `lib/bills/create.ts` when a bill is built, so the bill
+    // IS the order from the shop's side. Labelling it "Orders" and pointing it at /admin/bills
+    // would be honest about the destination and dishonest about the name; labelling it
+    // "Bills" alone hides where orders live. See specs/ROUTE-MAP.md and DEBT-004.
+    label: 'Bills & orders',
+    shortLabel: 'Bills',
+    icon: ReceiptText,
+    description: 'Invoices and orders',
+  },
 ] as const;
 
 /**
@@ -125,10 +145,21 @@ export const ADMIN_SECONDARY: readonly NavItem[] = [
 
 export const ADMIN_ALL: readonly NavItem[] = [...ADMIN_PRIMARY, ...ADMIN_SECONDARY];
 
+/**
+ * The complete admin menu, in the order the mobile drawer shows it.
+ *
+ * Stage 5 §11 requires the phone's menu to expose EVERY destination plus the way back to the
+ * shop, rather than only the four the bottom bar could not fit. `ADMIN_ALL` is that list;
+ * `BACK_TO_SITE` is appended by the component so the exit is always last.
+ */
+export const ADMIN_MENU: readonly NavItem[] = ADMIN_ALL;
+
 /** The way out of the admin. Its absence was audit finding C-6. */
 export const BACK_TO_SITE: NavItem = {
   href: '/',
-  label: 'Back to site',
+  // "shop", not "site" — this is a jeweller's admin, and the thing they are going back to
+  // is the shop their customers see. Stage 5 §9 asks for exactly this label.
+  label: 'Back to shop',
   icon: Home,
 };
 

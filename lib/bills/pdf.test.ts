@@ -65,6 +65,16 @@ function line(overrides: Partial<OrderForPdf['items'][number]> = {}) {
   };
 }
 
+/**
+ * The same line with a Rs. 2,500 stone charge, priced by hand from MASTER-SPEC §4 like the
+ * fixture above: taxable 1,32,630.40 + 2,500 = 1,35,130.40, x1.03 = 1,39,184.312 -> 1,39,184.31.
+ *
+ * Stated rather than derived, because `splitStoredLine` refuses a bill whose stored total
+ * does not reproduce from its own inputs — a fixture that leaves `lineTotal` behind when it
+ * changes an input cannot be printed at all, which is the guard working.
+ */
+const STONE_LINE = { stoneCharge: 250_000n, lineTotal: 13_918_431n } as const;
+
 function order(items: OrderForPdf['items']): OrderForPdf {
   const grandTotal = items.reduce((sum, item) => sum + item.lineTotal, 0n);
   return {
@@ -265,6 +275,81 @@ describeDb('invoice PDF', () => {
     const footerExtent = A4_HEIGHT - Math.min(...footer.map((run) => run.y));
 
     expect(PAGE_BOTTOM_PADDING).toBeGreaterThan(footerExtent);
+  }, 30_000);
+
+  /**
+   * §15 of the Stage 5G brief — what a spilling invoice must not do.
+   *
+   * The 20-item fixture above proves the renderer produces more than one page and that
+   * nothing lands under the footer. What it never checked is whether the SECOND page is
+   * readable: a continuation sheet of unlabelled numbers, or a grand total stranded on a
+   * page by itself, are both "renders fine" and both unusable.
+   *
+   * Per content stream rather than over the whole document, because "the header appears
+   * twice somewhere in the file" is not the claim — the claim is that it appears on each
+   * page, and that the total appears on exactly one.
+   */
+  it('repeats the table head on every page and keeps the totals together', async () => {
+    const items = Array.from({ length: 20 }, (_, index) =>
+      line({ name: `Piece ${index + 1} — a deliberately long description that wraps` }),
+    );
+    const pdf = await renderBillPdf(order(items));
+
+    const pages = pageCount(pdf);
+    expect(pages).toBeGreaterThan(1);
+
+    const perPage = extractStreams(pdf)
+      .map((stream) =>
+        (stream.match(/\[([^\]]*)\]\s*TJ/g) ?? [])
+          .map((run) => decodeHexRuns(run))
+          .join(' '),
+      )
+      .filter((text) => text.includes('Page '));
+
+    // One text-bearing stream per page — the positive control for everything below.
+    expect(perPage).toHaveLength(pages);
+
+    // `fixed` on the table head: every page can be read on its own.
+    for (const [index, text] of perPage.entries()) {
+      expect(text, `page ${index + 1} has no column headers`).toContain('DESCRIPTION');
+      expect(text, `page ${index + 1} has no footer`).toContain(
+        'computer-generated invoice',
+      );
+    }
+
+    /**
+     * The total is stated once, on the last page, with its words beside it.
+     *
+     * The last page is identified by what it PRINTS — "Page 2 of 2" — not by its position
+     * among the content streams. @react-pdf does not emit them in page order, and the first
+     * version of this assertion took `perPage.at(-1)` and failed against a document that was
+     * perfectly correct.
+     */
+    const withTotal = perPage.filter((text) => text.includes('GRAND TOTAL'));
+    expect(withTotal).toHaveLength(1);
+
+    const lastPage = perPage.find((text) => text.includes(`Page ${pages} of ${pages}`));
+    expect(lastPage, 'no page identifies itself as the last one').toBeDefined();
+    expect(lastPage).toContain('GRAND TOTAL');
+    expect(lastPage).toContain('AMOUNT IN WORDS');
+  }, 30_000);
+
+  /**
+   * §8: "Do not force empty columns into the document."
+   *
+   * Most bills carry no stone charge, and the column printed `0.00` on every line.
+   */
+  it('drops the stone column when nothing on the bill has one', async () => {
+    const withoutStones = await renderBillPdf(order([line()]));
+    const withStones = await renderBillPdf(order([line(STONE_LINE)]));
+
+    const text = (pdf: Buffer) =>
+      textRuns(pdf)
+        .map((run) => run.text)
+        .join(' ');
+
+    expect(text(withoutStones)).not.toContain('STONE');
+    expect(text(withStones)).toContain('STONE');
   }, 30_000);
 
   it('stays inside the page width', async () => {

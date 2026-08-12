@@ -2217,3 +2217,828 @@ transparent state is the hero treatment, which is a known wine ground by constru
 
 The tablet breakpoint is what made `StickyBar` visible as a separate defect — it is the width
 where the bottom nav is hidden and the sticky bar is the thing sitting over the footer.
+
+---
+
+## D-077 — the admin's mobile drawer lists everything, and the bottom bar stays
+
+D-063 kept the phone's bottom bar over a drawer, for §7.1's reason: the owner is standing in
+a shop between customers, and a bar that is always visible beats a drawer that must be opened
+for the four destinations used dozens of times a day.
+
+That argument still holds and the bar stays. What was wrong is what the fifth slot opened: a
+sheet containing only the four destinations the bar could not fit. **No single surface on a
+phone showed the admin everything they could reach** — the four in the bar were discoverable
+only by looking at the bar, and the sheet's title ("More") described an overflow rather than
+a menu.
+
+The sheet is now the complete menu — all eight destinations plus "Back to shop" — and the
+trigger is labelled "All admin pages". Stage 5 §11 asks the drawer to expose every
+destination; the bar remains the fast path, not the only path.
+
+---
+
+## D-078 — "Bills & orders", because there is no /admin/orders
+
+Stage 5 §6 lists "Bills / Orders" as an admin destination. `/admin/orders` does not exist and
+is not created.
+
+An `Order` row is written by `lib/bills/create.ts` when the admin builds a bill — from the
+shop's side the bill **is** the order. The customer sees it at `/account/orders`; the admin
+sees it at `/admin/bills`.
+
+Three labels were possible and two are wrong. "Orders" pointing at `/admin/bills` is honest
+about the destination and dishonest about the name. "Bills" alone hides where orders live,
+which is what sent the previous label looking for a route that was never there. **"Bills &
+orders"** is true about the page it opens, and `lib/navigation.test.ts` fails if
+`/admin/orders` is ever added to the navigation without a route behind it.
+
+Recorded in `specs/ROUTE-MAP.md` and UI_REDESIGN_DEBT-004.
+
+---
+
+## D-079 — the admin shell stops printing a page title, because every page has one
+
+The shell's header said "Shop admin" on every screen, above each page's own `h1`. Two
+headings, and the larger said nothing about where you were.
+
+It now carries only what the shell knows: the signed-in admin, and — on a phone, where there
+is no rail — the wordmark. The page title belongs to the page.
+
+**No menu trigger in the header either.** §12 allows one; the bottom bar already has one, in
+the half of the screen a thumb reaches. A second control opening the same sheet from the
+furthest corner is redundancy, not convenience.
+
+**No breadcrumbs.** §12 allows them; the admin does not earn them. Its deepest routes are two
+levels (`/admin/products/[id]`), and a trail reading "Admin › Products › Ring" spends three
+words on one hop. The pages that need it already carry a single labelled back link, which
+says the same thing and gives one 44px target instead of a chain of small ones.
+
+A shared `AdminPage` wrapper was written for this and then deleted: all twelve admin pages
+already render an identical `h1`, so it would have been an abstraction with nothing to fix,
+and adopting it across the tree is 5B–5F content work. It can be introduced by the first
+sub-stage that actually needs it.
+
+---
+
+## D-080 — admin headings stay sans; only the storefront is editorial
+
+`Section` grew a `display` prop in Stage 4A so the storefront could take the Playfair serif.
+The admin deliberately does not use it, and this is permanent rather than a migration gap.
+
+Stage 5 §13: the storefront is editorial, the admin is structured data. A serif headline over
+a bills table is costume — it slows scanning and claims a register the page is not in. The
+brand is carried into the admin by the wine rail, the rose interaction colour, the spacing
+scale and the primitives; it does not need the typeface to prove it.
+
+---
+
+## D-081 — the dashboard's two most actionable numbers had been computed and never shown
+
+`getSalesTotals()` has returned `unsent` and `unclaimed` since Phase 8, with a comment on the
+interface saying *"§8.5's list needs the counts; the dashboard shows them as alerts."* The
+dashboard never did.
+
+They are the two most actionable facts on the page: a bill that was raised and never sent on
+WhatsApp, and a purchase sitting against a phone number with no account behind it. Both are
+now rows in "Worth a look", beside the stale-rate and missing-photo alerts that were already
+there.
+
+No new query, no new aggregation — the values were already in the object the page destructures.
+
+---
+
+## D-082 — the dashboard has a hierarchy instead of seven equal tiles
+
+§7.2 asked for "big soft stat cards" and Phase 7 delivered seven of them, all the same size.
+The consequence was that "sold today" — the number an owner opens the page for — carried
+exactly the weight of all-time takings.
+
+Today is now the anchor: full width, and larger type **from `sm` upward only**. That
+qualifier is the whole care in this change. `e2e/admin.spec.ts` substitutes ₹1000 crore into
+every tile at 375px and measures whether it fits, because DEBT-038 was a real overflow that
+hid inside real data — a lakh-scale figure fitted the tile the shop had, and a crore-scale one
+did not. Growing the type at 375px would have walked straight back into it, so at that width
+the anchor renders exactly as every other money tile does.
+
+The tile count and the `data-stat` seams are unchanged for the same reason: that test asserts
+seven tiles, five of them money, and it is measuring something real.
+
+The primary action moved with it. §7.2 calls updating rates "the most frequent daily action";
+it was a small "Update →" text link in a card corner, the same weight as everything else.
+It is now the page's one accent button, in a rates panel that also shows each face's unit
+(§13 — "₹1,49,840" alone does not say per what, and the three rows are quoted in two
+different units).
+
+---
+
+## D-083 — rate freshness shows a date, and a badge only for the exception
+
+§7 asks the dashboard to make the rate update state clear. The first attempt gave every row a
+badge: green "Updated", red "Needs update".
+
+That is a traffic light. On an ordinary day all three read green, which is three pieces of
+chrome saying "nothing to do" and burying the one row that does need attention on the day it
+appears. So a fresh row shows **when it was set** and a stale row shows the badge.
+
+The date is also the more useful fact. "Set this morning" and "Set on Tuesday" are different
+things to know, and only one of them is a problem — a green tick collapses both into "fine".
+
+Either way the state is a word, never only a colour (§14, §18).
+
+---
+
+## D-084 — the "More" card is gone, because the navigation now exists
+
+The dashboard carried a card of chips linking to Collections, Images, Settings and Audit. It
+existed because those four routes had nowhere else to live — that was audit finding C-5, and
+5A put all eight destinations in the rail and in the mobile drawer.
+
+§10: quick actions should reduce repeated navigation, not duplicate the navigation. Four chips
+one click from four identical links in a rail that is on screen at the same time is the
+second thing, so they are removed.
+
+---
+
+## D-085 — `/admin` must never get a `loading.tsx`
+
+Recorded because it is a trap this codebase has already fallen into once, in the opposite
+direction.
+
+§16 asks for skeletons. `/admin` will not get one. `app/admin/layout.tsx` calls
+`requireAdminPage()`, which calls `notFound()` for anyone who is not an ADMIN — and D-065
+established that a route-level `loading.tsx` opts the segment into streaming, which commits
+`HTTP 200` before the body runs. A `loading.tsx` here would turn every admin 404 into a 200,
+which is not a cosmetic regression: §3.6 requires a non-admin to get a 404 precisely so the
+route's existence is not confirmed.
+
+`e2e/admin-shell.spec.ts` asserts `404` for a signed-in customer across all eight admin
+routes, so the mistake fails loudly. The dashboard is `force-dynamic` and its aggregates are
+Redis-cached for 60s; it does not need one.
+
+---
+
+## D-086 — the rate card separates what IS from what WOULD BE
+
+§5's complaint applied exactly: the card ran the label, the current figure, the set time and
+the input down one undifferentiated column, so the largest number on screen — the current
+rate — read like the thing being edited.
+
+The separation is now explicit and costs almost nothing: a `CURRENT` eyebrow above the
+figure, a hairline, then `New rate (per 10 grams)`. Both the eyebrow and the field label
+carry the unit, so §6 holds in both halves — a rate without its unit is a number that means
+three different things across these three cards.
+
+The save button changes weight rather than staying loud. A filled `primary` bar reading "No
+change" sat at full strength on all three cards on every page load: three of the heaviest
+elements on screen, all inert. It is `outline` until the field differs from the current rate,
+and fills in at the moment it becomes pressable.
+
+**The >20% confirmation is untouched.** §12 says to preserve an existing confirmation unless
+the redesign clearly improves it without changing behaviour, and §7.3's reasoning is better
+than anything worth substituting: this is "the single most damaging typo available", so the
+dialog names both figures rather than asking "are you sure?". Verified live at 320px — a
+567% change was refused and no rate was written.
+
+---
+
+## D-087 — "stale" is defined once, for both pages that judge it
+
+§7.2's 48-hour rule was a `STALE_RATE_MS` constant private to the dashboard. Stage 5C needs
+the same judgement on `/admin/rates` — which is the page an admin opens *because* something
+is stale — so the two would each have carried their own copy of the number.
+
+`lib/admin/rate-freshness.ts` holds it, and `isRateStale()` answers the one question. It
+reads no rate and converts nothing; it is presentation, and it exists so the dashboard cannot
+flag a row the rates page calls fine.
+
+A missing or unparseable timestamp counts as stale. A shop that has never set a rate has the
+most urgent version of this problem, and letting an absent date fall through a comparison
+would return "fine" for exactly the case worth surfacing.
+
+The badge follows D-083's rule: shown only for the exception, never as a green tick on every
+row.
+
+---
+
+## D-088 — the rate history stays a list of changes, not a grid of days
+
+§13 lists the history columns as Date / 22K / 18K / Silver / Actor. That shape assumes rates
+move together; in this application they do not. `setRate` writes one metal at a time and the
+`AuditLog` entry is per metal, so a date × metal grid would be mostly empty cells, and a day
+on which only silver changed would render two blanks that look like missing data rather than
+like nothing having happened.
+
+So it stays one row per change — what changed, from what to what, by whom, when — which is
+the question the page is actually asked. It reads from `AuditLog` rather than `MetalRate`
+because the rate table records what the value became and the audit log records who made it
+become that.
+
+---
+
+## D-089 — the editing column is capped
+
+§16: three numeric fields do not get easier to read at 1200px, they get further from their
+labels. The rates page is now `max-w-2xl`, so the whole task — read the current figure, type
+the new one, save — sits in one measure, with the history below it on the same axis.
+
+This is the first admin page to constrain its width. The pages 5D–5F cover carry tables and
+galleries, which have a real claim on the full container; a decision for each of them rather
+than a rule applied ahead of the evidence.
+
+---
+
+## D-090 — the admin product list shows the product
+
+Stage 5D. §2 asks that a row make a piece immediately identifiable: image, name, purity,
+weight, price, status. Phase 7's list had four of those and not the first — it selected
+`_count.images` to draw a "No image" badge without ever selecting an image — so the one screen
+whose job is managing jewellery described it in words.
+
+The thumbnail is a fixed-ratio `ImageFrame`, which means a row is the same height before and
+after the picture loads and an empty one draws the branded monogram rather than a broken
+glyph. 96px rather than the 64px used elsewhere in the admin: §14's "do not make thumbnails
+unnecessarily tiny" is about being able to tell two gold chains apart.
+
+§22 says the product image should supply the visual richness, and it is the only decoration
+added: no gradients, no tinted panels, no card borders. Everything else on the row is text.
+
+---
+
+## D-091 — the admin list prices through the storefront's own function
+
+The list carried a private `priceOf` whose comment read "Same engine as the storefront — the
+admin list must not quote a different number", and which passed `gstPct: 3` as a literal.
+DEBT-024 had already made GST a required parameter of `priceProduct` precisely because the
+shop sets it in §7.9, so with any non-default GST the admin list disagreed with the product
+page, with the form's own live preview and with every bill.
+
+`priceProduct(row, rates, defaults.gstPct)` replaces it, reading `PRODUCT_CARD_SELECT` — which
+also carries the image, so the fix and D-090 share one query.
+
+Fixed rather than logged, because §10 requires the figure to be explained and the explanation
+is what would have been false: the header now reads "at the current rate and including 3%
+GST", with the percentage taken from Settings.
+
+---
+
+## D-092 — the product form is grouped, and Save reports whether there is anything to save
+
+§8's running order — identity, details, pricing, media, availability, save — applied to a form
+that was one undifferentiated stack, with the name directly above the making charge and the
+hallmark number below the price. The fields, their labels, their validation and the action
+behind them are unchanged; only the grouping is new.
+
+Pricing is the heading that earns itself. Weight and purity are details that happen to feed
+the price; making charge and stone charge ARE the price, and sitting them beside the live
+`calculateLine` preview is what lets an admin watch a mistyped 12 become ₹9,000.
+
+Save follows D-086's rule, with one exception that matters:
+
+  - **editing** — `outline` and disabled while the form matches what was loaded, reading "No
+    changes"; `primary` the moment a field differs.
+  - **creating** — always pressable. An empty form is the start of the task, not a saved one,
+    and a greyed-out "Add this piece" on a fresh page reads as broken. The server's Zod schema
+    is what refuses an empty name, exactly as before.
+
+§9's "unit where relevant, valid format where relevant" is carried by the field hints rather
+than by the `suffix` adornments, which are `aria-hidden` and reach nobody using a screen
+reader: "In grams, up to 3 decimal places", "0–100% of the metal value".
+
+---
+
+## D-093 — creating a piece now ends somewhere
+
+A successful create used to end in a toast. The form kept the values, the button still read
+"Add this piece", and pressing it again failed on the slug the owner had just created — while
+the photo upload they now needed lives on `/admin/products/[id]`, which nothing linked to.
+
+The button is replaced on success by a panel offering **Add photos** (the new piece's edit
+page) and **Add another piece** (a local reset, not a link to the route we are already on,
+which would not unmount the form and so would keep the previous piece's values in it).
+
+This is why §8's media step sits below the save button on the edit screen rather than inside
+the form: every image action commits on the tap, and the fields commit on Save. Interleaving
+them would put already-saved controls inside an unsaved form.
+
+---
+
+## D-094 — the two destructive actions on these screens ask first
+
+§20. Neither confirmed anything before Stage 5D:
+
+  - **Removing a product photo.** Three 44px targets sat side by side and the third deleted a
+    photograph outright. Phase 7's own comment said "a miss deletes an image" and then relied
+    on the reader being careful.
+  - **Clearing a media slot.** One tap wiped the homepage hero.
+
+Both now show an inline strip that names the thing — "Remove photo 2 — “gold necklace on
+silk”?", "Clear the Homepage hero image?" — rather than "Are you sure?", which is the form
+people learn to dismiss. Inline rather than a modal: a dialog is heavier than the decision and
+would hide the thumbnail the question is about.
+
+`removeProductImage` and `saveMediaSlot` are called with exactly the arguments they were
+before. Only the number of taps changed.
+
+---
+
+## D-095 — the media screen stops promising places that do not exist
+
+§7.6 planned eleven image surfaces. Two were built: the homepage hero and the invoice logo.
+The other ten — the offer strip, six category tiles, the feature banner, the about image, the
+footer background — are seeded, editable, validated, audited, stored and rendered by nothing,
+and the admin page told the owner precisely where each would appear. One of those places was
+"The about page", a route that has never existed (ROUTE-MAP.md, D-060).
+
+The slots are NOT removed. They are seeded rows, an owner may already have filled some, and
+deleting one is a schema decision. What changes is the claim: a `live` flag on
+`SlotDefinition`, two headed groups ("On the site now" / "Not shown anywhere yet"), and
+"Not shown on the site yet" in place of a location for the ten.
+
+`lib/media/slots.test.ts` scans `app/`, `components/` and `lib/` for each slot key and fails
+if a `live` flag stops matching what the code actually reads — in either direction. The claim
+decays the moment somebody wires a slot up, which is the argument for a test rather than a
+comment; `lib/navigation.test.ts` resolves hrefs against the real `app/` tree for the same
+reason. UI_REDESIGN_DEBT-011 carries the product decision.
+
+---
+
+## D-096 — the axe scan of "the product editor" was scanning the create page
+
+`e2e/a11y.spec.ts` opened `/admin/products`, clicked the first `a[href^="/admin/products/"]`
+and asserted the URL matched `/admin/products/[^/]+$`. The **Add piece** link matches both,
+and it is first in the DOM — so the test named after the longest form in the application had
+been checking `/admin/products/new`, which ADMIN_ROUTES already covers, and the editor's
+gallery (thumbnails, reorder controls, the remove confirmation, the upload label) had never
+been through axe at all.
+
+Found by a Stage 5D screenshot probe that used the same selector and produced two identical
+pictures of the create page. The selector now excludes `/new` and the URL assertion wants a
+uuid. It passes.
+
+The general lesson is the one Phase 4 learned about `revalidateTag`: a test that asserts a
+weaker thing than its name claims will pass forever.
+
+---
+
+## D-097 — the switch owns its own tap target
+
+The "Visible on the site" and "Featured" switches were 32px-high buttons that met §23's 44px
+floor only because a `<label>` wrapped the whole row and carried `min-h-tap`. The target was
+therefore a property of the caption beside the control rather than of the control.
+
+The button is now `h-tap` with the 32px track centred inside it, so it is 44px wherever it is
+used and whatever is rendered next to it. The knob geometry — `left-1`, `translate-x-8`, a
+24px knob inset 4px at both ends of a 64px track — is unchanged; the note explaining why
+`left-1` is load-bearing moved with it.
+
+---
+
+## D-098 — searching the invoice book by name returned the whole invoice book
+
+Stage 5E, and the most consequential thing found in it.
+
+`billsWhere` built its search `OR` with a phone clause of
+`{ customerPhone: { contains: filters.q.replace(/\D/g, '') } }`. For any term without a digit
+in it that expression is `contains: ''`, which Prisma compiles to `LIKE '%%'` — true for every
+row in the table. So §8.5's "search by phone, order number, **customer name**" matched every
+bill in the shop whenever the term was a name.
+
+Measured against the real database before anything was changed: `q=zzzznotabill` returned
+**120 of 120** active orders.
+
+What made it survive Phase 8 and Phase 9 is that it fails silently in the friendly direction.
+The header read "120 bills", the rows were all there, and the screen looked like a list with
+no filter applied rather than a filter that was broken. The same `billsWhere` backs
+`/admin/bills/export`, so an accountant asking for one customer's invoices got the ledger.
+
+The clause is now conditional on there being digits. A name search matches `customerName` and
+`orderNo`; a number still matches both the digit substring and the E.164 normalisation, which
+is what makes "look them up by the number they just read out" work.
+
+Fixed rather than logged. §3 of the 5E brief allows exactly this — the UI was presenting
+incorrect information — and `lib/bills/query.test.ts` now asserts the shape of the `where`
+rather than a fixture-dependent count, so the defect cannot come back as a passing test.
+
+---
+
+## D-099 — the bills list badges the exception, not the state
+
+Phase 7 gave every row two filled badges — `Sent`/`Not sent` and `Claimed`/`Unclaimed`, the
+positives in `up` green. An ordinary bill therefore carried two coloured chips whose entire
+message was that nothing had gone wrong, which is the condition §5 names: when everything is
+highlighted, nothing is.
+
+Now a badge means something needs attention. **Void** is red with a `Ban` icon; **Not sent** is
+an outline badge with a `Send` icon — a job still to do, not a failure, and §7.2's dashboard
+alert already counts them. "Sent" and "Claimed" are a quiet run of text in the meta line.
+
+Both badges carry text as well as colour and icon (WCAG 1.4.1), and the vocabulary is the
+filter's: the list, the `<select>` and the detail page all say "Claimed"/"Unclaimed". An
+earlier draft of the detail page read "Not claimed yet", which is friendlier and wrong — a
+screen that uses two words for one state makes an admin wonder whether there are two states.
+
+---
+
+## D-100 — the filter drawer, and why search stays outside it
+
+§6 asks that filters not consume most of a phone screen. Five controls and a date pair,
+stacked, ran past 380px at 320px wide — more than a phone showed of the actual book.
+
+Search stays out in the open because looking a customer up by the number they just read out is
+what this page is opened for. The refinements live in a native `<details>`, which needs no
+JavaScript, still submits its fields while closed, and is open on arrival whenever any of them
+is set — so a filtered view never hides the reason it is short.
+
+`voided: 'active'` is deliberately excluded from "is this filtered": it is the default, and
+counting it would leave "Clear all" permanently on and the drawer permanently open.
+
+---
+
+## D-101 — the bill screen shows the invoice's own breakdown, from the invoice's own code
+
+§7 asks the detail page for identity → customer → items → rate snapshot → charges → GST →
+total. It had three of those. The metal/making/stone split and the rate reference block existed
+only inside `lib/bills/render.ts`, so an admin asking "where did ₹22,476 of this go?" or "what
+rate did we bill at?" had to open the PDF and read it there.
+
+`splitStoredLine` and `billRateReference` are now exported from that module and called by the
+page. A pure extraction: `buildBillData` calls the same functions, the PDF bytes are
+unchanged, and the 115 existing bill tests passed untouched.
+
+Exported rather than re-implemented, because that module's header is explicit that
+`calculateLine` appears there **once**, applied to the snapshotted rate. A second copy on a
+screen is how a bill and its own invoice start disagreeing.
+
+§9's "do not recalculate the total in the UI" is honoured exactly: the grand total, the taxable
+value and the GST are read from the order's stored columns. Only the components — which the
+schema does not store per line — are recovered, by the engine, from each line's own snapshot.
+
+`BILL_PURITY_LABEL` came out of the same module for the same reason: the page was rendering
+`String(item.purity).replace('_', ' ')`, so an admin saw **"K22 916"** where the customer's
+invoice said "22K (916)".
+
+---
+
+## D-102 — when a bill disagrees with itself, the screen degrades rather than 500s
+
+`splitStoredLine` throws if a stored `lineTotal` does not match its own snapshotted inputs.
+That is correct for the PDF — §8.3 refuses to print an invoice that contradicts itself — and
+wrong for a screen, because `/admin/bills/[id]` is the page somebody opens to investigate
+exactly that condition. A 500 there would hide the evidence.
+
+So the split is attempted, and on failure the page falls back to the stored figures, drops the
+component rows, and says plainly that the breakdown cannot be shown and that re-rendering will
+fail until someone looks at it. The stored total is authoritative either way.
+
+There is a second guard with no exception behind it: even when every line reconciles, the
+components are only shown if they sum to the stored `subtotal`. A breakdown that does not
+reconcile with the figure beneath it is worse than no breakdown, because it invites an admin to
+check the arithmetic and find it wrong.
+
+`lib/bills/split-line.test.ts` asserts both halves — that the parts add up, and that a
+tampered total throws with the invoice number in the message.
+
+---
+
+## D-103 — the builder is numbered, and it shows the rate it is pricing with
+
+§11 asks the creation flow to feel guided rather than like one form. The **sequence** is Phase
+8's and is unchanged — customer, items, review, generate — but each stage now says which stage
+it is, and two of them were missing entirely:
+
+- **Rates being used.** The builder has always fetched `/api/rates` and has never shown it, so
+  an admin priced a wedding set against a figure they could not see, on the screen where being
+  wrong is most expensive. The panel reads the same response the pricing does, in the shop's
+  own quoting units, and says the rates are frozen onto the bill at Generate — which is what
+  `ratesSnapshot` actually does.
+- **Review.** Customer, item count, and metal / making / stones / taxable / GST / total from
+  `summariseTotal`, the function Stage 4D built and `lib/calculator/summary.test.ts` proves
+  reconciles. A visual check only: §14 forbids a new backend confirmation, and §8.2's
+  guarantee is that the server re-prices every line regardless of what this screen showed.
+
+§12's "the UI should clearly communicate that the bill is incomplete" is answered twice — the
+review says "no mobile number yet" in red where the customer belongs, and a short list above the
+sticky bar says what Generate is waiting for. That list deliberately does not repeat the
+field's own "Enter a 10-digit Indian mobile number": two identical strings on one screen is a
+worse experience, not a more consistent one.
+
+---
+
+## D-104 — Generate stays disabled through the navigation
+
+`setBusy(false)` ran in a `finally`, which re-enabled the button in the same tick as
+`router.push`. By then `setIdempotencyKey(newId())` had already rotated the key — so a tap
+landing in that window would **not** have been swallowed as a replay. It would have raised a
+second real invoice, consumed a second number from the year's sequence, and sent the customer
+two bills.
+
+Narrow, and precisely the flow §8.2 exists for: "admins on flaky shop wifi will double-tap
+Generate." The success path now returns without clearing `busy`, so the button stays disabled
+until the detail page replaces the component. Failure paths clear it as before.
+
+Nothing about the idempotency mechanism changed; this closes the one gap where it was not the
+thing standing in the way.
+
+---
+
+## D-105 — voiding names the bill, the customer and the amount
+
+§19: a destructive action must identify its target. Voiding already required a written reason
+and put the invoice number on the button, which is most of the way there. What it did not say
+is whose bill and for how much — and on a phone, between customers, "Void JW-2026-0041" is a
+string of digits that looks like every other string of digits on the screen.
+
+The confirmation now leads with the number, then names the customer and the total, then repeats
+why voiding is not deleting: the invoice and its number are kept because the law requires it,
+and it leaves the sales totals.
+
+`voidBill` is untouched — same three-character minimum on the reason, same soft void, same
+VOID-stamped re-render, and still no delete anywhere in the bill flow.
+
+---
+
+## D-106 — the audit filter stopped narrowing its own vocabulary
+
+Stage 5F. Phase 7 built both dropdowns from the rows currently on screen:
+
+```ts
+const actions = [...new Set(entries.map((e) => e.action))].sort();
+```
+
+`entries` is the *filtered* result, so choosing "RATE_SET" left `RATE_SET` as the only option
+in the action list. There was no way back to another action except clearing the query string
+by hand — the filter narrowed the vocabulary it offered every time it was used, and the more
+precisely you filtered the fewer ways out you had.
+
+Both lists now come from `groupBy` over the whole table, which is what §7.10's "filterable by
+action, entity" meant. Two grouped reads on a page an owner opens rarely.
+
+---
+
+## D-107 — the audit log answers "what changed", within a bound
+
+`before` and `after` have been written on every audited action since Phase 7 and rendered
+nowhere. So the log answered two of §13's three questions — who and when — and not the one
+people open it for.
+
+`auditChanges` reduces the pair to the fields that actually moved. Unchanged keys are dropped
+(a `SETTINGS_UPDATE` records six and usually one moved), booleans read as yes/no, arrays
+become a count, long strings clip, and a row stops after six fields. §16 forbids dumping raw
+JSON; the full record stays in the database for anyone who needs it.
+
+The values are safe to render because each writer curates its own payload — the settings
+action is explicit that the password never reaches the audit entry — and this only ever
+prints primitives, so a nested object cannot leak through as a blob.
+
+Actions read as sentences, and the stored constant stays beside the label (§14). Nothing is
+renamed: `AUDIT_ACTION_LABEL` is a display table keyed by the stored string, and
+`lib/admin/audit-labels.test.ts` scans the repository for every `action:` a writer passes and
+fails if one has no wording — in both directions, so a label with no writer is also caught.
+
+---
+
+## D-108 — the audit log is paged
+
+`take: 200` with no pager and no indication it had stopped. An owner looking for last month's
+rate change saw the most recent 200 events and nothing to say there were more; the log grows
+forever and is never pruned, so that gap widens every day.
+
+50 a page, with the same pager shape the bills list uses. §18's "do not load an unlimited
+audit history into the browser just for visual convenience" was already satisfied by the cap
+— what was missing was any way to get past it.
+
+---
+
+## D-109 — a collection's image is set through the guard that already existed
+
+UI_REDESIGN_DEBT-014, closed. §8 of the 5F brief asks whether the fix is UI exposure or
+missing infrastructure; it is UI exposure, and nothing new was built.
+
+`Category.imageUrl` has existed since Phase 3 and is selected by the homepage and the
+collections grid. Nothing has ever written it — the seed leaves it null and Phase 7's form had
+no field — so every collection tile on the storefront has rendered the branded monogram
+permanently, with no admin route to change it.
+
+The URL now goes through `checkImageUrl`: the same §7.7 SSRF-and-magic-bytes guard product
+images and media slots use, validated once on save and never at render time. The verified
+final URL is stored, not the one that was typed. The preview reuses `validateImageUrl` from
+the media actions rather than a second copy — it takes a URL and returns what the guard saw,
+nothing about it is slot-specific, and §23 asks for reuse over an admin-only duplicate.
+
+**`imageUrl` has three meanings and the difference between two of them is a data-loss bug:**
+
+| sent | means |
+| :--- | :--- |
+| `undefined` | leave the column alone |
+| `''` | clear it, back to the branded frame |
+| a URL | validate, then store what was verified |
+
+The visibility toggle and the reorder path do not send the field. If `undefined` were treated
+as "clear", hiding a collection would silently delete its picture — so that case is asserted
+in `lib/admin/admin.test.ts` rather than left to the reader.
+
+Not done, and deliberately: `blurDataUrl` is still never written, exactly as it is not for
+media slots. Generating one means fetching and downsampling the image server-side, which is
+the "unrelated media system" §9 says not to build to close this.
+
+---
+
+## D-110 — collections can be renamed, and deleting one asks first
+
+Two more of §7.5's capabilities that had a back end and no front end.
+
+**Rename.** `saveCategory` has taken a name and a slug since Phase 7, and the only caller
+passed the existing ones straight back — so a collection could be created, reordered, hidden
+and deleted, but never renamed, and its web address could never be corrected.
+
+**Delete.** A trash icon sat 4px from the reorder arrows and hard-deleted on one tap. §7.5's
+block only covers a collection that still holds pieces; an empty one went immediately, taking
+its slug with it. The confirmation names the collection and says which of the two cases
+applies — for a collection with pieces it says plainly that the delete will be refused, which
+is more useful than a warning that will not apply.
+
+`deleteCategory` itself is untouched, block and all.
+
+---
+
+## D-111 — settings say what they change, and warn only while being changed
+
+§3 asks each field to communicate what it controls, its current value and its unit. Phase 7's
+form was a stack of bare labels — "Prefix", "Next number", "GST" — on a screen where three
+fields change what customers are charged, what prints on a legal document, and which number
+the next invoice takes. Only GST had a sentence.
+
+Five groups now, each with a line saying what it governs, and a live preview of the next
+invoice number as it will actually read.
+
+The two high-impact fields (§6) warn **only when their value differs from what is stored**. A
+permanent banner over GST is furniture — the eye stops seeing it by the third visit — and the
+consequence is only worth reading at the moment somebody is causing it. The GST warning names
+both percentages and says bills already raised keep their own rate; the sequence warning says
+that moving it backwards can reissue a number that is already on a customer's invoice, and
+that invoice numbers must stay unique for six years.
+
+Save follows D-086 with one addition: this screen requires re-authentication, so a change
+alone does not enable it, and a line under the password says which of the two is missing
+rather than leaving a dead control. `saveSettings` is unchanged — same schema, same
+re-auth, same audit entry, same two cache invalidations. The only edit to it was giving
+`billSequence` real messages, because a cleared field used to surface Zod's "Too small:
+expected number to be >=1" to a shop owner.
+
+`billSequence` is also a string in form state now. It was `Number(e.target.value) || 1`, so
+clearing the field to retype snapped straight back to `1` — there was no way to get from 41 to
+402. The schema is `z.coerce.number()`, so the string coerces server-side exactly as before.
+
+---
+
+## D-112 — "← More" is gone from all three pages
+
+`/admin/settings`, `/admin/audit` and `/admin/categories` each opened with a back link reading
+"← More" that pointed at `/admin/media`. It was the last remnant of Phase 7's dashboard card,
+and it was wrong twice over: there is no "More" page, and the destination was a different
+screen entirely.
+
+D-063 removed the bottom bar's version of the same lie in Stage 2, and the sidebar and mobile
+drawer have been the way between admin pages since Stage 5A. Nothing replaces it.
+
+---
+
+## D-113 — the collection row was hiding the collection's name
+
+Found by looking at a screenshot, not by a failing assertion.
+
+At 320px the row is a 64px thumbnail, a text column and three 44px controls inside 232px of
+card interior. That leaves about 20px for the text — so `truncate` removed the name entirely
+and the row showed a slug and a piece count for a collection it would not name.
+
+Every geometry check passed throughout: nothing overflowed, because everything shrank instead
+of pushing the page sideways. `scrollX === 0` is a necessary condition for a usable layout and
+not remotely a sufficient one, which is why §25 asks for eyes on the screen as well.
+
+The controls drop to their own line below `sm`, which is the same shape Stage 5D used for the
+product gallery once the identical arithmetic failed there.
+
+---
+
+## D-114 — the invoice is quieter than the website, deliberately
+
+Stage 5G. The site is wine, rose and cream; an invoice is a financial document that has to
+survive an office printer, a phone screen and a photocopier. Three things that made this PDF
+feel designed on screen made it worse on paper:
+
+- **`roseTint` (#FCEEF1) carried the rules and the grand-total box.** Against white that is
+  1.04:1 — not a hairline, nothing. The same is true of `line` (#F0EEF0) on the row
+  separators and of the `cream` panel fills behind BILLED TO and the rate block. Three
+  decorative surfaces, none of which rendered.
+- **The only large colour area on the page was behind the grand total**, which is exactly the
+  element that should be carried by weight.
+- **Rose was the accent.** Rose is the site's accent. Wine is the brand, it is far darker
+  (15.9:1 on white against roseDeep's 6.4:1), and it stays black-ish in grayscale.
+
+The palette is now, by count: `muted` ×16 (secondary text and every rule), `ink` ×4,
+`wine` ×3, `down` ×2 (the void stamp), `white` ×1. **Rose, roseTint, cream and gold do not
+appear on the invoice at all.**
+
+Wine is used exactly three times, and each one is structural rather than decorative: the
+TAX INVOICE label, the rule under the table head, and the rule above the grand total.
+
+Rules are `muted` at three weights — 0.4pt for row separators, 0.6pt for section divisions,
+1.2pt for the two that carry structure. The previous rules failed §18 on colour, not on
+weight, which is why the weights barely moved.
+
+---
+
+## D-115 — the grand total is carried by type, not by a filled box
+
+§11: "Use dark typography, subtle wine accent, clear label, strong alignment. Avoid a giant
+colored box." It was a `roseTint` box.
+
+A 1.2pt wine rule above it, `GRAND TOTAL` letterspaced bold, and the figure at 15pt bold ink.
+It is unmistakably the final amount, it costs no toner, and it is still unmistakable in
+grayscale — which the pink box was not.
+
+---
+
+## D-116 — the invoice shows where the money went
+
+§10 asks for the breakdown "where the bill contains them". The totals block had taxable
+value, CGST, SGST and the grand total; metal, making and stones existed per line in the table
+and were never summed.
+
+`buildBillData` now sums the per-line split it already produces — the same `splitStoredLine`
+values the table prints and the admin screen shows — into `components`, and the block prints
+Metal value / Making charges / Stones and other above the taxable value.
+
+Nothing is recomputed: these are the engine's own figures added together, and the field is
+**null unless they add up to the stored `taxableTotal`**, in which case the invoice prints
+the stored totals alone. A breakdown that does not reconcile with the figure beneath it is
+bad on a screen and indefensible on a tax document.
+
+Making and stones appear only when non-zero. §10 is explicit that an invented zero row is
+worse than no row, and on an invoice it would imply a charge that was never made.
+
+---
+
+## D-117 — a column of zeroes is not a column
+
+§8: "Do not force empty columns into the document." Most bills in a jewellery shop carry no
+stone charge, and STONE printed `0.00` on every line — ten columns across A4, one of them
+saying nothing.
+
+It appears when at least one line has a stone charge, and its width goes to the description
+when it does not. Asserted both ways in `pdf.test.ts`.
+
+The other money columns were rebalanced at the same time, and that was measured rather than
+guessed: on a ₹1.2-crore bill `12,66,146.64` and `2,50,000.00` filled MAKING and STONE
+completely and read as a single run of digits. Not an overflow — each sits in its own flex
+box — but the gutter was gone. Description gave up 0.6 of a flex unit for it, which is the
+right trade because it wraps by design and a name on two lines is legible in a way two
+adjacent numbers are not.
+
+---
+
+## D-118 — the money columns say what currency they are in
+
+Only the last column's header carried `(RS.)`, so RATE/G, METAL VALUE, MAKING and STONE
+printed bare digits with nothing on the page naming their unit.
+
+Widening four headers was not available — the COLUMNS note records how hard the ten-column
+fit already is — so the section label above the table says it once:
+`ITEMS · ALL AMOUNTS IN RUPEES`. No width cost, and it covers every column at once.
+
+Helvetica's digits are all 556 units wide, so §8's "tabular-number formatting where supported
+by the PDF font/system" is satisfied by the base-14 metrics themselves. There is nothing to
+turn on and nothing that could be turned off by accident.
+
+---
+
+## D-119 — there is no QR code, and 5G did not invent one
+
+§13 of the brief asks that existing QR/verification behaviour be preserved. **There is none.**
+Nothing in this repository generates, encodes or verifies a QR code; the string "qr" does not
+appear in the application at all.
+
+The only verification artefact that exists is the signed, **expiring** URL the PDF is served
+from (`lib/bills/storage.ts`): an unguessable key plus an HMAC over key and deadline, valid
+for seven days. That is a capability credential. Printing it on a customer's copy would put a
+secret on paper that stops working after a week — worse than useless, and actively harmful if
+the paper is seen by anyone else.
+
+Adding a real one means choosing what to encode, building a public verification route that
+does not leak the bill, and taking a new dependency. That is a feature, not a visual cleanup.
+Recorded as UI_REDESIGN_DEBT-016.
+
+---
+
+## D-120 — the multi-page invoice is asserted, not eyeballed
+
+`pdf.test.ts` proved a 20-item bill spills onto a second page and that nothing lands under
+the footer. It never checked whether that second page is *readable*: a continuation sheet of
+unlabelled numbers, or a grand total stranded on a page by itself, both render fine.
+
+The new assertion walks the content stream per page and requires the table head and the
+footer on every page, and the grand total exactly once, on the page that prints
+`Page N of N` — identified by what it prints rather than by its position among the streams,
+because @react-pdf does not emit them in page order and the first version of the assertion
+failed against a document that was entirely correct.

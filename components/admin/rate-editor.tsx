@@ -15,7 +15,7 @@
 import { useState, useTransition } from 'react';
 
 import { updateRate } from '@/app/admin/rates/actions';
-import { Button, Card, Input, toast } from '@/components/ui';
+import { Badge, Button, Card, Input, toast } from '@/components/ui';
 import { formatINR } from '@/lib/money';
 import { cn } from '@/lib/utils/cn';
 
@@ -27,6 +27,8 @@ export interface RateEditorProps {
   /** Current rate in the display unit, in paise. */
   currentDisplay: string;
   effectiveAt: string;
+  /** Older than §7.2's 48-hour rule. Flagged here because this is where it gets fixed. */
+  stale?: boolean;
 }
 
 export function RateEditor({
@@ -36,6 +38,7 @@ export function RateEditor({
   unit,
   currentDisplay,
   effectiveAt,
+  stale = false,
 }: RateEditorProps) {
   const currentPaise = BigInt(currentDisplay);
   const currentRupees = (Number(currentPaise) / 100).toFixed(2).replace(/\.00$/, '');
@@ -91,27 +94,47 @@ export function RateEditor({
 
   return (
     <Card className="flex flex-col gap-4">
-      <div className="flex items-baseline justify-between gap-4">
+      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 className="text-h3 font-semibold text-ink">{label}</h2>
+        {/* §6: the unit is never out of sight of the value it belongs to. */}
         <p className="text-small text-muted">{unit}</p>
       </div>
 
+      {/*
+        ── Current, then new, then save (§5) ──
+
+        The figure below is what the shop is quoting right now; the field under it is what it
+        would become. They used to sit in one undifferentiated column, which is the ambiguity
+        §5 names — at a glance the large number reads like the thing being edited. The rule
+        and the "New rate" label are the whole separation.
+      */}
       <div className="flex flex-col gap-1">
-        <p className="text-small text-muted">Current</p>
-        <p className="text-display font-semibold text-ink tabular">
+        <p className="text-small font-medium tracking-[0.08em] text-muted uppercase">
+          Current
+        </p>
+        <p className="text-display font-semibold text-ink num">
           {formatINR(currentPaise)}
         </p>
-        <p className="text-small text-muted">
-          Set{' '}
-          <time dateTime={effectiveAt}>
-            {new Intl.DateTimeFormat('en-IN', {
-              dateStyle: 'medium',
-              timeStyle: 'short',
-              timeZone: 'Asia/Kolkata',
-            }).format(new Date(effectiveAt))}
-          </time>
+        <p className="flex flex-wrap items-center gap-2 text-small text-muted">
+          <span>
+            Set{' '}
+            <time dateTime={effectiveAt}>
+              {new Intl.DateTimeFormat('en-IN', {
+                dateStyle: 'medium',
+                timeStyle: 'short',
+                timeZone: 'Asia/Kolkata',
+              }).format(new Date(effectiveAt))}
+            </time>
+          </span>
+          {/*
+            §4 — a badge for the exception only. A "fresh" tick on every card every ordinary
+            day is chrome that trains the eye to skip the row that matters.
+          */}
+          {stale && <Badge tone="down">Needs update</Badge>}
         </p>
       </div>
+
+      <div className="h-px bg-line" aria-hidden="true" />
 
       <Input
         label={`New rate (${unit})`}
@@ -131,7 +154,7 @@ export function RateEditor({
       {preview !== null && dirty && (
         <p
           className={cn(
-            'text-body font-medium tabular',
+            'text-body font-medium num',
             preview > 0 ? 'text-up' : preview < 0 ? 'text-down' : 'text-muted',
           )}
         >
@@ -165,6 +188,7 @@ export function RateEditor({
               size="sm"
               onClick={() => save(true)}
               loading={pending}
+              loadingLabel="Saving…"
               data-testid={`confirm-${purity}`}
             >
               Yes, set it
@@ -172,12 +196,22 @@ export function RateEditor({
           </div>
         </div>
       ) : (
+        /**
+         * The button gains weight only when it has something to do.
+         *
+         * A filled `primary` bar reading "No change" sat at full strength on all three cards
+         * every time the page loaded — three of the heaviest elements on screen, all inert.
+         * `outline` while there is nothing to save keeps the control present and legible
+         * without competing with the figure it belongs to; it fills in the moment the field
+         * differs from the current rate, which is also the moment it becomes pressable.
+         */
         <Button
-          variant="primary"
+          variant={dirty ? 'primary' : 'outline'}
           size="md"
           full
           disabled={!valid || !dirty}
           loading={pending}
+          loadingLabel="Saving…"
           onClick={() => save(false)}
           data-testid={`save-${purity}`}
         >

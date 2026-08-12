@@ -29,10 +29,11 @@ import { StickyBar } from '@/components/shell/sticky-bar';
 import { Button, Card, Input, Select, toast } from '@/components/ui';
 import { priceItems } from '@/lib/calculator/price-items';
 import { calculatorReducer, initialState } from '@/lib/calculator/reducer';
+import { summariseTotal } from '@/lib/calculator/summary';
 import type { ItemDefaults } from '@/lib/calculator/types';
 import { formatINR } from '@/lib/money';
 import type { PurityKey, RatesByPurity } from '@/lib/pricing';
-import { ratesByPurityFromApi } from '@/lib/rates.keys';
+import { PURITY_BY_FACE, ratesByPurityFromApi, type RateFaceKey } from '@/lib/rates.keys';
 
 /** One catalogue piece, for §8.1's "Load from product". */
 export interface ProductOption {
@@ -57,6 +58,59 @@ function newId(): string {
   return typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : `item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+/**
+ * How the three rate faces read on this screen.
+ *
+ * Local rather than imported: `RATE_FACES` in `lib/rates.ts` carries the same wording and
+ * that module is `server-only`, so a client component cannot have it without dragging Prisma
+ * into the bundle. UI_REDESIGN_DEBT-010 tracks folding the repository's purity labels
+ * together; this is one of them.
+ */
+const RATE_FACE_LABEL: Record<RateFaceKey, string> = {
+  gold22: 'Gold 22K',
+  gold18: 'Gold 18K',
+  silver999: 'Silver 999',
+};
+
+/** One rate as this screen shows it: the shop's own quoting unit, straight from the API. */
+interface RateFaceView {
+  purity: PurityKey;
+  label: string;
+  /** Paise, in the display unit — `display` from `/api/rates`. */
+  display: bigint;
+  unit: string;
+}
+
+/**
+ * The quoted rates, read from the same `/api/rates` payload the pricing already uses.
+ *
+ * Presentation only — `ratesByPurityFromApi` remains the sole path from that response into
+ * anything that touches money. Every field is checked before it is trusted; a payload that
+ * does not carry a usable `display` contributes no row rather than rendering `NaN` beside a
+ * customer's total.
+ */
+function readRateFaces(payload: unknown): RateFaceView[] {
+  if (typeof payload !== 'object' || payload === null) return [];
+  const record = payload as Record<string, unknown>;
+
+  return (Object.keys(PURITY_BY_FACE) as RateFaceKey[]).flatMap((face) => {
+    const entry = record[face];
+    if (typeof entry !== 'object' || entry === null) return [];
+
+    const { display, unit } = entry as { display?: unknown; unit?: unknown };
+    if (typeof display !== 'string' || !/^\d+$/.test(display)) return [];
+
+    return [
+      {
+        purity: PURITY_BY_FACE[face],
+        label: RATE_FACE_LABEL[face],
+        display: BigInt(display),
+        unit: typeof unit === 'string' ? unit : '',
+      },
+    ];
+  });
 }
 
 /**
@@ -117,6 +171,8 @@ export function BillBuilder({
   const [note, setNote] = useState('');
 
   const [rates, setRates] = useState<RatesByPurity | null>(null);
+  /** The same payload, formatted for reading. §11's "rate snapshot" step. */
+  const [rateFaces, setRateFaces] = useState<RateFaceView[]>([]);
   const [ratesError, setRatesError] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -143,6 +199,7 @@ export function BillBuilder({
         const parsed = ratesByPurityFromApi(payload);
         if (!parsed) throw new Error('Unexpected /api/rates payload');
         setRates(parsed);
+        setRateFaces(readRateFaces(payload));
       })
       .catch(() => {
         if (!cancelled) setRatesError(true);
@@ -202,6 +259,28 @@ export function BillBuilder({
   const hasWeight = state.items.every((item) => item.weightGrams.trim() !== '');
   const canGenerate = phoneValid && priced && hasWeight && !busy && rates !== null;
 
+  /**
+   * §12 — why Generate is off, in words.
+   *
+   * The button's disabled state is unchanged; what is new is that it stops being a mystery.
+   * A control that will not respond and does not say why is the one thing a shop assistant
+   * cannot work around mid-transaction, and "the phone is missing" was inferable only from
+   * a field error further up a scrolling page.
+   *
+   * The phrasing deliberately differs from the field's own "Enter a 10-digit Indian mobile
+   * number" — two identical strings on one screen is a worse experience, not a more
+   * consistent one, and it would make either impossible to assert on.
+   */
+  const blockers = [
+    !phoneValid && 'The customer’s mobile number',
+    !hasWeight && 'A weight on every item',
+    rates === null && !ratesError && 'Today’s rates, still loading',
+    !priced && hasWeight && rates !== null && 'A fix for the highlighted item',
+  ].filter((reason): reason is string => typeof reason === 'string');
+
+  /** §14's review figures — the engine's own, summed, never re-derived. */
+  const summary = total ? summariseTotal(total) : null;
+
   async function generate() {
     setBusy(true);
     setError(null);
@@ -249,6 +328,7 @@ export function BillBuilder({
               ? 'Too many bills just now. Try again in a moment.'
               : 'Could not create the bill.'),
         );
+        setBusy(false);
         return;
       }
 
@@ -261,10 +341,26 @@ export function BillBuilder({
           ? `${body.orderNo} was already created.`
           : `${body.orderNo} created.`,
       );
-      if (body.path) router.push(body.path);
+
+      /**
+       * §13 — stay busy through the navigation.
+       *
+       * `setBusy(false)` used to run in a `finally`, which re-enabled Generate in the same
+       * tick as `router.push`. The idempotency key had already been rotated by then, so a
+       * tap landing in that window would not have been swallowed as a replay — it would have
+       * raised a SECOND real invoice, consumed a second number from the yearly sequence, and
+       * sent the customer two bills. Narrow, but this is the flow §8.2 calls out for
+       * "admins on flaky shop wifi will double-tap Generate".
+       *
+       * The button now stays disabled until the detail page replaces this component.
+       */
+      if (body.path) {
+        router.push(body.path);
+        return;
+      }
+      setBusy(false);
     } catch {
       setError('Network problem. The bill was not created.');
-    } finally {
       setBusy(false);
     }
   }
@@ -280,10 +376,17 @@ export function BillBuilder({
         </p>
       )}
 
-      {/* Customer first: it is what the admin asks for while the customer is still at the
-          counter, and a phone typed at the end is a phone typed in a hurry. */}
+      {/*
+        Customer first: it is what the admin asks for while the customer is still at the
+        counter, and a phone typed at the end is a phone typed in a hurry.
+
+        §11 asks the flow to feel guided rather than like one form. The SEQUENCE is Phase 8's
+        and is not changed — customer, items, review, generate — but each stage now says
+        which stage it is, so a half-finished bill is legible at a glance instead of being a
+        stack of identical white cards.
+      */}
       <Card className="flex flex-col gap-4">
-        <h2 className="text-h3 font-semibold text-ink">Customer</h2>
+        <Step number={1} title="Customer" />
 
         <Input
           label="Name"
@@ -324,6 +427,44 @@ export function BillBuilder({
           maxLength={500}
         />
       </Card>
+
+      {/*
+        §11's rate step, and §13's "what rate is being used".
+
+        The builder has always fetched `/api/rates` and has never shown it — the admin priced
+        a wedding set against a figure they could not see, on the page where getting it wrong
+        is most expensive. These are the shop's own quoted rates, in the shop's own units,
+        read from the same response the pricing uses.
+
+        `ratesSnapshot` on the order freezes exactly this at Generate, which is why the
+        wording says "frozen onto the bill" rather than implying it might move afterwards.
+      */}
+      {rateFaces.length > 0 && (
+        <Card className="flex flex-col gap-4">
+          <Step number={2} title="Rates being used" />
+          <dl className="flex flex-col gap-2 text-small">
+            {rateFaces.map((face) => (
+              <div
+                key={face.purity}
+                className="flex items-baseline justify-between gap-4"
+              >
+                <dt className="text-muted">
+                  {face.label} <span className="text-muted">{face.unit}</span>
+                </dt>
+                <dd className="font-medium text-ink num">{formatINR(face.display)}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="text-small text-muted">
+            Today&rsquo;s rates, frozen onto the bill when you generate it. Change them on{' '}
+            <span className="font-medium text-ink">Rates</span> if they are out of date.
+          </p>
+        </Card>
+      )}
+
+      <div className="flex flex-col gap-4">
+        <Step number={3} title="Items" />
+      </div>
 
       <ItemList
         items={state.items}
@@ -380,13 +521,93 @@ export function BillBuilder({
         )}
       />
 
+      {/*
+        §14's review step.
+
+        A visual check, not a second submission: the brief is explicit that no new backend
+        confirmation belongs here, and §8.2's guarantee is that the server re-prices every
+        line regardless of what this screen showed. Every figure below comes from
+        `summariseTotal`, which sums the engine's own `LineResult` fields — and
+        `lib/calculator/summary.test.ts` asserts those parts reconcile with this whole, which
+        is the only reason it is safe to print them beside each other.
+      */}
+      <Card className="flex flex-col gap-4" data-testid="bill-review">
+        <Step number={4} title="Review" />
+
+        <dl className="flex flex-col gap-2 text-small">
+          <div className="flex items-baseline justify-between gap-4">
+            <dt className="text-muted">Customer</dt>
+            <dd className="text-right text-ink">
+              {customerName.trim() || 'No name taken'}
+              {phoneValid ? (
+                <span className="text-muted num"> · +91 {customerPhone.trim()}</span>
+              ) : (
+                /* §12 — an incomplete bill says so, rather than only refusing to submit. */
+                <span className="font-medium text-down"> · no mobile number yet</span>
+              )}
+            </dd>
+          </div>
+          <div className="flex items-baseline justify-between gap-4">
+            <dt className="text-muted">Items</dt>
+            <dd className="text-ink num">{state.items.length}</dd>
+          </div>
+        </dl>
+
+        {summary ? (
+          <dl className="flex flex-col gap-2 border-t border-line pt-4 text-small">
+            <ReviewRow label="Metal value" value={summary.metalValue} />
+            {summary.makingCharge > 0n && (
+              <ReviewRow label="Making charges" value={summary.makingCharge} />
+            )}
+            {/* §9's rule, applied to the builder too: no invented zero rows. */}
+            {summary.hasStoneCharge && (
+              <ReviewRow label="Stones and other" value={summary.stoneCharge} />
+            )}
+            <ReviewRow label="Taxable value" value={summary.subtotal} emphasis />
+            <ReviewRow label="GST" value={summary.gst} />
+            <div className="flex items-baseline justify-between gap-4 border-t border-line pt-2">
+              <dt className="text-h3 font-semibold text-ink">Total</dt>
+              <dd className="text-h3 font-semibold text-ink num">
+                {formatINR(summary.grandTotal, true)}
+              </dd>
+            </div>
+          </dl>
+        ) : (
+          <p className="border-t border-line pt-4 text-small text-muted">
+            The total appears once every item has a weight and today&rsquo;s rates have
+            loaded.
+          </p>
+        )}
+      </Card>
+
       {error && (
         <p
           role="alert"
-          className="rounded-field bg-down/10 px-4 py-2 text-small text-down"
+          className="rounded-field bg-down/10 px-4 py-4 text-small text-down"
         >
           {error}
         </p>
+      )}
+
+      {/*
+        §12 — the disabled Generate button, explained.
+
+        Rendered above the sticky bar rather than inside it: the bar is 64px of fixed
+        furniture and a list of reasons in it would either truncate or cover the form.
+      */}
+      {!canGenerate && !busy && blockers.length > 0 && (
+        <div className="flex flex-col gap-2 rounded-field bg-rose-tint p-4">
+          <p className="text-small font-semibold text-ink">
+            Before this bill can be generated
+          </p>
+          <ul className="flex flex-col gap-1">
+            {blockers.map((reason) => (
+              <li key={reason} className="text-small text-muted">
+                — {reason}
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
 
       {/* §8.1: "Live grand total in a sticky bar." The same StickyBar the calculator and
@@ -396,24 +617,65 @@ export function BillBuilder({
           <span className="text-small text-muted">
             {state.items.length} {state.items.length === 1 ? 'item' : 'items'}
           </span>
-          <span
-            className="text-h2 font-semibold text-ink tabular"
-            data-testid="bill-total"
-          >
+          <span className="text-h2 font-semibold text-ink num" data-testid="bill-total">
             {total ? formatINR(total.grandTotal) : '—'}
           </span>
         </div>
 
+        {/*
+          §13 — duplicate submission is prevented twice over, and neither is new.
+          `Button` sets `disabled={disabled || loading}`, and §8.2's idempotency key is minted
+          with the form so a second POST returns the first bill rather than raising another.
+        */}
         <Button
           variant="accent"
           size="lg"
           loading={busy}
+          loadingLabel="Generating…"
           disabled={!canGenerate}
           onClick={() => void generate()}
         >
           Generate
         </Button>
       </StickyBar>
+    </div>
+  );
+}
+
+/** One numbered stage of §11's flow. Presentation — the sequence itself is Phase 8's. */
+function Step({ number, title }: { number: number; title: string }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span
+        aria-hidden="true"
+        className="flex size-6 shrink-0 items-center justify-center rounded-pill bg-rose-tint text-small font-semibold text-rose-deep num"
+      >
+        {number}
+      </span>
+      <h2 className="text-h3 font-semibold text-ink">{title}</h2>
+    </div>
+  );
+}
+
+function ReviewRow({
+  label,
+  value,
+  emphasis = false,
+}: {
+  label: string;
+  value: bigint;
+  emphasis?: boolean;
+}) {
+  return (
+    <div
+      className={
+        emphasis
+          ? 'flex items-baseline justify-between gap-4 border-t border-line pt-2 font-semibold text-ink'
+          : 'flex items-baseline justify-between gap-4'
+      }
+    >
+      <dt className={emphasis ? undefined : 'text-muted'}>{label}</dt>
+      <dd className="num">{formatINR(value, true)}</dd>
     </div>
   );
 }

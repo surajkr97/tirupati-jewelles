@@ -18,6 +18,37 @@
  *  records why: embedding Inter means committing a font binary and resolving its path at
  *  runtime, and the one thing it would buy — the `₹` glyph — is handled by writing `Rs.`,
  *  which is what Indian tax invoices print anyway.
+ *
+ *  Helvetica's digits are all 556 units wide, so every money column is tabular by
+ *  construction — §8 of the Stage 5G brief asks for that "where supported by the PDF
+ *  font/system", and here it needs no `font-variant-numeric` because the base-14 metrics
+ *  already provide it.
+ *
+ *  ── Stage 5G: quieter than the website, on purpose ──
+ *
+ *  The site is wine, rose and cream. An invoice is not a marketing surface, and three of the
+ *  things that made this document feel designed on screen made it worse on paper:
+ *
+ *    · `roseTint` (#FCEEF1) carried the rules and the grand-total box. Against white that is
+ *      1.04:1 — it is not a hairline, it is nothing, and it prints as nothing. The same is
+ *      true of `line` (#F0EEF0) on the row separators and of the `cream` panel fills.
+ *    · The one large colour block on the page was behind the grand total, which is exactly
+ *      the element that should be carried by weight rather than by fill.
+ *    · Rose was the accent. Rose is the site's accent; wine is the brand, it is darker, and
+ *      it survives a grayscale printer.
+ *
+ *  So: white ground, ink type, muted secondary text, rules in real grey, and wine used three
+ *  times — the invoice label, the rule under the table head and the rule above the total.
+ *  Rose does not appear on the invoice at all.
+ *
+ *  ── There is no QR code, and 5G did not add one ──
+ *
+ *  §13 of the brief asks that existing QR/verification behaviour be preserved. There is
+ *  none: nothing in this repository generates or encodes one. The only verification artefact
+ *  the application has is the signed, EXPIRING URL the PDF is served from
+ *  (`lib/bills/storage.ts`) — a capability credential, which is the last thing that belongs
+ *  printed on a customer's copy. Adding one would mean inventing an encoding, a verification
+ *  route and a dependency. Recorded as UI_REDESIGN_DEBT-016.
  * ═══════════════════════════════════════════════════════════════════════════
  */
 import {
@@ -79,6 +110,13 @@ export interface BillPdfData {
   rates: BillPdfRate[];
 
   items: BillPdfItem[];
+  /**
+   * Metal / making / stones, summed across the lines by `buildBillData`.
+   *
+   * Null when they do not add up to `taxableTotal`, in which case the invoice prints the
+   * stored totals alone rather than a breakdown that does not reconcile.
+   */
+  components: { metal: bigint; making: bigint; stone: bigint } | null;
   taxableTotal: bigint;
   gstTotal: bigint;
   grandTotal: bigint;
@@ -113,15 +151,21 @@ const COLUMNS = {
   index: 0.5,
   // Widened from 3.4/1.2 after a render: "Silver (999)" wrapped onto two lines, which made
   // a silver row a third taller than a gold one for no reason.
-  description: 3.0,
+  //
+  // Narrowed again by Stage 5G, and the money columns widened with what it gave up. On a
+  // ₹1.2-crore bill `12,66,146.64` and `2,50,000.00` filled MAKING and STONE completely and
+  // read as one run of digits — not an overflow, since each sits in its own flex box, but
+  // the gutter had gone. Description is the column that can afford it: it wraps by design,
+  // and a name on two lines is legible in a way two adjacent numbers are not.
+  description: 2.4,
   purity: 1.6,
   weight: 1.1,
   rate: 1.5,
-  metal: 1.7,
-  makingPct: 0.9,
-  making: 1.5,
-  stone: 1.3,
-  taxable: 1.8,
+  metal: 1.75,
+  makingPct: 0.85,
+  making: 1.75,
+  stone: 1.6,
+  taxable: 1.85,
 } as const;
 
 /**
@@ -138,6 +182,23 @@ const COLUMNS = {
  */
 export const PAGE_BOTTOM_PADDING = 84;
 
+/**
+ * The three rule weights, in one place.
+ *
+ * §18 asks that the document survive an ordinary office printer, and the previous rules
+ * failed that test on colour rather than on weight: `roseTint` and `line` are both under
+ * 1.1:1 against white. `muted` (#6E6B72) at a fine weight is a real grey line — subtle on a
+ * screen, present on paper, and unambiguous in grayscale.
+ */
+const RULE = {
+  /** Row separators. Fine enough not to stripe a 20-line bill. */
+  hair: 0.4,
+  /** Section divisions. */
+  fine: 0.6,
+  /** The two rules that carry structure: under the table head, above the total. */
+  strong: 1.2,
+} as const;
+
 const styles = StyleSheet.create({
   page: {
     paddingTop: 32,
@@ -149,59 +210,85 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.white,
   },
 
-  // Header
+  // ── Header ───────────────────────────────────────────────────────────────
   header: { flexDirection: 'row', justifyContent: 'space-between', gap: 16 },
   logo: { width: 120, maxHeight: 44, objectFit: 'contain' },
-  wordmark: { fontSize: 18, fontFamily: 'Helvetica-Bold', color: COLORS.ink },
+  wordmark: { fontSize: 17, fontFamily: 'Helvetica-Bold', color: COLORS.ink },
   shopBlock: { flex: 1 },
-  shopMeta: { fontSize: 8, color: COLORS.muted, marginTop: 3, lineHeight: 1.5 },
-  invoiceBlock: { alignItems: 'flex-end', width: 170 },
+  shopMeta: { fontSize: 8, color: COLORS.muted, marginTop: 4, lineHeight: 1.5 },
+
+  invoiceBlock: { alignItems: 'flex-end', width: 180 },
+  /**
+   * The one place wine appears at type size.
+   *
+   * Small, letterspaced and bold: it names the document without competing with the shop
+   * above it or the total below it. #3D0C1E on white is 15.9:1, so it is legible at 9pt and
+   * still black-ish in grayscale — which `roseDeep` at 6.4:1 was not.
+   */
   invoiceTitle: {
-    fontSize: 13,
+    fontSize: 9,
     fontFamily: 'Helvetica-Bold',
-    letterSpacing: 1.6,
-    color: COLORS.roseDeep,
+    letterSpacing: 2,
+    color: COLORS.wine,
   },
-  invoiceMeta: { fontSize: 8, color: COLORS.muted, marginTop: 4, textAlign: 'right' },
-  invoiceNo: { fontSize: 11, fontFamily: 'Helvetica-Bold', marginTop: 2 },
+  invoiceNo: { fontSize: 14, fontFamily: 'Helvetica-Bold', marginTop: 3 },
+  invoiceMeta: { fontSize: 8, color: COLORS.muted, marginTop: 3, textAlign: 'right' },
 
-  rule: { borderBottomWidth: 1, borderBottomColor: COLORS.roseTint, marginVertical: 12 },
-  hairline: { borderBottomWidth: 0.6, borderBottomColor: COLORS.line },
-
-  // Parties + rate reference
-  panels: { flexDirection: 'row', gap: 16 },
-  panel: {
-    flex: 1,
-    backgroundColor: COLORS.cream,
-    borderRadius: 4,
-    padding: 10,
+  headerRule: {
+    borderBottomWidth: RULE.fine,
+    borderBottomColor: COLORS.muted,
+    marginTop: 12,
+    marginBottom: 12,
   },
+  sectionRule: {
+    borderBottomWidth: RULE.hair,
+    borderBottomColor: COLORS.muted,
+    marginTop: 10,
+    marginBottom: 12,
+  },
+
+  // ── Parties + rate reference ─────────────────────────────────────────────
+  /**
+   * No panel fill.
+   *
+   * These were two `cream` boxes. Cream on white is 1.02:1 — invisible on screen and gone in
+   * print, so the boxes were doing nothing but suggesting they were. Type hierarchy and a
+   * gutter separate the two blocks perfectly well.
+   */
+  panels: { flexDirection: 'row', gap: 28 },
+  panel: { flex: 1 },
   panelLabel: {
     fontSize: 7,
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     color: COLORS.muted,
     fontFamily: 'Helvetica-Bold',
-    marginBottom: 4,
+    marginBottom: 5,
   },
   panelName: { fontSize: 11, fontFamily: 'Helvetica-Bold' },
-  panelLine: { fontSize: 8, color: COLORS.muted, marginTop: 2 },
-  rateRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 2 },
+  panelLine: { fontSize: 8, color: COLORS.muted, marginTop: 3 },
+  rateRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 3 },
+  rateValue: { fontSize: 8, color: COLORS.ink, marginTop: 3 },
 
-  // Items
+  // ── Items ────────────────────────────────────────────────────────────────
   sectionTitle: {
     fontSize: 7,
-    letterSpacing: 1,
+    letterSpacing: 1.2,
     color: COLORS.muted,
     fontFamily: 'Helvetica-Bold',
     marginBottom: 6,
   },
+  /**
+   * The table head is a RULE, not a fill.
+   *
+   * A wine underline at 1.2pt anchors the table on paper far better than the cream band did
+   * on screen, and it costs no toner across the full width of an A4 page.
+   */
   tableHead: {
     flexDirection: 'row',
-    backgroundColor: COLORS.cream,
-    borderBottomWidth: 1,
-    borderBottomColor: COLORS.roseTint,
-    paddingVertical: 6,
-    paddingHorizontal: 4,
+    borderBottomWidth: RULE.strong,
+    borderBottomColor: COLORS.wine,
+    paddingBottom: 5,
+    paddingHorizontal: 2,
   },
   /**
    * `paddingRight` on every cell, not a `gap` on the row.
@@ -213,24 +300,25 @@ const styles = StyleSheet.create({
   headCell: {
     fontSize: 6.5,
     fontFamily: 'Helvetica-Bold',
-    color: COLORS.muted,
+    letterSpacing: 0.3,
+    color: COLORS.ink,
     paddingRight: 6,
   },
   row: {
     flexDirection: 'row',
     paddingVertical: 6,
-    paddingHorizontal: 4,
-    borderBottomWidth: 0.6,
-    borderBottomColor: COLORS.line,
+    paddingHorizontal: 2,
+    borderBottomWidth: RULE.hair,
+    borderBottomColor: COLORS.muted,
   },
   cell: { fontSize: 8, paddingRight: 6 },
   right: { textAlign: 'right' },
   itemName: { fontSize: 8.5, fontFamily: 'Helvetica-Bold' },
   itemMeta: { fontSize: 6.5, color: COLORS.muted, marginTop: 2 },
 
-  // Totals
-  totals: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 12 },
-  totalsBox: { width: 240 },
+  // ── Totals ───────────────────────────────────────────────────────────────
+  totals: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 14 },
+  totalsBox: { width: 250 },
   totalRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -238,26 +326,34 @@ const styles = StyleSheet.create({
   },
   totalLabel: { fontSize: 8, color: COLORS.muted },
   totalValue: { fontSize: 8, textAlign: 'right' },
+  totalsDivider: {
+    borderBottomWidth: RULE.hair,
+    borderBottomColor: COLORS.muted,
+    marginVertical: 4,
+  },
+
+  /**
+   * §11 — the strongest financial element on the page, carried by weight and a rule.
+   *
+   * It was a filled `roseTint` box, which is the one thing §4 and §11 both name: a large
+   * colour area doing the job that type should do, in the site's accent rather than the
+   * brand's, and invisible the moment the page is printed in grayscale. A 1.2pt wine rule
+   * above it and 15pt bold ink is unmistakably the final amount and costs nothing to print.
+   */
   grandRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    alignItems: 'baseline',
     marginTop: 6,
-    paddingVertical: 7,
-    paddingHorizontal: 8,
-    backgroundColor: COLORS.roseTint,
-    borderRadius: 4,
+    paddingTop: 8,
+    borderTopWidth: RULE.strong,
+    borderTopColor: COLORS.wine,
   },
-  grandLabel: { fontSize: 9, fontFamily: 'Helvetica-Bold' },
-  grandValue: { fontSize: 12, fontFamily: 'Helvetica-Bold', textAlign: 'right' },
+  grandLabel: { fontSize: 9, fontFamily: 'Helvetica-Bold', letterSpacing: 1 },
+  grandValue: { fontSize: 15, fontFamily: 'Helvetica-Bold', textAlign: 'right' },
 
-  words: {
-    marginTop: 10,
-    padding: 9,
-    borderWidth: 0.6,
-    borderColor: COLORS.roseTint,
-    borderRadius: 4,
-  },
-  wordsLabel: { fontSize: 6.5, letterSpacing: 1, color: COLORS.muted },
+  words: { marginTop: 12 },
+  wordsLabel: { fontSize: 6.5, letterSpacing: 1.2, color: COLORS.muted },
   wordsValue: {
     fontSize: 9,
     fontFamily: 'Helvetica-Bold',
@@ -265,27 +361,31 @@ const styles = StyleSheet.create({
     lineHeight: 1.4,
   },
 
-  note: { marginTop: 10, fontSize: 8, color: COLORS.muted, lineHeight: 1.5 },
+  note: { marginTop: 12, fontSize: 8, color: COLORS.muted, lineHeight: 1.5 },
 
-  // Footer
+  // ── Footer ───────────────────────────────────────────────────────────────
   footer: {
     position: 'absolute',
     bottom: 24,
     left: 32,
     right: 32,
-    borderTopWidth: 0.6,
-    borderTopColor: COLORS.line,
+    borderTopWidth: RULE.hair,
+    borderTopColor: COLORS.muted,
     paddingTop: 6,
   },
   footerText: { fontSize: 6.5, color: COLORS.muted, lineHeight: 1.5 },
   pageNumber: { fontSize: 6.5, color: COLORS.muted, textAlign: 'right', marginTop: 2 },
 
+  /**
+   * §21 — never colour alone. The word VOID and the cancellation date carry the meaning;
+   * the red border and red type are the second channel, not the only one.
+   */
   voided: {
-    marginTop: 10,
+    marginTop: 12,
     padding: 8,
     borderWidth: 1,
     borderColor: COLORS.down,
-    borderRadius: 4,
+    borderRadius: 2,
   },
   voidedText: { fontSize: 10, fontFamily: 'Helvetica-Bold', color: COLORS.down },
 });
@@ -299,6 +399,19 @@ export function BillDocument({
 }): React.ReactElement<DocumentProps> {
   const gst = splitGst(bill.gstTotal);
   const taxLabel = bill.halfRate ? ` ${bill.halfRate}%` : '';
+
+  /**
+   * §8: "Do not force empty columns into the document."
+   *
+   * Most bills in a jewellery shop carry no stone charge at all, and the column printed
+   * `0.00` on every line — a column of zeroes that says nothing, on the page where every
+   * other figure means something. It appears when at least one line has a stone charge, and
+   * its width goes to the description when it does not.
+   */
+  const hasStoneCharge = bill.items.some((item) => item.stoneCharge > 0n);
+  const descriptionFlex = hasStoneCharge
+    ? COLUMNS.description
+    : COLUMNS.description + COLUMNS.stone;
 
   return (
     <Document
@@ -349,7 +462,7 @@ export function BillDocument({
           </View>
         </View>
 
-        <View style={styles.rule} />
+        <View style={styles.headerRule} />
 
         <View style={styles.panels}>
           <View style={styles.panel}>
@@ -373,7 +486,7 @@ export function BillDocument({
                 <Text style={styles.panelLine}>
                   {rate.label} {rate.unit}
                 </Text>
-                <Text style={styles.panelLine}>
+                <Text style={styles.rateValue}>
                   {formatRupeesAscii(rate.amount, false)}
                 </Text>
               </View>
@@ -389,17 +502,23 @@ export function BillDocument({
           </View>
         )}
 
-        <View style={styles.rule} />
+        <View style={styles.sectionRule} />
 
-        <Text style={styles.sectionTitle}>ITEMS</Text>
+        {/*
+          The unit, said once.
+
+          Only the last column's header carried `(RS.)`, so RATE/G, METAL VALUE, MAKING and
+          STONE printed bare digits with nothing on the page naming their currency. Widening
+          four headers is not available — ten columns across A4 is already tight (see
+          COLUMNS) — and one line above the table costs no width at all.
+        */}
+        <Text style={styles.sectionTitle}>ITEMS  ·  ALL AMOUNTS IN RUPEES</Text>
 
         {/* `fixed` repeats the header on every page — a 20-item bill spills, and a
             continuation page of unlabelled numbers is unreadable. */}
         <View style={styles.tableHead} fixed>
           <Text style={[styles.headCell, { flex: COLUMNS.index }]}>#</Text>
-          <Text style={[styles.headCell, { flex: COLUMNS.description }]}>
-            DESCRIPTION
-          </Text>
+          <Text style={[styles.headCell, { flex: descriptionFlex }]}>DESCRIPTION</Text>
           <Text style={[styles.headCell, { flex: COLUMNS.purity }]}>PURITY</Text>
           <Text style={[styles.headCell, styles.right, { flex: COLUMNS.weight }]}>
             WT (G)
@@ -416,11 +535,13 @@ export function BillDocument({
           <Text style={[styles.headCell, styles.right, { flex: COLUMNS.making }]}>
             MAKING
           </Text>
-          <Text style={[styles.headCell, styles.right, { flex: COLUMNS.stone }]}>
-            STONE
-          </Text>
+          {hasStoneCharge && (
+            <Text style={[styles.headCell, styles.right, { flex: COLUMNS.stone }]}>
+              STONE
+            </Text>
+          )}
           <Text style={[styles.headCell, styles.right, { flex: COLUMNS.taxable }]}>
-            TAXABLE (RS.)
+            TAXABLE
           </Text>
         </View>
 
@@ -430,7 +551,7 @@ export function BillDocument({
           <View key={`${item.name}-${index}`} style={styles.row} wrap={false}>
             <Text style={[styles.cell, { flex: COLUMNS.index }]}>{index + 1}</Text>
 
-            <View style={{ flex: COLUMNS.description, paddingRight: 6 }}>
+            <View style={{ flex: descriptionFlex, paddingRight: 6 }}>
               <Text style={styles.itemName}>{item.name}</Text>
               {/* §8.3: "Hallmark / HUID / BIS numbers per item where present." */}
               {(item.hallmarkNo || item.bisCertNo) && (
@@ -463,9 +584,11 @@ export function BillDocument({
             <Text style={[styles.cell, styles.right, { flex: COLUMNS.making }]}>
               {formatAmountDigits(item.makingCharge)}
             </Text>
-            <Text style={[styles.cell, styles.right, { flex: COLUMNS.stone }]}>
-              {formatAmountDigits(item.stoneCharge)}
-            </Text>
+            {hasStoneCharge && (
+              <Text style={[styles.cell, styles.right, { flex: COLUMNS.stone }]}>
+                {formatAmountDigits(item.stoneCharge)}
+              </Text>
+            )}
             <Text style={[styles.cell, styles.right, { flex: COLUMNS.taxable }]}>
               {formatAmountDigits(item.taxableValue)}
             </Text>
@@ -476,13 +599,50 @@ export function BillDocument({
         <View wrap={false}>
           <View style={styles.totals}>
             <View style={styles.totalsBox}>
+              {/*
+                §10 — where the taxable value came from, when it can be shown honestly.
+
+                `components` is summed by `buildBillData` from the same per-line split the
+                table above prints, and is null unless those parts add up to the stored
+                `taxableTotal`. Making and stones appear only when they are non-zero: §10 is
+                explicit that a zero row invented to balance the table is worse than no row,
+                and on an invoice it would imply a charge that was never made.
+              */}
+              {bill.components && (
+                <>
+                  <View style={styles.totalRow}>
+                    <Text style={styles.totalLabel}>Metal value</Text>
+                    <Text style={styles.totalValue}>
+                      {formatRupeesAscii(bill.components.metal)}
+                    </Text>
+                  </View>
+                  {bill.components.making > 0n && (
+                    <View style={styles.totalRow}>
+                      <Text style={styles.totalLabel}>Making charges</Text>
+                      <Text style={styles.totalValue}>
+                        {formatRupeesAscii(bill.components.making)}
+                      </Text>
+                    </View>
+                  )}
+                  {bill.components.stone > 0n && (
+                    <View style={styles.totalRow}>
+                      <Text style={styles.totalLabel}>Stones and other</Text>
+                      <Text style={styles.totalValue}>
+                        {formatRupeesAscii(bill.components.stone)}
+                      </Text>
+                    </View>
+                  )}
+                  <View style={styles.totalsDivider} />
+                </>
+              )}
+
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>Taxable value</Text>
                 <Text style={styles.totalValue}>
                   {formatRupeesAscii(bill.taxableTotal)}
                 </Text>
               </View>
-              <View style={styles.hairline} />
+              <View style={styles.totalsDivider} />
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>CGST{taxLabel}</Text>
                 <Text style={styles.totalValue}>{formatRupeesAscii(gst.cgst)}</Text>

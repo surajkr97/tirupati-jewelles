@@ -348,6 +348,401 @@ API contracts; or the schema. The enumeration-safe generic error is unchanged an
 
 ## Stage 5 — Admin
 
+### 5A — shell, navigation, wayfinding ✅ COMPLETE
+
+- [x] **Route inventory** — `specs/ROUTE-MAP.md`: every route, how it is protected, how it is
+      reached. Enumerated from `app/` on disk, with authorisation read from the code that
+      enforces it rather than from where a link appears.
+- [x] **Desktop rail** — all eight destinations + "Back to shop". Already shipped in Stage 2
+      (D-059); 5A verified it and relabelled two entries.
+- [x] **Mobile drawer** — now the COMPLETE menu, not the overflow (D-077). Trigger renamed
+      "All admin pages"; bottom bar keeps the four daily destinations as the fast path.
+- [x] **"Bills & orders"** — truthful about `/admin/bills`; no invented `/admin/orders`
+      (D-078, DEBT-004).
+- [x] **Admin header compacted** — the generic "Shop admin" line removed; every page already
+      has its own `h1` (D-079).
+- [x] **Back to shop** — relabelled from "Back to site" per §9, in both the rail and drawer.
+- [x] **Storefront → admin** — the `/account` shortcut from Stage 3 (C-3), admin-only.
+- [x] **Admin bottom bar made opaque** — same contrast reasoning as D-076.
+
+**5A verification**
+
+| Gate | Result |
+| :--- | :--- |
+| `pnpm lint` / `typecheck` | pass |
+| `lib/navigation.test.ts` | 56 assertions |
+| `e2e/admin-shell.spec.ts` (new) | 25 passed |
+| `navigation` / `admin` specs | 92 passed |
+| `a11y` / `keyboard` / `screen-reader` / `responsive` | 227 → 120 passed after relabelling |
+
+Security verified as behaviour, not markup: a signed-in **customer** gets `404` from all
+eight admin routes and sees no `/admin` link anywhere; a signed-out visitor gets `404`.
+Navigation is convenience only.
+
+Responsive: `/admin` measured at 320 / 390 / 1440 — no horizontal scroll; all five bottom-bar
+targets ≥44px.
+
+**Not done in 5A, on purpose:** dashboard, rates, products, media, bills, settings, audit and
+the bill PDF are 5B–5G.
+
+### 5B — dashboard ✅ COMPLETE
+
+- [x] **Primary action** — "Set today's rates" is the page's one accent button. §7.2 calls it
+      the most frequent daily action; it had been a corner text link (D-082).
+- [x] **Rates panel** — units per face (§13), and freshness as a date, with a badge only for
+      the stale exception rather than a green tick on every row (D-083).
+- [x] **Hierarchy over a tile wall** — "sold today" is the anchor, larger **from `sm` only**
+      so DEBT-038's 375px overflow test still measures what it measured (D-082).
+- [x] **Two alerts that existed in the data and had never been shown** — unsent bills and
+      unclaimed orders, computed by `getSalesTotals()` since Phase 8 (D-081).
+- [x] **"More" card removed** — it duplicated the rail and drawer 5A built (D-084, §10).
+- [x] **Empty states** — recent orders offers "Create the first bill"; the chart says "no
+      sales recorded yet"; alerts render only when there is something to act on.
+- [x] **Bottom-bar `shortLabel`** — "Bills & orders" dropped its second line out of the 64px
+      row at 320px. Measured, then abbreviated to "Bills" in the bar only.
+- [x] **No `loading.tsx` for `/admin`** — it would turn every admin 404 into a 200 (D-085).
+
+**No invented data.** Every figure comes from a source that already existed: `getCurrentRates`,
+`getSalesTotals`, order/enquiry counts, the 30-day SQL series, and the products-without-images
+count. No revenue, conversion, growth or customer metric was added.
+
+**5B verification**
+
+| Gate | Result |
+| :--- | :--- |
+| `pnpm lint` / `typecheck` / `build` | pass |
+| `e2e/admin.spec.ts` + `admin-shell.spec.ts` | 63 passed |
+| `a11y` + `responsive` | 120 passed |
+
+Visual check at **320 / 390 / 1440** — no horizontal scroll; money tiles stay full width on
+mobile per D-036; all five bottom-bar targets 63px.
+
+**Not done in 5B:** rates, products, media, bills, settings, audit and the bill PDF are 5C–5G.
+
+### 5C — admin rates ✅ COMPLETE
+
+- [x] **Current → new → save** made explicit (D-086). A `CURRENT` eyebrow, the figure, a
+      hairline, then `New rate (per 10 grams)` — the largest number on screen used to read
+      like the field being edited.
+- [x] **Units in both halves** (§6) — on the current figure and in the field label.
+- [x] **Stale flagged where it gets fixed** — §7.2's 48-hour rule extracted to
+      `lib/admin/rate-freshness.ts` and shared with the dashboard (D-087).
+- [x] **Save button changes weight** — `outline` while inert, `primary` when there is a
+      change. Three full-strength "No change" bars were the heaviest thing on the page.
+- [x] **Loading labels** — "Saving…" on both the save and the confirm action.
+- [x] **History redesigned** as a scannable row per change, with an empty state that explains
+      what will appear (D-088).
+- [x] **Editing column capped** at `max-w-2xl` (§16, D-089).
+- [x] **`.num`** on every figure.
+
+**Preserved exactly:** the >20% confirmation naming both figures (§7.3 — "the single most
+damaging typo available"), the live % preview, `inputMode="decimal"`, Zod validation, the
+server action, `setRate`'s audit write and cache busting. Verified live at 320px: a 567%
+change was refused and the stored rate was unchanged afterwards.
+
+**5C verification**
+
+| Gate | Result |
+| :--- | :--- |
+| `pnpm lint` / `typecheck` / `build` | pass |
+| `admin` + `admin-shell` + `a11y` specs | 150 passed |
+| `lib/admin` + `lib/rates` unit | 128 passed |
+
+Visual check at **320 / 390 / 1440**, including the confirmation step at 320 — no horizontal
+scroll. New debt: UI_REDESIGN_DEBT-009 (₹ renders after the number in the rate field).
+
+**Not done in 5C:** products, media, bills, settings, audit and the bill PDF are 5D–5G.
+
+### 5D — admin products + media ✅ COMPLETE
+
+**Products**
+
+- [x] **The list shows the piece** (§2, D-090) — a fixed-ratio 96px thumbnail, purity, weight
+      with its unit, price, and only the badges that are true. Phase 7 counted the images
+      without ever selecting one.
+- [x] **The price is the shop's price** (D-091) — `priceProduct` with the Settings GST, not a
+      private helper passing `gstPct: 3`. Labelled once above the column (§10).
+- [x] **Filters are legible and reversible** (§3) — visible labels, an active-filter pill per
+      applied filter, a matching count and "Clear all". Two selects pair up below `lg` so the
+      panel stops eating half a 320px screen.
+- [x] **Two empty states** (§21) — "no pieces match" → clear filters; "no pieces yet" → add
+      the first.
+- [x] **Two columns from `lg`, stacked below** (§6, §7). No table squeezed into 320px.
+- [x] **Form grouped identity → the piece → pricing → availability → save** (§8, D-092), with
+      hints carrying units and ranges (§9) and a dirty-aware save (§12).
+- [x] **Creating ends somewhere** (D-093) — a success panel with **Add photos**, instead of a
+      form that would fail on its own slug if pressed twice.
+- [x] **Photos**: 96px thumbnails, a **Cover** marker on the first (§19), errors split across
+      the three controls that produce them (§11, §17), and no invented upload progress (§16).
+- [x] **Removing a photo asks first and names it** (§20, D-094).
+- [x] **The switch is its own 44px target** (§23, D-097).
+
+**Media**
+
+- [x] **The screen stops promising places that do not exist** (§15, D-095) — two live slots,
+      ten that nothing reads, said in two headed groups. `lib/media/slots.test.ts` fails if
+      the flag stops matching the code.
+- [x] **Clearing asks first and names the slot** (§20, D-094).
+- [x] **Save is inert until something changes** (§12), and **Clear** tracks what is stored now
+      rather than what was stored at page load.
+
+**Preserved exactly:** `saveProduct`'s Zod schema and every message, slug uniqueness, the
+grams→milligrams and rupees→paise integer conversions, the soft-delete-only rule and its §7.4
+note, `checkImageUrl`/SSRF, the signed direct-to-Cloudinary upload and its field list, the
+server-side re-verification, `sortOrder` reordering, and every audit write.
+
+**5D verification**
+
+| Gate | Result |
+| :--- | :--- |
+| `pnpm lint` / `typecheck` / `build` | pass |
+| `admin` + `admin-shell` + `a11y` specs | 150 passed |
+| new `e2e/admin-products.spec.ts` | 34 passed |
+| `lib/admin` + `lib/media` + `lib/catalog` unit | 232 passed, + 14 new in `slots.test.ts` |
+
+Measured at **320 / 390 / 1440** on the list, the create form, an edit page and the media
+screen: `scrollX === 0` everywhere, and every button, link and switch inside `main` at 320px
+is ≥44×44. Both confirmation strips fit at 320px.
+
+Fixed on the way past: `e2e/a11y.spec.ts`'s "product editor" scan had been scanning
+`/admin/products/new` since Phase 7 (D-096).
+
+New debt: UI_REDESIGN_DEBT-010 (four purity label maps), 011 (ten dead media slots), 012 (no
+unsaved-changes guard), 013 (`bulkUpdateProducts` has no UI), 014 (a collection's image cannot
+be set anywhere).
+
+**Not done in 5D:** bills, settings, audit and the bill PDF are 5E–5G.
+
+### 5E — admin bills & orders ✅ COMPLETE
+
+**A defect, found and fixed (D-098)**
+
+Searching the invoice book by **customer name returned every bill in the shop**.
+`billsWhere` built `customerPhone: { contains: q.replace(/\D/g, '') }`, which is
+`contains: ''` for any term without a digit — `LIKE '%%'`, true for every row. Measured
+against the real database first: `q=zzzznotabill` matched **120 of 120** active orders. The
+same function backs the accountant's CSV, so that export was the whole ledger too. Fixed under
+§3, with the assertion on the shape of the `where` rather than on a fixture count.
+
+**Bills list**
+
+- [x] **Rows answer §1's questions** — invoice number, total (largest thing on the row),
+      customer *and* their number, item count, date, status, and a chevron because opening the
+      bill is the action.
+- [x] **Badges mark exceptions only** (§5, D-099) — Void and Not sent. "Sent" and "Claimed"
+      are quiet text. Every badge carries text and an icon, never colour alone.
+- [x] **Filters fold away** (§6, D-100) — search stays visible, five refinements sit in a
+      native `<details>` that still submits while closed and opens itself on a filtered view.
+- [x] **Applied filters are removable pills** with a matching count and Clear all.
+- [x] **Two empty states** (§20) — an empty book offers "Create the first bill"; an empty
+      search offers "Clear filters".
+- [x] **A real pager** with "page N of M" between the two controls.
+
+**Bill detail**
+
+- [x] **§7's full hierarchy** — identity → total → customer → items → rate snapshot → charges
+      → GST → total → actions.
+- [x] **The total is unmissable** (§9) — its own card, `md:text-display`, with the amount in
+      words underneath.
+- [x] **Items show where the money went** (§8, D-101) — purity as "22K (916)" rather than the
+      raw enum "K22 916", weight and the *snapshotted* rate with units, then metal value,
+      making, stones, taxable and GST per line.
+- [x] **The rate snapshot is on the screen** (§7) — it was on the invoice and nowhere else.
+- [x] **Charges reconcile** and no zero-value category is invented (§9).
+- [x] **A corrupt bill degrades instead of 500ing** (D-102), with a second guard that hides
+      the components unless they sum to the stored taxable value.
+- [x] **`<a><Button/></a>` unnested** — the PDF link is an anchor wearing `buttonClasses`.
+
+**Bill creation**
+
+- [x] **Numbered stages** (§11, D-103) — customer → rates → items → review, the sequence
+      unchanged.
+- [x] **The rate being used is visible** (§13) — the builder always fetched it and never
+      showed it.
+- [x] **A review before Create** (§14) from `summariseTotal`, the function whose parts are
+      already proven to reconcile with its whole.
+- [x] **Incomplete says so** (§12) — "no mobile number yet" in the review, plus a list of what
+      Generate is waiting for.
+- [x] **The duplicate-bill window is closed** (§13, D-104) — Generate stays disabled through
+      the navigation, where it used to re-enable *after* the idempotency key had rotated.
+
+**Destructive**
+
+- [x] **Voiding names the bill, the customer and the amount** (§19, D-105). Reason still
+      required, still a soft void, still no delete anywhere.
+
+**Preserved exactly:** every figure in `lib/pricing.ts` and `lib/bills/totals.ts`, the
+CGST/SGST split, the `ratePerGram`/`makingPct`/`gstPct` snapshots, `createBill`, the invoice
+sequence, the idempotency key, `/api/admin/bills`, the signed PDF URL and its expiry, the
+WhatsApp deep link and its claim URL, `markBillSent`'s refusal to record optimistically,
+`voidBill`, `regenerateBillPdf`, the CSV export, and every PDF style (5G).
+
+**5E verification**
+
+| Gate | Result |
+| :--- | :--- |
+| `pnpm lint` / `typecheck` / `build` | pass |
+| `bills` + `claim` + `a11y` + `admin` + `admin-shell` + `admin-products` | 205 passed |
+| new `e2e/admin-bills.spec.ts` | 40 passed |
+| `lib/bills` unit | 129 passed (+10 new in `split-line.test.ts`, +4 in `query.test.ts`) |
+
+Measured at **320 / 390 / 1440** across the list, the builder and a bill: `scrollX === 0`
+everywhere, every button/link/summary inside `main` at 320px is ≥44×44, and the sticky total
+bar bottoms out at exactly the nav's top edge (736px in an 800px viewport) with Generate 16px
+clear of it. The void confirmation was opened at 320px, checked, and dismissed — no bill was
+voided.
+
+**Not done in 5E:** settings, audit and the bill PDF are 5F–5G.
+
+### 5F — settings, audit & collections ✅ COMPLETE
+
+**A three-year-old gap, closed (D-109)**
+
+UI_REDESIGN_DEBT-014: `Category.imageUrl` has been selected by the homepage since Phase 3 and
+written by nothing, so every collection tile on the storefront rendered the branded monogram
+permanently with no admin route to change it. §8 asked whether the fix was UI exposure or
+missing infrastructure — it was UI exposure. The URL goes through `checkImageUrl`, the same
+§7.7 guard product images and media slots use. No new media architecture.
+
+`imageUrl` is a three-state field: `undefined` leaves it alone, `''` clears it, a URL is
+validated and the **verified** result stored. The first of those is load-bearing — the
+visibility toggle does not send the field, and treating it as "clear" would delete a picture
+every time somebody hid a collection.
+
+**Settings**
+
+- [x] **Five groups, each saying what it governs** (§3, D-111) — Phase 7 was a stack of bare
+      labels on a screen that sets what customers are charged.
+- [x] **Units and effects explicit** (§4) — GST and making carry their range and their reach.
+- [x] **High-impact fields warn only while being changed** (§6) — GST names both percentages;
+      the invoice sequence says that moving it backwards can reissue a number already on a
+      customer's invoice.
+- [x] **A live preview of the next invoice number.**
+- [x] **Unconfigured is explicit** (§7) — "Not set. Your invoices are printing without a
+      GSTIN." The WhatsApp number says when it is the site's built-in fallback rather than a
+      saved value.
+- [x] **Dirty-aware save** (§5) that still requires the password, and says which of the two is
+      missing instead of leaving a dead control.
+- [x] **`billSequence` is a string in form state** — it was `Number(v) || 1`, so clearing the
+      field to retype snapped back to `1`.
+
+**Collections**
+
+- [x] **Rename and web address reachable** (D-110) — `saveCategory` has taken both since
+      Phase 7 and the only caller passed the existing values back.
+- [x] **Image managed from the row** (§9), with a preview and a checked URL.
+- [x] **Removing an image names the collection** (§12); **deleting names it too** (§6) and
+      says which of the two outcomes applies.
+- [x] **The row shows the name again** (D-113) — at 320px `truncate` had been hiding it
+      entirely. Found by a screenshot; every geometry assertion passed throughout.
+
+**Audit**
+
+- [x] **The filter stopped narrowing its own vocabulary** (§15, D-106) — both lists were built
+      from the rows already on screen, so filtering to one action left it as the only option.
+- [x] **"What changed" is answered** (§13, §16, D-107) — `before`/`after` had been written
+      since Phase 7 and rendered nowhere. A bounded diff, not raw JSON.
+- [x] **Human labels beside the stored constants** (§14) — nothing renamed;
+      `lib/admin/audit-labels.test.ts` scans the repo in both directions.
+- [x] **Paged** (§18, D-108) — `take: 200` with no pager and no sign it had stopped.
+- [x] **Read-only, and it says so** (§17). No edit, delete or clear control exists.
+- [x] **Dense rows, not a card per event** (§19) — the other two screens are things you edit;
+      this is a ledger you read.
+
+**Also:** the "← More" back link pointing at `/admin/media` is gone from all three pages
+(D-112).
+
+**Preserved exactly:** `saveSettings`'s schema, re-authentication, audit entry and both cache
+invalidations; `deleteCategory`'s block with its count and its way out; `reorderCategories`;
+audit recording semantics; every event name.
+
+**5F verification**
+
+| Gate | Result |
+| :--- | :--- |
+| `pnpm lint` / `typecheck` / `build` | pass |
+| `admin` + `a11y` + `admin-shell` + `admin-settings` + `admin-products` + `admin-bills` | 258 passed |
+| new `e2e/admin-settings.spec.ts` | 46 passed |
+| `lib/admin` + `lib/settings` + `lib/media` unit | 196 passed (+30 in `audit-labels.test.ts`, +4 category-image cases) |
+
+Measured at **320 / 390 / 1440** on all three screens: `scrollX === 0` everywhere and every
+button, link, summary and switch inside `main` at 320px is ≥44×44 — with a category editor
+open, so its controls were measured too. Nothing was written: the settings password is wrong
+on purpose, and both confirmations were opened and dismissed.
+
+New debt: UI_REDESIGN_DEBT-015 (the audit log has no actor filter — §7.10 asks for one, and
+§15 forbids inventing the backend for it).
+
+**Not done in 5F:** the bill PDF is 5G.
+
+### 5G — bill PDF visual cleanup ✅ COMPLETE
+
+**The palette, by count**
+
+`muted` ×16 · `ink` ×4 · `wine` ×3 · `down` ×2 · `white` ×1.
+**Rose, roseTint, cream and gold do not appear on the invoice at all** (D-114).
+
+Wine is used three times, each structurally: the TAX INVOICE label, the rule under the table
+head, the rule above the grand total.
+
+- [x] **The rules are visible on paper** (§18) — `roseTint` (1.04:1 on white) and `line`
+      (1.06:1) carried every rule and both cream panel fills rendered as nothing. Rules are
+      now `muted` at 0.4 / 0.6 / 1.2pt; the panel fills are gone.
+- [x] **The grand total is type, not a box** (§11, D-115) — a wine rule and 15pt bold ink in
+      place of a filled `roseTint` panel.
+- [x] **The charges break down** (§10, D-116) — Metal value / Making charges / Stones, summed
+      by `buildBillData` from the per-line split it already produces, and **null unless they
+      reconcile with the stored taxable total**. No zero rows.
+- [x] **The stone column disappears when nothing has one** (§8, D-117), and the money columns
+      were rebalanced after a ₹1.2-crore render showed MAKING and STONE reading as one run of
+      digits.
+- [x] **The money columns say their unit** (§9, D-118) — `ITEMS · ALL AMOUNTS IN RUPEES`,
+      because only the last header carried `(RS.)`.
+- [x] **Multi-page invoices are asserted** (§15, D-120) — table head and footer on every page,
+      grand total exactly once on the page that prints `Page N of N`.
+- [x] **Tabular figures** (§8) — Helvetica's digits are all 556 units wide, so the base-14
+      metrics already provide it.
+
+**Unchanged, and verified unchanged:** every figure on the page. `formatRupeesAscii` and
+`formatAmountDigits` are the same formatters; `splitStoredLine` still refuses to print a bill
+that disagrees with its own snapshot; GST is still `splitGst` over the stored `gstAmount`;
+the rate reference still comes from `ratesSnapshot`; the void stamp, the amount in words, the
+buyback text and the page numbering are untouched. No page size, margin or font change.
+
+**There is no QR code** (§13, D-119). Nothing in the repository generates or verifies one —
+the only verification artefact is the signed, expiring URL the PDF is served from, which is a
+capability credential and must not be printed. Recorded as UI_REDESIGN_DEBT-016 rather than
+invented.
+
+**5G verification**
+
+| Gate | Result |
+| :--- | :--- |
+| `pnpm lint` / `typecheck` / `build` | pass |
+| `lib/bills` + `lib/money` + `lib/pricing` unit | 228 passed (+2 new PDF assertions) |
+| `e2e/bills.spec.ts` + `e2e/claim.spec.ts` | 29 passed |
+| `e2e/admin-bills.spec.ts` | 40 passed |
+
+**Manual PDF review** — five invoices rendered and inspected: one item with hallmark and BIS,
+five items across three purities with a stone charge, a 67-character product name with a
+37-character customer name at ₹1.2 crore, a voided bill, and a 20-item bill that spills to a
+second page. No clipping, no overlap, no text outside its container.
+
+New debt: UI_REDESIGN_DEBT-016 (no QR), UI_REDESIGN_DEBT-017 — the three bill E2E suites pass
+individually but return **429** when run together, because `/admin/bills*` matches the 60/min
+`bill` tier in `lib/security/global-limit.ts` and every worker shares one IP. The application
+is behaving correctly; the CI parallelism is what needs tuning at Stage 6, and the limiter
+must not be loosened to make it green.
+
+**Stage 5 is complete.** 5A–5G done; the final full-suite run and the Stage 5 PR are next.
+
+
+
+
+
+
+
+
 - [x] **24 Admin shell** — **done in Stage 2.** Desktop rail, phone bottom bar + "More"
       sheet, all eight destinations, "← Back to site". Fixes C-5 and C-6. D-063.
 - [ ] **25 Admin dashboard** — today's rates, set-rate primary action, bills this week, value
