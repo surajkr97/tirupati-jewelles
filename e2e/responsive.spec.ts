@@ -177,7 +177,7 @@ test.describe('the header holds together across the breakpoint', () => {
       ).toBeLessThanOrEqual(width + 1);
 
       // The wordmark must never be pushed out by the controls beside it.
-      const wordmark = page.getByRole('link', { name: 'Tirupati Jewelles — home' });
+      const wordmark = page.getByRole('link', { name: 'Tirupati J. — home' });
       const wordmarkBox = await wordmark.boundingBox();
       expect(wordmarkBox!.x, `wordmark visible at ${width}px`).toBeGreaterThanOrEqual(0);
     });

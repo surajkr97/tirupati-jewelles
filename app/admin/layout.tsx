@@ -80,7 +80,7 @@ export default async function AdminLayout({ children }: { children: React.ReactN
               href="/admin"
               className="font-display text-h3 font-medium text-ink md:hidden"
             >
-              Tirupati
+              Tirupati J.
             </Link>
             {/* Holds the row's right edge on desktop, where the rail shows the wordmark. */}
             <span className="hidden md:block" />

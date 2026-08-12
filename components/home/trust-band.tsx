@@ -61,11 +61,14 @@ export function TrustBand() {
   return (
     <section
       aria-labelledby="trust-heading"
-      className="surface-wine bg-wine text-cream"
+      /* Stage 6: was `surface-wine bg-wine text-cream`. §1 takes wine off the storefront,
+         and this band was the second-largest dark field on the page. `sand` keeps it set
+         back from the white sections above and below it without going dark. */
+      className="bg-sand text-ink"
     >
       <div className="mx-auto w-full max-w-[1200px] px-[20px] py-12 md:px-[40px] md:py-16">
         <h2 id="trust-heading" className="sr-only">
-          Why buy from Tirupati
+          Why buy from Tirupati J.
         </h2>
 
         {/*
@@ -79,17 +82,19 @@ export function TrustBand() {
           {ITEMS.map(({ icon: Icon, title, detail }) => (
             <li
               key={title}
-              className="flex gap-4 lg:flex-col lg:gap-4 lg:border-l lg:border-cream/15 lg:pl-6 lg:first:border-l-0 lg:first:pl-0"
+              className="flex gap-4 lg:flex-col lg:gap-4 lg:border-l lg:border-line lg:pl-6 lg:first:border-l-0 lg:first:pl-0"
             >
               <Icon
-                className="size-icon shrink-0 text-gold"
+                /* Gold was legible on wine and measures 2.27:1 on a light ground (D-057),
+                   so it cannot come with the band. `rose` is the accent this palette uses
+                   for exactly this — a small non-text mark. */
+                className="size-icon shrink-0 text-rose"
                 aria-hidden="true"
                 strokeWidth={1.5}
               />
               <div className="flex flex-col gap-1">
                 <p className="text-body font-medium">{title}</p>
-                {/* cream/70 on wine is 7.99:1 — set back, still body text. */}
-                <p className="text-small text-cream/70">{detail}</p>
+                <p className="text-small text-muted">{detail}</p>
               </div>
             </li>
           ))}

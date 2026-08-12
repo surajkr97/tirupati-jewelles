@@ -92,6 +92,15 @@ export function AppHeader({ overlay, ownerWhatsApp }: AppHeaderProps) {
     return () => window.removeEventListener('scroll', onScroll);
   }, [overlayHero]);
 
+  /**
+   * `onWine` is now "over the hero photograph".
+   *
+   * The name is Stage 4's and the ground changed under it in Stage 6 — the hero is a
+   * photograph with a measured scrim rather than a wine field (§5). The branch still means
+   * the same thing: the header is transparent over a dark image, so its marks invert. Kept
+   * as one flag rather than renamed through the file, and `.surface-wine` still does the one
+   * job it is here for, which is inverting the focus ring on a dark ground.
+   */
   const onWine = overlayHero && !scrolled;
 
   const whatsAppHref = buildWhatsAppUrl(
@@ -103,7 +112,7 @@ export function AppHeader({ overlay, ownerWhatsApp }: AppHeaderProps) {
   const iconButton = cn(
     'grid size-tap place-items-center rounded-pill',
     'transition-colors duration-fast ease-standard',
-    onWine ? 'text-cream hover:bg-cream/15' : 'text-ink hover:bg-rose-tint',
+    onWine ? 'text-white hover:bg-white/15' : 'text-ink hover:bg-rose-tint',
   );
 
   return (
@@ -120,14 +129,19 @@ export function AppHeader({ overlay, ownerWhatsApp }: AppHeaderProps) {
           {/* The wordmark IS the home link, which is why STOREFRONT_PRIMARY omits Home. */}
           <Link
             href="/"
-            aria-label="Tirupati Jewelles — home"
+            /* Starts with the visible text, so WCAG 2.5.3 (Label in Name) holds — voice
+               control users say what they see. The full legal name lives in the footer,
+               the metadata and every document (§15). */
+            aria-label="Tirupati J. — home"
             aria-current={pathname === '/' ? 'page' : undefined}
             className={cn(
               'flex h-tap shrink-0 items-center font-display text-h3 font-medium',
-              onWine ? 'text-cream' : 'text-ink',
+              'tracking-[-0.01em]',
+              onWine ? 'text-white' : 'text-ink',
             )}
           >
-            Tirupati
+            {/* §13 — the website's visual brand is "Tirupati J." */}
+            Tirupati J.
           </Link>
 
           {/* ── Desktop navigation. The whole point of Stage 2. ── */}
@@ -147,7 +161,7 @@ export function AppHeader({ overlay, ownerWhatsApp }: AppHeaderProps) {
                         'flex h-tap items-center rounded-pill px-4 text-small font-medium',
                         'transition-colors duration-fast ease-standard',
                         onWine
-                          ? cn('text-cream hover:bg-cream/15', active && 'bg-cream/15')
+                          ? cn('text-white hover:bg-white/15', active && 'bg-white/15')
                           : cn(
                               'hover:bg-rose-tint',
                               // roseDeep, not rose: 14px text needs the full 4.5:1 (D-057).
@@ -165,11 +179,11 @@ export function AppHeader({ overlay, ownerWhatsApp }: AppHeaderProps) {
 
           <div className="flex shrink-0 items-center gap-1 md:gap-2">
             <Link href="/search" aria-label="Search" className={iconButton}>
-              <Search className="size-icon" aria-hidden="true" />
+              <Search className="size-icon-sm" aria-hidden="true" />
             </Link>
 
             <Link href="/account" aria-label="Account" className={iconButton}>
-              <User className="size-icon" aria-hidden="true" />
+              <User className="size-icon-sm" aria-hidden="true" />
             </Link>
 
             {/* The commercial action. There is no checkout (MASTER-SPEC §1), so this is the

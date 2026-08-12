@@ -59,10 +59,10 @@ export function AuthShell({
         <div className="flex w-full max-w-sm flex-col">
           <Link
             href="/"
-            aria-label="Tirupati Jewelles — home"
-            className="mb-8 font-display text-h3 font-medium text-ink"
+            aria-label="Tirupati J. — home"
+            className="mb-8 font-display text-h3 font-medium tracking-[-0.01em] text-ink"
           >
-            Tirupati
+            Tirupati J.
           </Link>
 
           <header className="mb-8 flex flex-col gap-2">

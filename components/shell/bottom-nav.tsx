@@ -43,28 +43,62 @@ export function BottomNav() {
     >
       {/* The border lives on the list, not the nav, so the nav's own height is exactly
           --spacing-bottom-nav plus the safe-area inset — which is what the spacer
-          reserves. border-box means the 1px border is inside the 64px. */}
+          reserves. border-box means the 1px border is inside the bar. */}
       <ul className="flex h-bottom-nav items-stretch justify-around border-t border-line">
-        {BOTTOM_NAV.map(({ href, label, icon: Icon }) => {
+        {BOTTOM_NAV.map(({ href, label, shortLabel, icon: Icon }) => {
           const active = isActiveHref(pathname, href);
+          // `min-w-0` so `flex-1` can actually equalise the cells: without it the flex floor
+          // is min-content and the longest label sets the width of every cell.
           return (
-            <li key={href} className="flex-1">
+            <li key={href} className="min-w-0 flex-1">
               <Link
                 href={href}
                 aria-current={active ? 'page' : undefined}
                 className={cn(
-                  // h-full fills the 64px row — comfortably above the 44px minimum.
-                  'flex h-full flex-col items-center justify-center gap-1 px-1',
-                  'text-small font-medium transition-colors duration-fast ease-standard',
-                  active ? 'text-rose-deep' : 'text-muted',
+                  /**
+                   * `relative` for the indicator, `h-full` for the target.
+                   *
+                   * §3 and §12 both draw the same distinction: the TOUCH TARGET stays the
+                   * full row, comfortably past 44px, while the visual weight comes down.
+                   * Stage 6 took the icon from 24px to 18px and the label from 14px to
+                   * 11px, which is what let the bar itself go from 64px to 56px without
+                   * anything getting harder to hit.
+                   */
+                  /**
+                   * No horizontal padding, measured rather than chosen.
+                   *
+                   * Five cells across 320px is 64px each. `px-1` spent 8px of that on
+                   * whitespace the eye cannot see — the icon and label are centred anyway —
+                   * and it was the difference between "Account" (62px at 11px) fitting and
+                   * being truncated to "Accoun…". The touch target is the whole cell either
+                   * way, which is the §3 distinction again.
+                   */
+                  'relative flex h-full flex-col items-center justify-center gap-1',
+                  'text-caption font-medium transition-colors duration-fast ease-standard',
+                  active ? 'text-ink' : 'text-muted',
                 )}
               >
+                {/*
+                  The active state is a rule, not a fill.
+
+                  §11 rules out the bulky pill and §17 wants rose used as an accent rather
+                  than a surface — so the indicator is a 2px rose bar on the cell's top
+                  edge, the way a tab strip marks its selection. The label going from
+                  `muted` to `ink` is the second channel, so the state never rests on
+                  colour alone (§23).
+                */}
+                {active && (
+                  <span
+                    aria-hidden="true"
+                    className="absolute top-0 h-[2px] w-8 rounded-pill bg-rose-deep"
+                  />
+                )}
                 <Icon
-                  className="size-6"
+                  className="size-icon-sm"
                   aria-hidden="true"
-                  strokeWidth={active ? 2.2 : 1.8}
+                  strokeWidth={active ? 2 : 1.6}
                 />
-                {label}
+                <span className="max-w-full truncate">{shortLabel ?? label}</span>
               </Link>
             </li>
           );

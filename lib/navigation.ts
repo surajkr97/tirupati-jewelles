@@ -97,7 +97,19 @@ export const STOREFRONT_SECONDARY: readonly NavItem[] = [
 export const BOTTOM_NAV: readonly NavItem[] = [
   { href: '/', label: 'Home', icon: Home },
   { href: '/rates', label: 'Rates', icon: TrendingUp },
-  { href: '/calculator', label: 'Calculator', icon: Calculator },
+  /**
+   * `shortLabel` because five labels do not fit at 320px and this is the one that breaks it.
+   *
+   * Measured rather than assumed: at 11px, "Calculator" needs 78px of text in a cell that is
+   * 64px wide when five share the bar. `flex-1` cannot shrink past min-content, so the row
+   * overflowed the viewport by 2.2px — the same arithmetic that made the admin bar say
+   * "Bills" instead of "Bills & orders" in Stage 5A, and the reason `shortLabel` exists.
+   *
+   * "Price" rather than a truncation: it is the shop's own verb for this page — `/rates`
+   * ends on "Price a piece at this rate" — and a clipped "Calculat…" is worse than a shorter
+   * true word. The full label stays everywhere the space exists.
+   */
+  { href: '/calculator', label: 'Calculator', shortLabel: 'Price', icon: Calculator },
   { href: '/account/orders', label: 'Orders', icon: ReceiptText },
   { href: '/account', label: 'Account', icon: User },
 ] as const;
