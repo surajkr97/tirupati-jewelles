@@ -80,7 +80,8 @@ test.describe('§9.7 — the document spine every screen reader navigates by', (
  * per-second assertive region is unusable with a screen reader." The ticker WAS polite and
  * was still unusable, for the reason the spec gives and one it does not:
  *
- *   - `TICK_INTERVAL_MS` is 1000, so a polite region queued an announcement every second.
+ *   - `TICK_INTERVAL_MS` was 1000, so a polite region queued an announcement every second.
+ *     (It is 3000 since Stage 6; the defect it caused is unchanged in kind.)
  *     Politeness governs interruption, not volume; a queue gaining an entry per second
  *     never drains.
  *   - Every announcement would have been the JITTERED figure, which is a cosmetic shimmer
@@ -134,20 +135,26 @@ test.describe('§9.7 — flagship 1: the rate ticker', () => {
    * the ticker never started — the failure mode Phase 4 TEST warned about ("every 'nothing
    * happened' assertion is paired with a positive control").
    */
-  test('the announced text does NOT change every second, while the display does', async ({
-    page,
-  }) => {
+  test('the announced text does NOT change as the display ticks', async ({ page }) => {
     await page.goto('/');
     await page.waitForTimeout(1500);
 
     const announced = new Set<string>();
     const displayed = new Set<string>();
 
-    for (let i = 0; i < 6; i += 1) {
+    /**
+     * Polled at 500ms across ~13s rather than sampled six times a second apart.
+     *
+     * The ticker moved every 1000ms when this was written and now moves every 3000ms
+     * (`TICK_INTERVAL_MS`), so the old window covered barely one tick — the positive control
+     * below would have started failing for a reason that has nothing to do with the live
+     * region. The window is what changed; both assertions are the originals.
+     */
+    for (let i = 0; i < 26; i += 1) {
       const regions = await liveRegions(page);
       for (const region of regions) if (region.text) announced.add(region.text);
       displayed.add((await page.getByTestId('ticker-value').textContent()) ?? '');
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(500);
     }
 
     // Positive control: the shimmer really is running, so "one announcement" is a fact
@@ -159,7 +166,7 @@ test.describe('§9.7 — flagship 1: the rate ticker', () => {
 
     expect(
       [...announced],
-      'the live region changed while the rate did not: a screen reader would read a new number every second',
+      'the live region changed while the rate did not: a screen reader would read a new number on every tick',
     ).toHaveLength(1);
   });
 

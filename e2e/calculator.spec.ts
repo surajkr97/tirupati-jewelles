@@ -115,11 +115,11 @@ test.describe('the calculator', () => {
     await cards(page).nth(1).getByLabel('Weight').fill('5.5');
     await cards(page).nth(1).getByRole('radio', { name: '18K' }).click();
 
-    // Item 3 — 20 g of silver at 8%, which we then remove.
+    // Item 3 — 20 g of silver at 18%, which we then remove.
     await page.getByRole('button', { name: /Add another item/i }).click();
     await cards(page).nth(2).getByLabel('Weight').fill('20');
     await cards(page).nth(2).getByRole('radio', { name: 'Silver' }).click();
-    await cards(page).nth(2).getByRole('button', { name: '8%' }).click();
+    await cards(page).nth(2).getByRole('button', { name: '18%' }).click();
 
     await expect(cards(page)).toHaveCount(3);
     await settle(page);
@@ -127,7 +127,7 @@ test.describe('the calculator', () => {
     const withThree =
       lineTotalPaise(rates.K22_916!, 10, 12) +
       lineTotalPaise(rates.K18_750!, 5.5, 12) +
-      lineTotalPaise(rates.SILVER_999!, 20, 8);
+      lineTotalPaise(rates.SILVER_999!, 20, 18);
     await expect(grandTotal(page)).toHaveText(formatRupees(withThree));
 
     // Remove the third.

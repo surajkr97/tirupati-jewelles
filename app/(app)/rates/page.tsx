@@ -153,6 +153,11 @@ export default async function RatesPage() {
           initialRates={serialisedRates}
           history={sparklines}
           showHistoryLink={false}
+          /* Explicit, because it used to be a claim in a comment with nothing behind it: the
+             note above said the jitter was "switched off here" while the card read the env
+             flag on its own and moved regardless. `jitter` now defaults to false, and this
+             says so at the call site rather than relying on that default. */
+          jitter={false}
           // The page's h1 already says this; see the prop's note.
           heading={null}
         />

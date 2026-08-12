@@ -58,6 +58,20 @@ export interface NavItem {
    * both have the room and both are where someone goes looking.
    */
   shortLabel?: string;
+
+  /**
+   * Extra route subtrees this item stays lit for — bottom bar only.
+   *
+   * The bar offers five destinations but the storefront has more surfaces than five, so
+   * browsing into `/collections` or a product page left NO cell current: `aria-current` was
+   * absent everywhere and the active rule simply vanished, which reads as the indicator
+   * being broken rather than as "you are not on a tab".
+   *
+   * Only the bar needs this. The desktop header lists `/collections` as its own destination,
+   * so teaching the shared `isActiveHref` to fold those routes into `/` would light two of
+   * its links at once. Hence an opt-in field and a bar-specific matcher.
+   */
+  owns?: readonly string[];
 }
 
 /**
@@ -95,7 +109,12 @@ export const STOREFRONT_SECONDARY: readonly NavItem[] = [
  * it off the footer. Only the source of the list changed.
  */
 export const BOTTOM_NAV: readonly NavItem[] = [
-  { href: '/', label: 'Home', icon: Home },
+  /**
+   * Home owns the browse surface: the catalogue is reached FROM here (the hero's only CTA
+   * goes to `/collections`) and the bar has no separate shop tab, so these routes are inside
+   * Home as far as a person navigating is concerned.
+   */
+  { href: '/', label: 'Home', icon: Home, owns: ['/collections', '/products', '/search'] },
   { href: '/rates', label: 'Rates', icon: TrendingUp },
   /**
    * `shortLabel` because five labels do not fit at 320px and this is the one that breaks it.
@@ -111,6 +130,15 @@ export const BOTTOM_NAV: readonly NavItem[] = [
    */
   { href: '/calculator', label: 'Calculator', shortLabel: 'Price', icon: Calculator },
   { href: '/account/orders', label: 'Orders', icon: ReceiptText },
+  /**
+   * No `shortLabel`, and the reason it once had one is worth keeping.
+   *
+   * Stage 6 shortened this to "You" on a measurement of ~77px against a 62.4px cell. That
+   * width was real but the cause was not the word: `cn('text-caption', …, 'text-muted')`
+   * was DELETING the size class, so every label in the bar was rendering at the inherited
+   * 16px while the token said otherwise. "Account" needs ~40px at the caption size that is
+   * now actually applied, so the word fits and the workaround is gone (see lib/utils/cn.ts).
+   */
   { href: '/account', label: 'Account', icon: User },
 ] as const;
 
@@ -194,6 +222,19 @@ export function isActiveHref(pathname: string, href: string): boolean {
   if (href === '/account') return pathname === '/account';
   if (href === '/admin') return pathname === '/admin';
   return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+/**
+ * The bottom bar's own active test — `isActiveHref` plus each item's `owns` subtrees.
+ *
+ * Separate from `isActiveHref` because the header and the admin rail must NOT inherit the
+ * folding; see `owns` on `NavItem`.
+ */
+export function isActiveBottomNav(pathname: string, item: NavItem): boolean {
+  if (isActiveHref(pathname, item.href)) return true;
+  return (item.owns ?? []).some(
+    (base) => pathname === base || pathname.startsWith(`${base}/`),
+  );
 }
 
 /** Every href this module publishes, for the dead-link test. */

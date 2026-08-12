@@ -20,7 +20,11 @@ import { z } from 'zod';
 import { adminAction, type ActionResult } from '@/lib/admin/actions';
 import { verifyPassword } from '@/lib/auth/argon2';
 import { db } from '@/lib/db';
-import { applyPricingDefaultsChange, applyShopContactChange } from '@/lib/settings';
+import {
+  applyPricingDefaultsChange,
+  applyShopContactChange,
+  applyTickerJitterChange,
+} from '@/lib/settings';
 
 /**
  * The one settings row.
@@ -172,7 +176,15 @@ export async function saveSettings(input: unknown): Promise<ActionResult<undefin
       },
     });
 
-    // The jitter toggle and the holiday notice both show on the storefront.
+    /**
+     * The jitter toggle and the holiday notice both show on the storefront.
+     *
+     * `applyTickerJitterChange` drops the cached flag BEFORE revalidating (D-012) and covers
+     * `/rates` as well as `/`. Until Stage 6 this was a bare `revalidatePath('/')` against a
+     * setting no storefront page read — regenerating a page that would render the same thing
+     * either way. See `getTickerJitter`.
+     */
+    await applyTickerJitterChange();
     revalidatePath('/');
 
     /**

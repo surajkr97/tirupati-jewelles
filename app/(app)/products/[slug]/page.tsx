@@ -150,7 +150,10 @@ export default async function ProductPage({ params }: { params: Params }) {
             <div className="flex flex-col gap-2">
               <Link
                 href={`/collections/${product.categorySlug}`}
-                className="text-small font-medium text-rose-deep hover:underline"
+                /* The page's one "up" link, so it gets a real target — the same treatment
+                   the collections back link and the admin back links carry. `w-fit` keeps
+                   the hit area on the word rather than the full column width. */
+                className="flex h-tap w-fit items-center text-small font-medium text-rose-deep hover:underline"
               >
                 {product.categoryName}
               </Link>

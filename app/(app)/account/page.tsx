@@ -36,13 +36,28 @@ export default async function AccountPage() {
     <Section display heading="Your account">
       <div className="flex flex-col gap-6">
         <Card className="flex flex-col gap-4">
+          {/*
+            `min-w-0` and a breakable email.
+
+            A flex child's floor is `min-width: auto`, which is its min-content width — and
+            an email address has no break opportunity, so `admin@tirupatijewelles.com` set a
+            300px floor on this column. At 320px that pushed the Admin badge to x=347 and the
+            page scrolled sideways by 27px. Found by the Stage 6 sweep; it predates the
+            redesign and only shows on the narrowest screens with a long address.
+          */}
           <div className="flex items-start justify-between gap-4">
-            <div className="flex flex-col gap-1">
+            <div className="flex min-w-0 flex-col gap-1">
               <p className="text-h3 font-semibold text-ink">{user.name ?? 'Customer'}</p>
-              {user.email && <p className="text-body text-muted">{user.email}</p>}
+              {user.email && (
+                <p className="text-body wrap-break-word text-muted">{user.email}</p>
+              )}
               {user.phone && <p className="text-body text-muted tabular">{user.phone}</p>}
             </div>
-            {user.role === 'ADMIN' && <Badge tone="accent">Admin</Badge>}
+            {user.role === 'ADMIN' && (
+              <Badge tone="accent" className="shrink-0">
+                Admin
+              </Badge>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-2">

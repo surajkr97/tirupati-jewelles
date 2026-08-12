@@ -268,7 +268,7 @@ export default async function AdminDashboardPage() {
             <h2 className="text-h3 font-semibold text-ink">Sales</h2>
             <Link
               href="/admin/bills"
-              className="text-small font-semibold text-rose-deep hover:underline"
+              className="flex h-tap items-center text-small font-semibold text-rose-deep hover:underline"
             >
               Bills &amp; orders →
             </Link>
@@ -349,7 +349,7 @@ export default async function AdminDashboardPage() {
             {recentOrders.length > 0 && (
               <Link
                 href="/admin/bills"
-                className="text-small font-semibold text-rose-deep hover:underline"
+                className="flex h-tap items-center text-small font-semibold text-rose-deep hover:underline"
               >
                 View all →
               </Link>

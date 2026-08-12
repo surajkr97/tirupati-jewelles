@@ -157,7 +157,7 @@ describe('the calculator uses the TRUE rate while the ticker jitters', () => {
 
     render(
       <>
-        <LiveRateCard initialRates={API_PAYLOAD} />
+        <LiveRateCard initialRates={API_PAYLOAD} jitter />
         <Calculator defaults={SPEC_ITEM_DEFAULTS} initialItems={[ITEM]} />
       </>,
     );

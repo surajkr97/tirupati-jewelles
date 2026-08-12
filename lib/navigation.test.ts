@@ -24,6 +24,7 @@ import {
   allNavHrefs,
   BACK_TO_SITE,
   BOTTOM_NAV,
+  isActiveBottomNav,
   isActiveHref,
   STOREFRONT_PRIMARY,
 } from '@/lib/navigation';
@@ -165,6 +166,43 @@ describe('C-1: the desktop header exposes the primary storefront routes', () => 
 
   it('omits Home — the wordmark is the home link', () => {
     expect(STOREFRONT_PRIMARY.map((i) => i.href)).not.toContain('/');
+  });
+});
+
+describe('isActiveBottomNav', () => {
+  const home = BOTTOM_NAV.find((i) => i.href === '/')!;
+  const rates = BOTTOM_NAV.find((i) => i.href === '/rates')!;
+
+  it('keeps a cell current across the browse surface', () => {
+    /**
+     * The bar offers five destinations and the storefront has more surfaces than five. Before
+     * `owns`, `/collections` and every product page left NO item current — no `aria-current`
+     * for a screen reader and no visible rule, which reads as a broken indicator.
+     */
+    expect(isActiveBottomNav('/collections', home)).toBe(true);
+    expect(isActiveBottomNav('/collections/bangles', home)).toBe(true);
+    expect(isActiveBottomNav('/products/temple-necklace', home)).toBe(true);
+    expect(isActiveBottomNav('/search', home)).toBe(true);
+  });
+
+  it('does not let one item swallow another', () => {
+    expect(isActiveBottomNav('/rates', home)).toBe(false);
+    expect(isActiveBottomNav('/collections', rates)).toBe(false);
+  });
+
+  it('marks exactly one cell current on every storefront route', () => {
+    // The property that actually matters: two lit tabs is as wrong as none.
+    for (const path of ['/', '/rates', '/calculator', '/collections', '/collections/rings',
+                        '/products/x', '/search', '/account', '/account/orders']) {
+      const lit = BOTTOM_NAV.filter((i) => isActiveBottomNav(path, i));
+      expect(lit.map((i) => i.href), path).toHaveLength(1);
+    }
+  });
+
+  it('leaves the shared matcher alone, so the header keeps one link lit', () => {
+    // `/collections` folds into Home for the BAR only — the desktop header lists it as its
+    // own destination and would otherwise light two.
+    expect(isActiveHref('/collections', '/')).toBe(false);
   });
 });
 

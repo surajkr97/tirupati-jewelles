@@ -99,7 +99,7 @@ export default async function CategoryPage({
         <div className="flex flex-col gap-2">
           <Link
             href="/collections"
-            className="text-small font-medium text-rose-deep hover:underline"
+            className="flex h-tap w-fit items-center text-small font-medium text-rose-deep hover:underline"
           >
             ← All collections
           </Link>

@@ -60,7 +60,7 @@ export function AuthShell({
           <Link
             href="/"
             aria-label="Tirupati J. — home"
-            className="mb-8 font-display text-h3 font-medium tracking-[-0.01em] text-ink"
+            className="mb-4 flex h-tap w-fit items-center font-display text-h3 font-medium tracking-[-0.01em] text-ink"
           >
             Tirupati J.
           </Link>

@@ -132,6 +132,14 @@
      bar and the mobile menu cannot drift apart. */
   --spacing-icon-sm: 18px;
 
+  /* The bottom bar's glyph, deliberately NOT `--spacing-icon-sm`.
+
+     The two were the same 18px until Stage 6 tuned the bar up a step, and sharing the token
+     would have quietly resized the header's search and account marks and the WhatsApp icon
+     on the product page — three surfaces nobody asked to change. A nav-specific dimension
+     gets a nav-specific token, the same way `--spacing-bottom-nav` does. */
+  --spacing-icon-nav: 19px;
+
   /* Control heights. 44px is the minimum tap target (MASTER-SPEC §3). */
   --spacing-tap: 44px;
   /* Single source of truth for the mobile bottom nav. BottomNav sets its height from
