@@ -47,9 +47,9 @@ const GOLD_22 = { metal: Metal.GOLD, purity: Purity.K22_916 } as const;
 
 let adminId: string;
 
-async function seedRate(ratePerGram: bigint) {
+async function seedRate(ratePerGram: bigint, effectiveAt?: Date) {
   await db.metalRate.create({
-    data: { ...GOLD_22, ratePerGram, setByUserId: adminId },
+    data: { ...GOLD_22, ratePerGram, setByUserId: adminId, ...(effectiveAt && { effectiveAt }) },
   });
 }
 
@@ -274,7 +274,31 @@ describeDb('GET /api/rates/history', () => {
     getHistory(new Request(`http://localhost/api/rates/history${query}`));
 
   it('returns the recorded points in ascending order', async () => {
-    for (const rate of [1_150_000n, 1_170_000n, 1_184_200n]) await seedRate(rate);
+    /**
+     * The timestamps are explicit, and that is the point of the test rather than a detail.
+     *
+     * `effectiveAt` is `@default(now())`, and three `create` calls in a loop can land on the
+     * same value — `now()` is the transaction timestamp, not a counter. `getRateHistory`
+     * orders by `effectiveAt` alone, so a tie has no tiebreaker and Postgres may return any
+     * permutation of the tied rows.
+     *
+     * It passed locally for four phases and failed on CI, which is the signature: the
+     * assertion below is about ORDER, and until now the input had no defined order to
+     * assert. Every sibling test in this file that cares about sequence already sets the
+     * column explicitly — this was the one that did not.
+     *
+     * Fixed in the fixture rather than by adding `id` as a tiebreaker to `getRateHistory`:
+     * two rates for the same metal and purity at the same microsecond is not a state the
+     * application can reach, because `setRate` is one deliberate admin action at a time.
+     */
+    const base = Date.now() - 3 * 60 * 60 * 1000;
+    const points: [bigint, Date][] = [
+      [1_150_000n, new Date(base)],
+      [1_170_000n, new Date(base + 60 * 60 * 1000)],
+      [1_184_200n, new Date(base + 2 * 60 * 60 * 1000)],
+    ];
+    // Inserted out of order, so the assertion proves the QUERY sorts rather than the seed.
+    for (const [rate, at] of [points[1]!, points[2]!, points[0]!]) await seedRate(rate, at);
 
     const response = await call('?metal=GOLD&purity=K22_916&days=30');
     expect(response.status).toBe(200);
