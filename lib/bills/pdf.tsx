@@ -201,7 +201,9 @@ const RULE = {
 
 const styles = StyleSheet.create({
   page: {
-    paddingTop: 32,
+    // 32pt of air, measured from BELOW the 8pt masthead (7pt wine + 1pt gold) rather than
+    // from the paper edge, so the band does not eat into the header's breathing room.
+    paddingTop: 40,
     paddingBottom: PAGE_BOTTOM_PADDING,
     paddingHorizontal: 32,
     fontFamily: 'Helvetica',
@@ -211,6 +213,38 @@ const styles = StyleSheet.create({
   },
 
   // ── Header ───────────────────────────────────────────────────────────────
+  /**
+   * A wine bar across the top edge, and a gold hairline under it.
+   *
+   * Stage 5G stripped this document to white and ink for a good reason — every tint it had
+   * been using was under 1.1:1 and printed as nothing. That fixed the invisible colour and
+   * left the page reading as a plain-text receipt, which is the note this pass answers.
+   *
+   * A band at the paper's edge is the cheapest way to make a document look considered: it
+   * costs one strip of toner, it cannot interfere with any figure, and it is the first thing
+   * seen. `position: absolute` with `top/left/right: 0` escapes the page padding so it bleeds
+   * the full width — inset by the padding it would read as a stray rule.
+   *
+   * Gold appears once, as a 1pt line ON the wine. D-057 restricts it to wine surfaces
+   * (2.27:1 on cream, 6.84:1 on wine), and this is the only wine surface in the document.
+   */
+  topBand: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    height: 7,
+    backgroundColor: COLORS.wine,
+  },
+  topBandAccent: {
+    position: 'absolute',
+    top: 7,
+    left: 0,
+    right: 0,
+    height: 1,
+    backgroundColor: COLORS.gold,
+  },
+
   header: { flexDirection: 'row', justifyContent: 'space-between', gap: 16 },
   logo: { width: 120, maxHeight: 44, objectFit: 'contain' },
   wordmark: { fontSize: 17, fontFamily: 'Helvetica-Bold', color: COLORS.ink },
@@ -231,7 +265,14 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     color: COLORS.wine,
   },
-  invoiceNo: { fontSize: 14, fontFamily: 'Helvetica-Bold', marginTop: 3 },
+  invoiceNo: {
+    fontSize: 14,
+    fontFamily: 'Helvetica-Bold',
+    marginTop: 3,
+    // Wine, not ink: the number is what anyone references the document by, and #3D0C1E is
+    // 15.9:1 on white — it reads as brand colour on screen and as black in grayscale.
+    color: COLORS.wine,
+  },
   invoiceMeta: { fontSize: 8, color: COLORS.muted, marginTop: 3, textAlign: 'right' },
 
   headerRule: {
@@ -257,10 +298,17 @@ const styles = StyleSheet.create({
    */
   panels: { flexDirection: 'row', gap: 28 },
   panel: { flex: 1 },
+  /**
+   * The small caps labels are wine, not grey.
+   *
+   * At 7pt letterspaced they are navigation, not content — and wine at 15.9:1 is both more
+   * legible than `muted` at 6.3:1 and the thing that makes the page look laid out rather
+   * than typed. Costs nothing to print.
+   */
   panelLabel: {
     fontSize: 7,
     letterSpacing: 1.2,
-    color: COLORS.muted,
+    color: COLORS.wine,
     fontFamily: 'Helvetica-Bold',
     marginBottom: 5,
   },
@@ -273,22 +321,27 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 7,
     letterSpacing: 1.2,
-    color: COLORS.muted,
+    color: COLORS.wine,
     fontFamily: 'Helvetica-Bold',
     marginBottom: 6,
   },
   /**
-   * The table head is a RULE, not a fill.
+   * The table head IS a fill now — and the earlier note against fills still stands.
    *
-   * A wine underline at 1.2pt anchors the table on paper far better than the cream band did
-   * on screen, and it costs no toner across the full width of an A4 page.
+   * Stage 5G replaced a `cream` band with a wine underline, and it was right to: cream on
+   * white is 1.02:1, so the band was invisible on screen and absent in print. The objection
+   * was to a fill nobody could see, not to fills.
+   *
+   * Wine at 15.9:1 has the opposite problem to solve. A filled head is what separates a
+   * priced table from a list of numbers, it survives grayscale as a black band, and it costs
+   * one 15pt strip of toner. `headCell` inverts to white on it — 15.9:1 the other way.
    */
   tableHead: {
     flexDirection: 'row',
-    borderBottomWidth: RULE.strong,
-    borderBottomColor: COLORS.wine,
-    paddingBottom: 5,
-    paddingHorizontal: 2,
+    backgroundColor: COLORS.wine,
+    paddingVertical: 5,
+    paddingHorizontal: 6,
+    marginHorizontal: -4,
   },
   /**
    * `paddingRight` on every cell, not a `gap` on the row.
@@ -301,7 +354,7 @@ const styles = StyleSheet.create({
     fontSize: 6.5,
     fontFamily: 'Helvetica-Bold',
     letterSpacing: 0.3,
-    color: COLORS.ink,
+    color: COLORS.white,
     paddingRight: 6,
   },
   row: {
@@ -349,11 +402,29 @@ const styles = StyleSheet.create({
     borderTopWidth: RULE.strong,
     borderTopColor: COLORS.wine,
   },
-  grandLabel: { fontSize: 9, fontFamily: 'Helvetica-Bold', letterSpacing: 1 },
-  grandValue: { fontSize: 15, fontFamily: 'Helvetica-Bold', textAlign: 'right' },
+  grandLabel: {
+    fontSize: 9,
+    fontFamily: 'Helvetica-Bold',
+    letterSpacing: 1,
+    color: COLORS.wine,
+  },
+  /**
+   * Wine, still carried by weight rather than by a fill.
+   *
+   * §11's point was that the largest colour area on the page should not be the one element
+   * type can carry on its own, and that has not changed — this is 15pt bold under a 1.2pt
+   * wine rule. Colouring the glyphs adds the brand without adding a block, and in grayscale
+   * #3D0C1E is indistinguishable from the ink it replaced.
+   */
+  grandValue: {
+    fontSize: 15,
+    fontFamily: 'Helvetica-Bold',
+    textAlign: 'right',
+    color: COLORS.wine,
+  },
 
   words: { marginTop: 12 },
-  wordsLabel: { fontSize: 6.5, letterSpacing: 1.2, color: COLORS.muted },
+  wordsLabel: { fontSize: 6.5, letterSpacing: 1.2, color: COLORS.wine },
   wordsValue: {
     fontSize: 9,
     fontFamily: 'Helvetica-Bold',
@@ -364,13 +435,18 @@ const styles = StyleSheet.create({
   note: { marginTop: 12, fontSize: 8, color: COLORS.muted, lineHeight: 1.5 },
 
   // ── Footer ───────────────────────────────────────────────────────────────
+  /**
+   * A wine rule closes the page, so the document is bracketed rather than only topped.
+   * `fine` rather than `strong`: the footer is small print and a heavy rule above it would
+   * out-weigh the total, which is the one thing on the page that must stay loudest.
+   */
   footer: {
     position: 'absolute',
     bottom: 24,
     left: 32,
     right: 32,
-    borderTopWidth: RULE.hair,
-    borderTopColor: COLORS.muted,
+    borderTopWidth: RULE.fine,
+    borderTopColor: COLORS.wine,
     paddingTop: 6,
   },
   footerText: { fontSize: 6.5, color: COLORS.muted, lineHeight: 1.5 },
@@ -422,6 +498,11 @@ export function BillDocument({
       producer={bill.shopName}
     >
       <Page size="A4" style={styles.page}>
+        {/* `fixed` so the band and its gold hairline repeat on a bill that runs to a second
+            page — a masthead that appears once and then stops reads as a printing fault. */}
+        <View style={styles.topBand} fixed />
+        <View style={styles.topBandAccent} fixed />
+
         <View style={styles.header}>
           <View style={styles.shopBlock}>
             {bill.logo ? (
