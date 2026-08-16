@@ -24,6 +24,7 @@ import { ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useState } from 'react';
 
+import { CONTAINER_GUTTER } from '@/components/shell/container';
 import { cn } from '@/lib/utils/cn';
 
 export function AuthShell({
@@ -44,7 +45,7 @@ export function AuthShell({
         opened /login by mistake, or who is not ready to create an account, had no route back
         to the shop that did not involve the browser's back button.
       */}
-      <div className="px-[20px] pt-6 md:px-[40px]">
+      <div className={`${CONTAINER_GUTTER} pt-6`}>
         <Link
           href="/"
           className="inline-flex h-tap items-center gap-2 text-small font-medium text-muted transition-colors duration-fast ease-standard hover:text-ink"
@@ -54,7 +55,9 @@ export function AuthShell({
         </Link>
       </div>
 
-      <div className="flex flex-1 flex-col items-center justify-center px-[20px] py-12 md:px-[40px]">
+      <div
+        className={`flex flex-1 flex-col items-center justify-center ${CONTAINER_GUTTER} py-12`}
+      >
         {/* max-w-sm is 384px — a form column wider than this stops scanning as one object. */}
         <div className="flex w-full max-w-sm flex-col">
           <Link
@@ -149,7 +152,13 @@ export function ResendTimer({
       )}
     >
       {/* The countdown is a number that changes every second — tabular, or it jitters. */}
-      {ready ? 'Resend code' : <>Resend in <span className="num">{remaining}</span>s</>}
+      {ready ? (
+        'Resend code'
+      ) : (
+        <>
+          Resend in <span className="num">{remaining}</span>s
+        </>
+      )}
     </button>
   );
 }

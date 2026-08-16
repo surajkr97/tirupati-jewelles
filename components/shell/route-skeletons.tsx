@@ -31,6 +31,7 @@
  * in for — `h-control` for a control, `aspect-square` for a product image — so the swap does
  * not move anything.
  */
+import { CONTAINER_GUTTER } from '@/components/shell/container';
 import { Card, Skeleton } from '@/components/ui';
 
 /**
@@ -85,7 +86,9 @@ export function ProductGridSkeleton({ count = 6 }: { count?: number }) {
 
 export function CollectionLoading() {
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-[20px] pt-8 pb-12 md:px-[40px] md:pt-12">
+    <div
+      className={`mx-auto w-full max-w-[1200px] ${CONTAINER_GUTTER} pt-8 pb-12 md:pt-12`}
+    >
       <LoadingTitle>Loading collection</LoadingTitle>
       <SectionHeadingSkeleton />
       <ProductGridSkeleton />
@@ -95,7 +98,9 @@ export function CollectionLoading() {
 
 export function SearchLoading() {
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-[20px] pt-8 pb-12 md:px-[40px] md:pt-12">
+    <div
+      className={`mx-auto w-full max-w-[1200px] ${CONTAINER_GUTTER} pt-8 pb-12 md:pt-12`}
+    >
       <LoadingTitle>Search</LoadingTitle>
       <div className="mb-6 flex flex-col gap-4">
         <Skeleton className="h-8 w-2/3" />
@@ -110,7 +115,9 @@ export function SearchLoading() {
 /** `/rates` — the three rate cards, then the history table. */
 export function RatesLoading() {
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-[20px] pt-8 pb-12 md:px-[40px] md:pt-12">
+    <div
+      className={`mx-auto w-full max-w-[1200px] ${CONTAINER_GUTTER} pt-8 pb-12 md:pt-12`}
+    >
       <LoadingTitle>Today&rsquo;s gold and silver rates</LoadingTitle>
       <SectionHeadingSkeleton />
       <div className="grid gap-4 md:grid-cols-3">
@@ -136,7 +143,9 @@ export function RatesLoading() {
 /** `/account/orders` — a stack of order cards. */
 export function OrdersLoading() {
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-[20px] pt-8 pb-12 md:px-[40px] md:pt-12">
+    <div
+      className={`mx-auto w-full max-w-[1200px] ${CONTAINER_GUTTER} pt-8 pb-12 md:pt-12`}
+    >
       <LoadingTitle>Your orders</LoadingTitle>
       <SectionHeadingSkeleton />
       <div className="flex flex-col gap-4">
@@ -160,7 +169,9 @@ export function OrdersLoading() {
 /** `/products/[slug]` — gallery above, details beside it from `md`. */
 export function ProductLoading() {
   return (
-    <div className="mx-auto w-full max-w-[1200px] px-[20px] pt-8 pb-12 md:px-[40px] md:pt-12">
+    <div
+      className={`mx-auto w-full max-w-[1200px] ${CONTAINER_GUTTER} pt-8 pb-12 md:pt-12`}
+    >
       <LoadingTitle>Loading product</LoadingTitle>
       <div className="grid gap-8 md:grid-cols-2">
         <Skeleton className="aspect-square w-full rounded-card" />

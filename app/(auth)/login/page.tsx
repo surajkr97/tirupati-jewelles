@@ -44,8 +44,8 @@ export default async function LoginPage({
       <Suspense
         fallback={
           <div className="flex flex-col gap-4">
-            <Skeleton className="h-[76px] w-full" />
-            <Skeleton className="h-[76px] w-full" />
+            <Skeleton className="h-field-block w-full" />
+            <Skeleton className="h-field-block w-full" />
             <Skeleton className="h-control w-full rounded-pill" />
           </div>
         }

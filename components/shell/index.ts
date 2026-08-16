@@ -4,6 +4,6 @@
  */
 export { AppHeader, type AppHeaderProps } from '@/components/shell/app-header';
 export { BottomNav, BottomNavSpacer } from '@/components/shell/bottom-nav';
-export { Container } from '@/components/shell/container';
+export { Container, CONTAINER_GUTTER } from '@/components/shell/container';
 export { Footer } from '@/components/shell/footer';
 export { Section, type SectionProps } from '@/components/shell/section';

@@ -85,11 +85,17 @@
   --color-up: #0a7551;
   --color-down: #c61d2b;
 
-  /* ── Radius ───────────────────────────────────────────────────────────── */
-  --radius-card: 24px;
+  /* ── Radius ─────────────────────────────────────────────────────────────
+     Fluid on the same ramp, because radius does not scale with the screen on its
+     own: a 24px corner on a 350px-wide card is visually a much heavier round than
+     the same 24px on a 1100px one, and at phone width it was reading as a pill
+     rather than as a card. Desktop is unchanged.
+
+     `--radius-pill` stays 999px — it is a shape, not a measurement. */
+  --radius-card: clamp(16px, 7.7457px + 2.1165vw, 24px);
   --radius-pill: 999px;
-  --radius-sheet: 32px;
-  --radius-field: 16px;
+  --radius-sheet: clamp(24px, 15.7457px + 2.1165vw, 32px);
+  --radius-field: clamp(12px, 7.8726px + 1.0583vw, 16px);
 
   /* ── Shadow ───────────────────────────────────────────────────────────────
      Cards get shadow or nothing — never a border (MASTER-SPEC §3), which §3
@@ -106,16 +112,46 @@
   /* ── Spacing: 4 / 8 / 16 / 24 / 32 / 48 / 64 ONLY ─────────────────────────
      Tailwind's default scale is disabled below so off-scale values are hard
      to reach by accident. Sizes that are not "spacing" in the design sense —
-     control heights, hairlines, icon boxes — live in their own tokens. */
+     control heights, hairlines, icon boxes — live in their own tokens.
+
+     ── Stage 7: the scale is FLUID, and the names now mean the desktop end ──
+
+     Every value above was a single number, so a phone rendered the desktop
+     design at desktop dimensions and the whole application read as oversized —
+     the complaint that opened this stage. Stage 6 fixed that for the button and
+     the bottom bar by hand, one `sm:` variant at a time, and stopped: `Input`,
+     `Select`, `Card` and `Section` never got the same treatment, so the site was
+     half-corrected and inconsistent with itself.
+
+     Correcting the remaining 60-odd components the same way would have meant a
+     `md:` variant on every padding and every font size in 29 routes — a diff
+     nobody can review, and one that leaves the NEXT component free to forget.
+     Making the token itself fluid moves the decision to the one place the design
+     system already claims to own it. A component asks for `p-6` and gets 16px on
+     a phone and 24px on a desktop without knowing that a phone exists.
+
+     The interpolation runs 390px → 768px and clamps at both ends, so 320px gets
+     the mobile figure exactly rather than something smaller, and anything past
+     the `md` breakpoint is pixel-identical to what shipped before this stage.
+     Desktop does not move. That is the property that makes the change safe.
+
+     `--spacing-1` and `--spacing-2` stay fixed: 4px and 8px are optical gaps
+     between a glyph and its label, not layout, and interpolating them to 3px
+     buys nothing and rounds badly.
+
+     NOTE for anyone adding a token here: `eslint-rules/no-off-scale-spacing.mjs`
+     and `lib/utils/cn.test.ts` both parse this file for KEYS and ignore values,
+     so a fluid value is invisible to them — but a new KEY still has to be
+     mirrored into `lib/utils/cn.ts` if it is a `--text-*`. */
   --spacing: initial;
   --spacing-0: 0px;
   --spacing-1: 4px;
   --spacing-2: 8px;
-  --spacing-4: 16px;
-  --spacing-6: 24px;
-  --spacing-8: 32px;
-  --spacing-12: 48px;
-  --spacing-16: 64px;
+  --spacing-4: clamp(12px, 7.8726px + 1.0583vw, 16px);
+  --spacing-6: clamp(16px, 7.7457px + 2.1165vw, 24px);
+  --spacing-8: clamp(20px, 7.6187px + 3.1747vw, 32px);
+  --spacing-12: clamp(28px, 7.3647px + 5.2911vw, 48px);
+  --spacing-16: clamp(36px, 7.1108px + 7.4075vw, 64px);
   --spacing-px: 1px;
   --spacing-full: 100%;
 
@@ -123,7 +159,29 @@
      own token, and Phase 9 (DEBT-032) found 19 `size-5` classes that were emitting no CSS
      at all because 5 is not on the scale. 20px is the size every lucide icon in this
      codebase was already asking for. */
-  --spacing-icon: 20px;
+  --spacing-icon: clamp(18px, 15.9361px + 0.5292vw, 20px);
+
+  /* Leading padding for a field that carries a `prefix` adornment, e.g. `+91`.
+     Its own token because it is a CLEARANCE, not spacing: it has to be wider than
+     the adornment plus the field's own left padding, or the prefix overlaps the
+     text the user types. `Input` reached for `pl-16` when the scale's 16 was a
+     flat 64px; now that the scale is fluid, 16 is 36px on a phone and `+91` would
+     sit on top of the number — the same defect the comment in `input.tsx`
+     describes, arrived at from the opposite direction. 44px on a phone clears a
+     13px `+91` (~24px) plus the 12px `--spacing-4` gutter with 8px to read. */
+  --spacing-field-prefix: clamp(44px, 23.3647px + 5.2911vw, 64px);
+
+  /* One labelled field, top to bottom: the label's line box, `Input`'s own `gap-2`, and the
+     control. It exists so a loading skeleton can reserve the exact height of the thing it is
+     standing in for — the design gallery states the rule ("Skeleton — must match final
+     dimensions exactly") and the three auth routes were breaking it with a hardcoded 76px,
+     which was already 4px short of the 80px a labelled field actually occupied.
+
+     Composed from the tokens rather than measured, so it tracks the fluid control height
+     instead of having to be re-measured every time the scale moves. 66px on a phone. */
+  --spacing-field-block: calc(
+    var(--text-small--line-height) + var(--spacing-2) + var(--spacing-control)
+  );
 
   /* Navigation chrome. §4 and §12 of the Stage 6 brief both say the icons dominate on a
      phone, and 20px in a 44px target is the reason: the glyph reads as the control. 18px
@@ -140,14 +198,30 @@
      gets a nav-specific token, the same way `--spacing-bottom-nav` does. */
   --spacing-icon-nav: 19px;
 
-  /* Control heights. 44px is the minimum tap target (MASTER-SPEC §3). */
+  /* Control heights. 44px is the minimum tap target (MASTER-SPEC §3).
+     `--spacing-tap` stays FIXED and stays 44px. It is not a size, it is a floor —
+     the thing a component reaches for when it needs to guarantee a target is
+     reliably hittable regardless of how small it looks. Making it fluid would
+     have been the easy way to shrink every button at once, and it would have
+     destroyed the only token that still means something specific. Stage 6's own
+     note draws this line: "touch target is not visual size." */
   --spacing-tap: 44px;
   /* Single source of truth for the mobile bottom nav. BottomNav sets its height from
      this and BottomNavSpacer reserves exactly the same amount, so the two cannot drift
      apart and let the nav cover the footer. */
   --spacing-bottom-nav: 56px;
-  --spacing-control: 52px;
-  --spacing-control-lg: 56px;
+  /* The fluid control height — inputs, selects, buttons, the header's search field.
+     40px on a phone, 52px on a desktop.
+
+     40px is BELOW the 44px in MASTER-SPEC §3, and that is a deliberate, recorded
+     deviation (D-121), not an oversight. It is worth being exact about what it
+     costs: WCAG 2.2 AA sets its target-size floor at 24×24px (SC 2.5.8), so 40px
+     clears the accessibility gate with room to spare — what it breaks is the
+     44px Apple-HIG convention this project adopted as a house rule. Controls that
+     are genuinely small and isolated — icon buttons, nav links — must still reach
+     for `--spacing-tap`, which is why that token did not move. */
+  --spacing-control: clamp(40px, 27.6187px + 3.1747vw, 52px);
+  --spacing-control-lg: clamp(44px, 31.6187px + 3.1747vw, 56px);
   --spacing-header: 56px;
   --spacing-header-lg: 72px;
   /* Admin desktop rail (Stage 2, D-062). Its own token for the same reason
@@ -180,20 +254,44 @@
   --text-caption: 11px;
   --text-caption--line-height: 14px;
 
-  --text-small: 14px;
-  --text-small--line-height: 20px;
-  --text-body: 16px;
-  --text-body--line-height: 26px;
-  --text-lead: 18px;
-  --text-lead--line-height: 28px;
-  --text-h3: 20px;
-  --text-h3--line-height: 28px;
-  --text-h2: 24px;
-  --text-h2--line-height: 32px;
-  --text-h1: 32px;
-  --text-h1--line-height: 36px;
-  --text-display: 40px;
-  --text-display--line-height: 44px;
+  /* ── The scale is fluid from `small` up, on the same 390 → 768 ramp ───────
+     Same argument as the spacing block: these were fixed, so a 390px phone got
+     the desktop size. The worst offender was measurable rather than a matter of
+     taste — `--text-h1` at 32px put "Welcome back" across half the login screen,
+     and `--text-body` at 16/26 has a 1.63 line-height, which is an editorial
+     measure for a 700px column and simply loose in a 350px one. Mobile line
+     heights tighten faster than the sizes do (26 → 20 against 16 → 14) because
+     that ratio, not the glyph size, is what made the page feel airy.
+
+     `--text-body` reaches 14px on a phone, below MASTER-SPEC §3's "body copy
+     never below 15px". Recorded as D-122 rather than left as a silent
+     contradiction of the spec.
+
+     Two tokens deliberately do NOT interpolate:
+
+     `--text-caption` (11/14) is the bottom bar's label. Stage 6 arrived at it by
+     overshooting twice and measuring the rendered element; it is correct at the
+     size it is, and it is already a mobile-only surface, so a ramp would only
+     grow it on a desktop that never displays it.
+
+     `--text-h1-lg` (48/52) is only ever reached through an `md:` variant — ten
+     call sites, all of them `text-h1 md:text-h1-lg`. It is by construction a
+     desktop-only value, and the `md` breakpoint is exactly where a ramp from
+     768px would have finished anyway. */
+  --text-small: clamp(13px, 11.9681px + 0.2646vw, 14px);
+  --text-small--line-height: clamp(18px, 15.9361px + 0.5292vw, 20px);
+  --text-body: clamp(14px, 11.9361px + 0.5292vw, 16px);
+  --text-body--line-height: clamp(20px, 13.8091px + 1.5874vw, 26px);
+  --text-lead: clamp(15px, 11.9046px + 0.7937vw, 18px);
+  --text-lead--line-height: clamp(22px, 15.8091px + 1.5874vw, 28px);
+  --text-h3: clamp(17px, 13.9046px + 0.7937vw, 20px);
+  --text-h3--line-height: clamp(22px, 15.8091px + 1.5874vw, 28px);
+  --text-h2: clamp(18px, 11.8091px + 1.5874vw, 24px);
+  --text-h2--line-height: clamp(24px, 15.7457px + 2.1165vw, 32px);
+  --text-h1: clamp(24px, 15.7457px + 2.1165vw, 32px);
+  --text-h1--line-height: clamp(28px, 19.7457px + 2.1165vw, 36px);
+  --text-display: clamp(28px, 15.6187px + 3.1747vw, 40px);
+  --text-display--line-height: clamp(32px, 19.6187px + 3.1747vw, 44px);
   --text-h1-lg: 48px;
   --text-h1-lg--line-height: 52px;
 

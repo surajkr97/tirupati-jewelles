@@ -68,17 +68,23 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
             'disabled:opacity-40',
             suffix && 'pr-12',
             /**
-             * `pl-16`, not `pl-14`.
+             * `pl-field-prefix`, not `pl-16`.
              *
-             * Phase 2 §2.1 sets `--spacing: initial` and defines only the design scale, so
-             * `pl-14` does not exist — and Tailwind emits nothing rather than complaining.
-             * The class sat in the list looking correct while `padding-left` computed to the
-             * 16px from `px-4`, and `+91` overlapped the typed number by 27px. Measured, not
-             * spotted: it is legible enough in a screenshot to survive a glance.
+             * The original note here is still the point, so it is kept: Phase 2 §2.1 sets
+             * `--spacing: initial` and defines only the design scale, so `pl-14` does not
+             * exist — and Tailwind emits nothing rather than complaining. The class sat in
+             * the list looking correct while `padding-left` computed to the 16px from
+             * `px-4`, and `+91` overlapped the typed number by 27px. Measured, not spotted:
+             * it is legible enough in a screenshot to survive a glance.
              *
-             * 64px clears the widest prefix this field takes with room to read.
+             * `pl-16` was the fix, and it worked only while the scale's 16 was a flat 64px.
+             * Stage 7 made spacing fluid, which turns 16 into 36px on a phone and walks the
+             * prefix straight back on top of the number. The clearance now has its own
+             * token — see `--spacing-field-prefix` in globals.css — because it was never
+             * really spacing: it is "wider than the adornment", which is a different
+             * quantity that happened to equal a scale step.
              */
-            prefix && 'pl-16',
+            prefix && 'pl-field-prefix',
             error && 'ring-down focus:ring-down',
             className,
           )}

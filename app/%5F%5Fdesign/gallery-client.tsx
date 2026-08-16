@@ -84,9 +84,13 @@ export function GalleryClient() {
       </Row>
 
       <Row title="Buttons — sizes, loading, disabled">
+        {/* The figures are a range since Stage 7: `md` and `lg` read their height from the
+            fluid control tokens, so they measure 40/44px on a phone and 52/56px from `md`.
+            `sm` is the exception and stays a single number — it holds the 44px tap floor at
+            every width, which is the whole reason it did not become fluid. */}
         <Button size="sm">Small 44px</Button>
-        <Button size="md">Medium 52px</Button>
-        <Button size="lg">Large 56px</Button>
+        <Button size="md">Medium 40→52px</Button>
+        <Button size="lg">Large 44→56px</Button>
         <Button loading>Loading</Button>
         <Button disabled>Disabled</Button>
       </Row>
@@ -144,7 +148,7 @@ export function GalleryClient() {
       <Row title="Card">
         <Card className="w-full max-w-xs">
           <p className="text-body text-ink">
-            Static card — radius 24, shadow, no border.
+            Static card — radius 16→24, shadow, no border.
           </p>
         </Card>
         <Card interactive className="w-full max-w-xs">

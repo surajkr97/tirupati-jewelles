@@ -97,7 +97,19 @@ export function Section({
   );
 
   return (
-    <section className={cn('py-12 md:py-[80px]', className)} {...props}>
+    /**
+     * Stage 7: one ramp instead of a 48 → 80px breakpoint jump.
+     *
+     * `py-12` is now fluid (28px on a phone, 48px from `md`), which fixes the rhythm at the
+     * token level, but the desktop half of this was a separate arbitrary 80px switched on at
+     * `md` — so a phone got 48px of padding top AND bottom between every pair of sections,
+     * ~96px of empty cream between one heading and the next on a 390px screen. Continuous
+     * now, and 80px on a desktop exactly as before.
+     */
+    <section
+      className={cn('py-[clamp(28px,-25.6511px+13.7567vw,80px)]', className)}
+      {...props}
+    >
       {contained ? <Container>{body}</Container> : body}
     </section>
   );
