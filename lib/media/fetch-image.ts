@@ -49,7 +49,8 @@ export type UrlCheckFailure =
   | 'too_many_redirects'
   | 'unreachable'
   | 'too_large'
-  | 'not_an_image';
+  | 'not_an_image'
+  | 'not_a_video';
 
 export type UrlCheckResult =
   | {
@@ -251,13 +252,15 @@ function requestPinned(
   url: URL,
   address: string,
   family: 4 | 6,
+  /** `video/*` for `checkVideoUrl`; the header is a hint, and the answer is verified anyway. */
+  accept = 'image/*',
 ): Promise<IncomingMessage> {
   return new Promise((resolve, reject) => {
     const request = httpsRequest(
       url,
       {
         method: 'GET',
-        headers: { accept: 'image/*' },
+        headers: { accept },
         // Node passes this straight to `net.connect`. It is never asked to resolve again.
         lookup: pinnedLookup(address, family) as never,
         timeout: FETCH_TIMEOUT_MS,
@@ -392,4 +395,102 @@ export const FAILURE_MESSAGE: Record<UrlCheckFailure, string> = {
   unreachable: 'That URL could not be reached.',
   too_large: 'That image is too large.',
   not_an_image: 'That URL does not point at an image.',
+  not_a_video: 'That URL does not point at a video.',
 };
+
+/** What `checkVideoUrl` returns. No bytes: the body is never read. See below. */
+export type VideoCheckResult =
+  | { ok: true; url: string; contentType: string }
+  | { ok: false; reason: UrlCheckFailure; detail: string };
+
+/**
+ * Validate a background-video URL.
+ *
+ * Everything `checkImageUrl` does about SSRF applies unchanged and for the same reasons —
+ * §7.7's https-only rule, the default-deny host allowlist, DNS resolution pinned to the
+ * address that was actually checked, and re-validation from scratch after every redirect.
+ * That machinery is the reason this function lives in this file rather than beside the admin
+ * action: a second implementation of it is a second thing to get wrong.
+ *
+ * ── Where it deliberately differs ──
+ *
+ * `checkImageUrl` downloads up to 10MB and sniffs the magic bytes, because a `content-type`
+ * header is attacker-controlled and a 10MB ceiling is a reasonable thing to spend on
+ * certainty about an image.
+ *
+ * Neither half of that transfers. A hero video is tens of megabytes, so the download would
+ * either blow the cap on every legitimate file or have to be raised to a number that makes
+ * the endpoint a memory-exhaustion lever. And there is no short magic-number check that
+ * spans MP4, WebM and the fragmented-MP4 variants a CDN returns.
+ *
+ * So this verifies the response is reachable, final and declares itself a video, then
+ * DESTROYS the socket without reading a byte. The header is trusted for the type — which is
+ * a real weakening, and it is bounded by the thing that was already doing the heavy lifting:
+ * the host must be on `ALLOWED_IMAGE_HOSTS` in the first place. A hostile answer here
+ * requires the shop's own CDN to be serving hostile content, at which point the video URL is
+ * not the exposure. The browser is also not trusting us: `<video>` plays what it can decode
+ * and ignores anything else, so a mislabelled file fails to play rather than doing something.
+ */
+export async function checkVideoUrl(raw: string): Promise<VideoCheckResult> {
+  let current = raw;
+
+  for (let hop = 0; hop <= MAX_REDIRECTS; hop += 1) {
+    const validated = await validateAndResolve(current);
+    if (!validated.ok) return validated;
+
+    const { url, address, family } = validated.resolved;
+
+    let response: IncomingMessage;
+    try {
+      response = await requestPinned(url, address, family, 'video/*');
+    } catch (err) {
+      return {
+        ok: false,
+        reason: 'unreachable',
+        detail: err instanceof Error ? err.message : 'Could not reach that URL.',
+      };
+    }
+
+    const status = response.statusCode ?? 0;
+
+    if (status >= 300 && status < 400) {
+      const location = response.headers.location;
+      response.destroy();
+      if (!location) {
+        return { ok: false, reason: 'unreachable', detail: 'Redirect without a target.' };
+      }
+      current = new URL(location, url).toString();
+      continue;
+    }
+
+    // A CDN answering a ranged `accept` with 206 is serving the file, not refusing it.
+    if (status !== 200 && status !== 206) {
+      response.destroy();
+      return { ok: false, reason: 'unreachable', detail: `The host answered ${status}.` };
+    }
+
+    const contentType = (response.headers['content-type'] ?? '').split(';')[0]!.trim();
+
+    // Nothing is read from the body — the socket goes down here, before any of the file
+    // transfers. This is the difference that makes checking a 40MB video affordable.
+    response.destroy();
+
+    if (!contentType.toLowerCase().startsWith('video/')) {
+      return {
+        ok: false,
+        reason: 'not_a_video',
+        detail: contentType
+          ? `That URL returned ${contentType}.`
+          : 'That URL did not say what it was returning.',
+      };
+    }
+
+    return { ok: true, url: url.toString(), contentType };
+  }
+
+  return {
+    ok: false,
+    reason: 'too_many_redirects',
+    detail: `More than ${MAX_REDIRECTS} redirects.`,
+  };
+}

@@ -338,6 +338,49 @@ body {
   --color-focus: var(--color-cream);
 }
 
+/**
+ * The hero opts out of the fluid scale — D-125, an exception to D-121.
+ *
+ * D-121 made the type and spacing tokens interpolate 390 → 768px, which is right for the
+ * ~60 components that were rendering desktop dimensions on a phone. The hero is the one
+ * place it is wrong, and the reason is that the hero is not UI: it is the brand statement,
+ * one viewport tall, holding a single headline that is SUPPOSED to dominate. Shrinking a
+ * 40px display serif to 28px does not make it more comfortable to read, it makes it stop
+ * being a hero — measured, the default headline went from filling two lines to sitting on
+ * one, which is the whole difference between a statement and a caption.
+ *
+ * Done by re-declaring the tokens on the section rather than by writing fixed sizes into
+ * `hero.tsx`, for two reasons. Custom properties inherit, so every utility inside the hero
+ * picks these up with no class changes and no `md:` variants to keep in step. And the hero's
+ * markup goes on reading `text-display` / `py-12` / `mt-8` — the same names as the rest of
+ * the site — so the exception lives in one place with this comment attached, instead of
+ * being spread across a dozen arbitrary values that no one can later tell from a typo.
+ *
+ * Every value below is the figure this project shipped before D-121, taken from a
+ * measurement of `origin/master`, not from reading the old stylesheet.
+ *
+ * Desktop is unaffected either way: at 768px and above the fluid tokens had already clamped
+ * to exactly these numbers, which is why the hero measured identical to master at 768 and
+ * 1280 and differed only at 390.
+ */
+.hero-scale {
+  --text-display: 40px;
+  --text-display--line-height: 44px;
+  --text-lead: 18px;
+  --text-lead--line-height: 28px;
+  /* The CTA's label. `--text-body` is scoped here, so it does not leak past the hero. */
+  --text-body: 16px;
+  --text-body--line-height: 26px;
+
+  /* `mt-6` on the rule and the subtext, `mt-8` on the CTA, `py-12` on the block, and
+     `w-16` on the ornament rule — which is why 16 is pinned even though it reads as a
+     spacing step rather than a width. */
+  --spacing-6: 24px;
+  --spacing-8: 32px;
+  --spacing-12: 48px;
+  --spacing-16: 64px;
+}
+
 /* Money and rate figures. Tabular numerals stop digits shifting width as they
    change, which is what makes a cheap ticker look broken (Phase 4 §4.3).
    `.num` is the redesign brief's §6 name for this; `.tabular` is the name ~40

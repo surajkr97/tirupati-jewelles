@@ -327,3 +327,49 @@ describe('pinnedLookup — the shape net.connect actually asks for', () => {
     }
   });
 });
+
+/**
+ * D-126 — `checkVideoUrl` is the same SSRF surface as `checkImageUrl`.
+ *
+ * It reuses the same `validateAndResolve`, so these assertions are about that reuse actually
+ * being in place rather than about re-deriving the classifier: a second URL-taking entry
+ * point that skipped the allowlist would be a hole in the highest-risk input in the
+ * application (§7.7), and it would not look like one from the admin screen.
+ */
+describe('checkVideoUrl — the same refusals as the image path', () => {
+  async function check(url: string) {
+    vi.resetModules();
+    vi.stubEnv('ALLOWED_IMAGE_HOSTS', 'localhost,res.cloudinary.com');
+    const { checkVideoUrl } = await import('@/lib/media/fetch-image');
+    try {
+      return await checkVideoUrl(url);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  }
+
+  it.each([
+    ['the metadata endpoint over http', 'http://169.254.169.254/latest/meta-data/'],
+    ['the metadata endpoint over https', 'https://169.254.169.254/latest/meta-data/'],
+    ['a file:// URL', 'file:///etc/passwd'],
+    ['Redis over http', 'http://localhost:6379'],
+    ['a data: URL', 'data:video/mp4;base64,AAAA'],
+    ['a host that is not on the allowlist', 'https://example.com/hero.mp4'],
+    ['something that is not a URL at all', 'not a url'],
+  ])('refuses %s', async (_label, url) => {
+    const result = await check(url);
+    expect(result.ok).toBe(false);
+  });
+
+  it('refuses http even on an allowed host — https is an allowlist of one', async () => {
+    const result = await check('http://res.cloudinary.com/demo/hero.mp4');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe('scheme_not_https');
+  });
+
+  it('names the host rule when the host is the problem', async () => {
+    const result = await check('https://evil.test/hero.mp4');
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe('host_not_allowed');
+  });
+});

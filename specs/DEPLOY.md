@@ -235,6 +235,45 @@ told to on purpose (D-054). This creates the admin account, the categories and t
 
 ---
 
+## Part 4b — Vercel, and the one thing it does NOT do
+
+This document is written for Render, and Render is safe by construction: its build command is
+`pnpm install --frozen-lockfile && pnpm db:deploy && pnpm build`, so pending migrations are
+applied **before** the build that depends on them.
+
+**A Vercel project is also connected to this repository and serves Production.** It has no
+`buildCommand` override in `vercel.json`, so it runs the package default — `prisma generate
+&& next build` — which does **not** migrate.
+
+That difference is invisible until a release adds a column and reads it in the same commit.
+`next build` prerenders the ISR routes, `/` among them, so the build executes the queries in
+`app/(app)/page.tsx` against the live database. A column the code selects and the database
+does not have fails the build with `The column X does not exist in the current database`.
+
+It happened on D-126, which added `MediaSlot.videoUrl` and selected it on the homepage: every
+Vercel deployment of that branch failed while the three commits before it passed.
+
+**So for any release containing a migration, on Vercel the order is:**
+
+```bash
+# 1. Apply the migration to the production database FIRST.
+#    `migrate deploy` is forward-only and never resets — it is the safe one.
+#    `db:migrate` is NOT safe here; it resets on drift. See scripts/guarded-migrate.mts.
+MIGRATE_DATABASE_URL="<the production direct URL, port 5432>" pnpm exec prisma migrate deploy
+
+# 2. Then merge, which triggers the deploy.
+```
+
+A failed Vercel build does not take the site down — the previous deployment keeps serving — so
+getting this wrong costs a release, not an outage. Fix it by applying the migration and
+redeploying.
+
+The alternative, putting `pnpm db:deploy` into a Vercel `buildCommand`, is deliberately NOT
+done: Vercel builds every pull request as a preview against the same environment, so it would
+let an unmerged branch migrate the production database.
+
+---
+
 ## Part 5 — check it actually works
 
 **13. Sign in** at `https://your-site/login` with `SEED_ADMIN_EMAIL` and

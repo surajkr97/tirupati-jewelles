@@ -18,8 +18,8 @@ import { z } from 'zod';
 import { adminAction, type ActionResult } from '@/lib/admin/actions';
 import { BILL_LOGO_SLOT, invalidateBillLogo } from '@/lib/bills/logo';
 import { db } from '@/lib/db';
-import { checkImageUrl, FAILURE_MESSAGE } from '@/lib/media/fetch-image';
-import { isKnownSlot } from '@/lib/media/slots';
+import { checkImageUrl, checkVideoUrl, FAILURE_MESSAGE } from '@/lib/media/fetch-image';
+import { isKnownSlot, slotSupportsVideo } from '@/lib/media/slots';
 
 /** MASTER-SPEC §6 lists `media` among the revalidation tags. */
 const MEDIA_TAG = 'media';
@@ -31,6 +31,8 @@ const schema = z.object({
   slotKey: z.string().min(1).max(64),
   // Empty string clears the slot (§7.6: "Clearing a slot restores the branded empty frame").
   imageUrl: z.string().max(2048),
+  // Empty string clears the video and leaves the poster alone.
+  videoUrl: z.string().max(2048).default(''),
   linkUrl: z.string().max(2048),
   headline: z.string().max(120),
   subtext: z.string().max(240),
@@ -44,7 +46,8 @@ export async function saveMediaSlot(input: unknown): Promise<SaveSlotResult> {
     const parsed = schema.safeParse(input);
     if (!parsed.success) return { ok: false, error: 'Check the highlighted fields.' };
 
-    const { slotKey, imageUrl, linkUrl, headline, subtext, isActive } = parsed.data;
+    const { slotKey, imageUrl, videoUrl, linkUrl, headline, subtext, isActive } =
+      parsed.data;
 
     // The slot list is fixed by §7.6. An unknown key is not a validation nicety — it would
     // let an admin create rows the storefront never reads.
@@ -76,6 +79,47 @@ export async function saveMediaSlot(input: unknown): Promise<SaveSlotResult> {
     }
 
     /**
+     * The background video, checked through the same SSRF machinery as the image.
+     *
+     * Refused outright on a slot that does not declare `supportsVideo`, rather than merely
+     * not offered by the form. The screen is not a security boundary — this action is
+     * reachable directly, and `HeroMedia` is the only component that knows what to do with
+     * a video, so any other slot storing one would be storing something nothing renders.
+     *
+     * A video without a poster is refused too. `HeroMedia` mounts the video only after the
+     * poster has loaded, so a slot with a video and no image would download the video and
+     * never show it — a silent no-op that looks like a broken save.
+     */
+    let storedVideo: string | null = null;
+
+    if (videoUrl.trim() !== '') {
+      if (!slotSupportsVideo(slotKey)) {
+        return {
+          ok: false,
+          error: 'This slot does not take a video.',
+          field: 'videoUrl',
+        };
+      }
+      if (storedUrl === null) {
+        return {
+          ok: false,
+          error: 'Add the image first — it is the poster the video fades in over.',
+          field: 'videoUrl',
+        };
+      }
+
+      const check = await checkVideoUrl(videoUrl.trim());
+      if (!check.ok) {
+        return {
+          ok: false,
+          error: `${FAILURE_MESSAGE[check.reason]} ${check.detail}`.trim(),
+          field: 'videoUrl',
+        };
+      }
+      storedVideo = check.url;
+    }
+
+    /**
      * A link URL is never fetched, so it needs no SSRF check — but it IS rendered as an
      * `href`, so the scheme matters: `javascript:` in an href is XSS.
      */
@@ -99,6 +143,7 @@ export async function saveMediaSlot(input: unknown): Promise<SaveSlotResult> {
       where: { slotKey },
       update: {
         imageUrl: storedUrl,
+        videoUrl: storedVideo,
         linkUrl: storedLink,
         headline: headline.trim() || null,
         subtext: subtext.trim() || null,
@@ -107,6 +152,7 @@ export async function saveMediaSlot(input: unknown): Promise<SaveSlotResult> {
       create: {
         slotKey,
         imageUrl: storedUrl,
+        videoUrl: storedVideo,
         linkUrl: storedLink,
         headline: headline.trim() || null,
         subtext: subtext.trim() || null,
@@ -121,12 +167,14 @@ export async function saveMediaSlot(input: unknown): Promise<SaveSlotResult> {
       before: existing
         ? {
             imageUrl: existing.imageUrl,
+            videoUrl: existing.videoUrl,
             headline: existing.headline,
             isActive: existing.isActive,
           }
         : null,
       after: {
         imageUrl: saved.imageUrl,
+        videoUrl: saved.videoUrl,
         headline: saved.headline,
         isActive: saved.isActive,
       },

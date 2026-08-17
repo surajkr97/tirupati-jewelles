@@ -3177,3 +3177,191 @@ screen long enough to measure it: **0px shift at 320, 360, 365, 390, 768 and 128
 This is the one part of Stage 7 that deliberately DOES change desktop, because leaving a
 49px jump in place to preserve "desktop does not move" would have been the rule outranking
 the reason for it.
+
+## D-124 — the reels rail links out, and its covers come through our own origin
+
+The homepage now carries the shop's four most recent Instagram reels. Three things about it
+were decided against the obvious implementation, and each was measured first.
+
+**There is no scraping path, so it is the official API or nothing.** The public profile page
+serves ~600KB of JavaScript behind a login wall with zero post data in the HTML — checked
+with curl, and a deliberately invalid shortcode returns the same 608KB shell as a real one,
+so even the status code tells you nothing. Live reels with like counts have exactly one
+source: `graph.instagram.com`.
+
+The flow is "Instagram API with Instagram Login" rather than the Facebook Login variant,
+because the latter requires the account to be attached to a Facebook Page and this shop has
+no reason to run one. The price of that choice shows up in the UI and is worth stating:
+`caption` and `media_product_type` are Facebook-Login-only fields, so there is no caption and
+reels cannot be selected by `media_product_type === 'REELS'`. `media_type === 'VIDEO'` is the
+available stand-in and is exact for this account.
+
+`INSTAGRAM_ACCESS_TOKEN` is optional and the optionality is the design, not a convenience.
+With no token the rail renders four checked-in reels from `public/reels/`, so the section
+works on a fresh clone, in CI, and — the case that actually matters — sixty days after
+launch, when the long-lived token silently expires. Every failure path resolves to that set
+rather than throwing, because `page.tsx` awaits this inside a `Promise.all` with no `.catch()`
+and a rejection there would take the whole homepage down for a social widget. The fallback
+reports its counts as `null`, never `0`: the rail hides the engagement row entirely rather
+than telling a visitor a reel has no likes.
+
+**The tile is a link, not a player, and that reversed an earlier decision.** The first
+implementation opened the embed in a `Sheet`. Rendered in a real browser, Instagram's reel
+embed contains **no `<video>` element at all** — before or after clicking, it is a poster, a
+"Watch on Instagram" overlay and a click-through. So the sheet spent 1.29MB and an open
+`frame-src` to insert a step in front of the thing the reader wanted. An `<a>` to the
+permalink opens the Instagram app on a phone and a new tab on a desktop, where the reel
+actually plays. `frame-src` was handed back; **this feature opens no CSP directive at all.**
+
+**The covers are proxied, and the proxy is the risky part.** Instagram serves thumbnails from
+per-request hostnames (`instagram.fdel93-3.fna.fbcdn.net` one minute, another shard the next)
+on signed URLs that expire, and `next.config.ts` bans wildcard hostnames in
+`images.remotePatterns` — so there is no honest allowlist entry to write. `/api/social/reel-cover`
+fetches server-side and returns the bytes from this origin, which `img-src 'self'` already
+covers; no image host was added either.
+
+That route takes a URL and fetches it, which is the textbook SSRF sink: left open it fetches
+cloud metadata at 169.254.169.254 or this stack's own Redis on localhost:6379 and hands the
+result to an anonymous caller. The guard is an allowlist of hosts rather than a denylist of
+addresses — a denylist loses to DNS rebinding and to the many spellings of localhost, while a
+host that is not Instagram's simply never matches. https is pinned, `redirect: 'manual'` stops
+an allowed host bouncing the request onward after the check has passed, and a non-image
+content type is refused so the route cannot relay HTML from our own origin.
+
+`route.test.ts` pins all of it, including the two mistakes a hand-rolled host check usually
+makes: `evil-cdninstagram.com` (no dot boundary) and `cdninstagram.com.attacker.test` (a
+suffix that only looks terminal). Both were also confirmed to 400 against the running server.
+
+### Three corrections after the first look at it on a phone
+
+**The rail no longer bleeds to the screen edge.** It did, on the theory that a tile cut off at
+the true edge reads as "there is more" rather than as "this is clipped". Measured at 390px the
+rail had `padding-left: 16px` and the first tile still rendered at x=0, because
+`scroll-snap-align: start` snaps a tile's edge to the SCROLLPORT edge and ignores padding
+unless `scroll-padding` is set to match. So the padding was real, applied, and inert — the
+tile sat flush in the corner while the heading beside it was indented, which just looks like a
+bug. Aligning the rail to the section gutter needs no `scroll-padding` to stay correct, and
+the swipe is still signalled by the second tile being cut at the gutter line.
+
+**The see-all link says "View all", not the handle.** `@_tirupati_jewelers_` in the top-right
+corner sat where every other section on the site puts a short action, so it read as a stray
+label rather than as something to press.
+
+**`Section` opens an absolute `seeAllHref` in a new tab**, with `rel="noopener noreferrer"`.
+Derived from the href rather than added as a prop, because the `rel` is not decoration:
+without `noopener` the opened tab gets a live `window.opener` handle on ours and can navigate
+it elsewhere. A `seeAllExternal` prop would make that protection something the next caller has
+to remember, and the caller who forgets is by definition the one shipping an external link.
+`section.test.tsx` pins both directions — the twelve internal call sites must keep opening in
+the same tab.
+
+## D-125 — the hero opts out of the fluid scale
+
+D-121 made the type and spacing tokens interpolate 390 → 768px. That is right for the ~60
+components that were rendering desktop dimensions on a phone, and wrong for exactly one
+place.
+
+Measured against `origin/master`, the hero was the section D-121 changed most. At 390px:
+
+| | before D-121 | after |
+| :--- | ---: | ---: |
+| `h1` size / line-height | 40 / 44 | 28 / 32 |
+| `h1` rendered height | 88 | 32 |
+| subtext size / line-height | 18 / 28 | 15 / 22 |
+| CTA height / label | 44 / 16 | 40 / 14 |
+| block padding-top | 48 | 28 |
+| ornament rule width | 64 | 36 |
+
+At 768px and 1280px it measured **identical** to master, because the ramps had already
+clamped. So this was never a desktop question.
+
+The `h1` row is the one that decided it. The default headline went from filling two lines to
+sitting on one — the difference between a statement and a caption. The hero is not UI: it is
+one viewport of brand, holding a single headline that is supposed to dominate, and D-121's
+premise ("a phone should not render desktop dimensions") does not apply to an element whose
+job is to be large. §4.5's fold criterion is what constrains it instead, and that is asserted
+separately.
+
+**Implemented as a scoped token re-declaration, not as fixed sizes in the markup.**
+`.hero-scale` in globals.css re-declares the six tokens the hero uses; custom properties
+inherit, so every utility inside picks them up with no class changes and no `md:` variants to
+keep in step. `hero.tsx` goes on reading `text-display`, `py-12`, `mt-8` — the same names as
+the rest of the site — so the exception lives in one place with its reasoning attached rather
+than as a dozen arbitrary values indistinguishable from typos.
+
+One value could not come from the class. The CTA reads `h-control`, and pinning that token
+would have given the hero a **52px** button on a phone — larger than it ever was, since
+before D-121 the button was `h-tap sm:h-control` and measured 44px. The two-step form is
+restored explicitly at the call site, written after `buttonClasses(...)` so `cn` resolves the
+`h-*` conflict in its favour.
+
+Verified twice, because a re-declared inherited property is exactly the kind of change that
+escapes its container: the hero now measures identical to master at 390 / 768 / 1280 on all
+twelve properties, and elements outside it still measure the D-121 values (body 14px, section
+headings 18px). `e2e/smoke.spec.ts`'s above-the-fold assertion — the reason the hero's height
+is constrained at all — still passes at 375×667.
+
+A first attempt at the containment check read `getPropertyValue('--text-body')` and reported
+a leak that did not exist: Tailwind v4 does not expose `@theme` variables where that read
+finds them, and it returned empty at `:root` too. Rendered font sizes are the fact; the
+variable read was measuring the measurement.
+
+## D-126 — the hero takes a background video, and the owner can set one
+
+Closes UI_REDESIGN_DEBT-001, which the audit recorded as needing its own phase because the
+fix is a schema change: `HeroMedia` was built in Stage 4A already accepting an optional
+`videoSrc` and already doing the poster-then-video sequence, and `MediaSlot` had no column to
+put a video in. So the component is untouched here. What was missing was the data path.
+
+**The sequence was already right and is worth restating**, because it is the feature: a
+`sand` ground paints in the first frame, the poster fades in when it decodes, and the video
+is not in the DOM at all until the poster has loaded — verified in a browser, 0 `<video>`
+elements immediately after load, 1 video request afterwards, then `paused: false`,
+`currentTime` advancing, muted and looping. Under `prefers-reduced-motion` the video is
+never requested: **0** video requests, not a paused element.
+
+**`videoUrl` is nullable and additive.** One `ALTER TABLE ... ADD COLUMN`, no backfill, no
+data touched. An absent video is the ordinary case rather than a half-filled slot.
+
+**Two rules live in the action, not only in the form**, because the action is reachable
+directly:
+
+- Only a slot declaring `supportsVideo` may store one. That is the hero and nothing else —
+  `HeroMedia` is the only component that knows what to do with a video, so any other slot
+  storing one would be storing something nothing renders, invisible to the owner.
+- A video without an image is refused. The video mounts only after the poster loads, so a
+  slot with a video and no poster would download nothing and show nothing: a save that looks
+  like it worked and does not. Clearing the image clears the video with it.
+
+**`checkVideoUrl` reuses the image path's SSRF machinery and departs from it in one place.**
+Same https-only rule, same default-deny host allowlist, same DNS pinning, same re-validation
+after every redirect — it lives in `fetch-image.ts` precisely so there is not a second
+implementation of that to get wrong. What it cannot reuse is the proof: `checkImageUrl`
+downloads up to 10MB and sniffs magic bytes, and a hero video is tens of megabytes, so that
+would either reject every legitimate file or raise the cap to something that makes the
+endpoint a memory-exhaustion lever. There is also no short magic number spanning MP4, WebM
+and fragmented-MP4. So this reads the headers, requires `content-type: video/*`, and destroys
+the socket without reading a byte.
+
+That trusts a header, which is a real weakening, and it is bounded by the control that was
+already doing the work: the host must be on `ALLOWED_IMAGE_HOSTS` first. A hostile answer
+requires the shop's own CDN to be serving hostile content, at which point the video URL is
+not the exposure. The browser is not trusting us either — `<video>` plays what it can decode
+and ignores the rest, so a mislabelled file fails to play rather than doing something.
+
+Confirmed against live hosts: a real Cloudinary MP4 passes, **an image on the same allowed
+host is rejected** `not_a_video`, and a disallowed host, plain http and the metadata endpoint
+are all refused.
+
+**`media-src` had to be added to the CSP.** Without it the directive falls back to
+`default-src 'self'` and the video is blocked in a way that looks like a bug rather than a
+policy: the element mounts, never fires `canplay`, and the poster simply stays — nothing in
+any log. It is deliberately the same list as `img-src`, from `ALLOWED_IMAGE_HOSTS`, because
+the admin can only save a URL that already passed that allowlist; a second list could only
+disagree with the one that admits the data.
+
+**The hero is also shorter** — `62svh` → `54svh`, `560px` → `480px`. Only empty field comes
+off: the type is unchanged, and D-125 pinned it deliberately, so shrinking the headline again
+is exactly what this must not do. The floor is §4.5's fold criterion rather than taste, and
+cutting height moves that measurement the safe way — `e2e/smoke.spec.ts` still asserts the
+rate ticker sits above the fold at 375×667.

@@ -95,6 +95,23 @@ function contentSecurityPolicy(): string {
     'font-src': ["'self'", 'data:'],
 
     /**
+     * The hero's optional background video (D-126).
+     *
+     * Without this directive `media-src` falls back to `default-src 'self'` and a `<video>`
+     * pointing at the shop's CDN is blocked — silently, from the page's point of view: the
+     * element mounts, never fires `canplay`, and `HeroMedia` simply keeps showing the
+     * poster. The feature would look like it had been built and then not worked, with
+     * nothing in the server logs.
+     *
+     * Deliberately the SAME list as `img-src`, from `ALLOWED_IMAGE_HOSTS`, rather than a new
+     * variable. The admin can only save a video URL that passed `checkVideoUrl`, which
+     * enforces that exact allowlist — so a second list could only ever disagree with the one
+     * that admits the data, and the failure mode of that disagreement is a stored URL the
+     * browser refuses to load.
+     */
+    'media-src': ["'self'", ...imageHosts.map((h) => `https://${h}`)],
+
+    /**
      * `connect-src` is the one that breaks a feature if it is wrong.
      *
      * Phase 7 §7.8's signed upload POSTs image bytes from the BROWSER straight to
@@ -119,6 +136,13 @@ function contentSecurityPolicy(): string {
     /**
      * The modern form of `X-Frame-Options: DENY`, which is also still sent below. Browsers
      * that understand CSP enforce this one; the header covers the rest.
+     *
+     * Note for anyone adding an embed later: there is deliberately no `frame-src` here, so
+     * it falls back to `default-src 'self'` and third-party iframes are blocked. The Stage 7
+     * reels rail briefly opened it for Instagram and then gave it back — the embed turned out
+     * to contain no `<video>` at all, so it cost 1.29MB to add a step in front of a link.
+     * The rail proxies its covers through `/api/social/reel-cover` instead, which needs
+     * nothing loosened. D-124.
      */
     'frame-ancestors': ["'none'"],
   };
