@@ -25,6 +25,7 @@
  */
 
 import { Hero } from '@/components/home/hero';
+import { InstagramReels } from '@/components/home/instagram-reels';
 import { TrustBand } from '@/components/home/trust-band';
 import { ProductCard, ProductGrid } from '@/components/product/product-card';
 import { LiveRateCard } from '@/components/rates/live-rate-card';
@@ -34,6 +35,8 @@ import { EMPTY_FILTERS } from '@/lib/catalog/filters';
 import { listProducts } from '@/lib/catalog/products';
 import { db } from '@/lib/db';
 import { getCurrentRates, getRateHistory, RATE_FACES } from '@/lib/rates';
+import { getRecentReels } from '@/lib/social/instagram';
+import { INSTAGRAM_HANDLE, INSTAGRAM_PROFILE_URL } from '@/lib/social/reels';
 import { serialiseRates } from '@/lib/rates-view';
 import { canonical } from '@/lib/seo';
 import { ogImageFrom, OG_HEIGHT, OG_WIDTH } from '@/lib/seo/og-image';
@@ -77,7 +80,9 @@ export async function generateMetadata(): Promise<Metadata> {
       width: OG_WIDTH,
       height: OG_HEIGHT,
       // The owner's own headline when they have set one; otherwise what the picture is.
-      alt: hero?.headline?.trim() || 'Hallmarked gold and silver jewellery at Tirupati Jewelles',
+      alt:
+        hero?.headline?.trim() ||
+        'Hallmarked gold and silver jewellery at Tirupati Jewelles',
     },
   ];
 
@@ -92,7 +97,6 @@ export const revalidate = 300;
 
 /** How many new arrivals the strip shows. Six fills the grid at every breakpoint. */
 const NEW_ARRIVALS = 6;
-
 
 async function loadTickerData() {
   const rates = await getCurrentRates();
@@ -111,37 +115,50 @@ async function loadTickerData() {
 }
 
 export default async function HomePage() {
-  const [{ serialised, history }, tickerJitter, categories, hero, arrivals] = await Promise.all([
-    loadTickerData(),
-    // The owner's switch. Fetched with everything else — it is a cached read, not a round trip.
-    getTickerJitter(),
-    db.category.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
-      take: 6,
-      select: { id: true, name: true, slug: true, imageUrl: true, blurDataUrl: true },
-    }),
-    /**
-     * §7.6: "every image on the site replaceable from the dashboard."
-     *
-     * `isActive` is honoured, so clearing or deactivating the slot returns the hero to its
-     * wine ground rather than breaking the layout — `HeroMedia` treats a null poster as a
-     * complete state, not an error.
-     */
-    db.mediaSlot.findUnique({
-      where: { slotKey: 'HERO_BANNER' },
-      select: { imageUrl: true, blurDataUrl: true, headline: true, subtext: true, isActive: true },
-    }),
-    /**
-     * New arrivals, through the SAME priced-listing path the collection pages use.
-     *
-     * `listProducts(null, …)` with the default sort is already `createdAt: 'desc'` across
-     * every active category, so this needs no new query and — more importantly — no second
-     * copy of the pricing call. Every price on this page comes from `priceProduct` against
-     * the current rate snapshot, exactly as it does everywhere else.
-     */
-    listProducts(null, { ...EMPTY_FILTERS }),
-  ]);
+  const [{ serialised, history }, tickerJitter, categories, hero, arrivals, reels] =
+    await Promise.all([
+      loadTickerData(),
+      // The owner's switch. Fetched with everything else — it is a cached read, not a round trip.
+      getTickerJitter(),
+      db.category.findMany({
+        where: { isActive: true },
+        orderBy: { sortOrder: 'asc' },
+        take: 6,
+        select: { id: true, name: true, slug: true, imageUrl: true, blurDataUrl: true },
+      }),
+      /**
+       * §7.6: "every image on the site replaceable from the dashboard."
+       *
+       * `isActive` is honoured, so clearing or deactivating the slot returns the hero to its
+       * wine ground rather than breaking the layout — `HeroMedia` treats a null poster as a
+       * complete state, not an error.
+       */
+      db.mediaSlot.findUnique({
+        where: { slotKey: 'HERO_BANNER' },
+        select: {
+          imageUrl: true,
+          blurDataUrl: true,
+          headline: true,
+          subtext: true,
+          isActive: true,
+        },
+      }),
+      /**
+       * New arrivals, through the SAME priced-listing path the collection pages use.
+       *
+       * `listProducts(null, …)` with the default sort is already `createdAt: 'desc'` across
+       * every active category, so this needs no new query and — more importantly — no second
+       * copy of the pricing call. Every price on this page comes from `priceProduct` against
+       * the current rate snapshot, exactly as it does everywhere else.
+       */
+      listProducts(null, { ...EMPTY_FILTERS }),
+      /**
+       * Recent reels. Never rejects — it resolves to the checked-in set on any failure, so
+       * it cannot take the homepage down with it and needs no `.catch()` here. See
+       * `lib/social/instagram.ts`.
+       */
+      getRecentReels(),
+    ]);
 
   const heroActive = hero?.isActive ? hero : null;
   const newArrivals = arrivals.products.slice(0, NEW_ARRIVALS);
@@ -200,6 +217,32 @@ export default async function HomePage() {
       )}
 
       {/*
+        ── Reels (Stage 7) ──
+
+        After the product grid, not above it. The rate card and the pieces themselves are the
+        commercial path; this is social proof and belongs behind them — putting it higher
+        would push the live rate card, which is the reason most people open the site, further
+        down a phone screen.
+
+        `seeAllHref` is an external URL. `Section` renders it through `next/link`, which
+        handles an absolute href by emitting a plain anchor, so no special case is needed.
+
+        The eyebrow is the word "Instagram" and NOT the handle: `Section` styles every
+        eyebrow `uppercase`, which rendered `@_tirupati_jewelers_` as `@_TIRUPATI_JEWELERS_`
+        — a handle that does not exist, printed as though it did. The account name belongs
+        somewhere that preserves its case, so it is the link label instead.
+      */}
+      <Section
+        display
+        heading="From our Instagram"
+        eyebrow="Instagram"
+        seeAllHref={INSTAGRAM_PROFILE_URL}
+        seeAllLabel={`@${INSTAGRAM_HANDLE}`}
+      >
+        <InstagramReels reels={reels} />
+      </Section>
+
+      {/*
         The trust band sits BETWEEN the two product sections rather than closing the page.
 
         As a full-bleed `sand` band it breaks the run of white sections in half, so the page
@@ -226,37 +269,36 @@ export default async function HomePage() {
           {categories.map((category, index) => {
             const wide = index < 2;
             return (
-            <li
-              key={category.id}
-              className={wide ? 'col-span-2 md:col-span-6' : 'md:col-span-3'}
-            >
-              <Link href={`/collections/${category.slug}`} className="group block">
-                <div className="overflow-hidden rounded-card">
-                  <ImageFrame
-                    src={category.imageUrl}
-                    /* Decorative: the name is printed directly beneath, and a screen
+              <li
+                key={category.id}
+                className={wide ? 'col-span-2 md:col-span-6' : 'md:col-span-3'}
+              >
+                <Link href={`/collections/${category.slug}`} className="group block">
+                  <div className="overflow-hidden rounded-card">
+                    <ImageFrame
+                      src={category.imageUrl}
+                      /* Decorative: the name is printed directly beneath, and a screen
                        reader announcing it twice helps nobody. */
-                    alt=""
-                    ratio={wide ? '3/2' : '4/5'}
-                    sizes={
-                      wide
-                        ? '(max-width: 768px) 100vw, 50vw'
-                        : '(max-width: 768px) 50vw, 25vw'
-                    }
-                    blurDataURL={category.blurDataUrl ?? undefined}
-                    className="transition-transform duration-slow ease-standard group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
-                  />
-                </div>
-                <p className="mt-2 text-body font-medium text-ink group-hover:text-rose-deep">
-                  {category.name}
-                </p>
-              </Link>
-            </li>
+                      alt=""
+                      ratio={wide ? '3/2' : '4/5'}
+                      sizes={
+                        wide
+                          ? '(max-width: 768px) 100vw, 50vw'
+                          : '(max-width: 768px) 50vw, 25vw'
+                      }
+                      blurDataURL={category.blurDataUrl ?? undefined}
+                      className="transition-transform duration-slow ease-standard group-hover:scale-[1.03] motion-reduce:transition-none motion-reduce:group-hover:scale-100"
+                    />
+                  </div>
+                  <p className="mt-2 text-body font-medium text-ink group-hover:text-rose-deep">
+                    {category.name}
+                  </p>
+                </Link>
+              </li>
             );
           })}
         </ul>
       </Section>
-
     </>
   );
 }

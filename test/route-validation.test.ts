@@ -291,6 +291,24 @@ const ROUTE_CONTRACTS: RouteContract[] = [
     public: true,
   },
 
+  /**
+   * The reel-cover proxy (D-124). A host allowlist, not Zod — the input is a URL and what
+   * matters about it is where it points, which is a question no schema answers.
+   *
+   * `badQuery` is the cloud-metadata address on purpose: this route fetches a
+   * caller-supplied URL, so the SSRF case IS its validation, and that is what §9.1 should
+   * hold it to. `app/api/social/reel-cover/route.test.ts` covers the rest of the allowlist,
+   * including the dot-boundary and suffix tricks.
+   */
+  {
+    file: 'app/api/social/reel-cover/route.ts',
+    load: () => import('@/app/api/social/reel-cover/route'),
+    methods: ['GET'],
+    validates: 'guard',
+    public: true,
+    badQuery: 'u=http://169.254.169.254/latest/meta-data/',
+  },
+
   // ── The bill capability URL. A UUIDv4 pattern, not Zod, and correct (see the header).
   {
     file: 'app/bills/[key]/route.ts',

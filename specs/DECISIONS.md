@@ -3143,3 +3143,57 @@ screen long enough to measure it: **0px shift at 320, 360, 365, 390, 768 and 128
 This is the one part of Stage 7 that deliberately DOES change desktop, because leaving a
 49px jump in place to preserve "desktop does not move" would have been the rule outranking
 the reason for it.
+
+## D-124 — the reels rail links out, and its covers come through our own origin
+
+The homepage now carries the shop's four most recent Instagram reels. Three things about it
+were decided against the obvious implementation, and each was measured first.
+
+**There is no scraping path, so it is the official API or nothing.** The public profile page
+serves ~600KB of JavaScript behind a login wall with zero post data in the HTML — checked
+with curl, and a deliberately invalid shortcode returns the same 608KB shell as a real one,
+so even the status code tells you nothing. Live reels with like counts have exactly one
+source: `graph.instagram.com`.
+
+The flow is "Instagram API with Instagram Login" rather than the Facebook Login variant,
+because the latter requires the account to be attached to a Facebook Page and this shop has
+no reason to run one. The price of that choice shows up in the UI and is worth stating:
+`caption` and `media_product_type` are Facebook-Login-only fields, so there is no caption and
+reels cannot be selected by `media_product_type === 'REELS'`. `media_type === 'VIDEO'` is the
+available stand-in and is exact for this account.
+
+`INSTAGRAM_ACCESS_TOKEN` is optional and the optionality is the design, not a convenience.
+With no token the rail renders four checked-in reels from `public/reels/`, so the section
+works on a fresh clone, in CI, and — the case that actually matters — sixty days after
+launch, when the long-lived token silently expires. Every failure path resolves to that set
+rather than throwing, because `page.tsx` awaits this inside a `Promise.all` with no `.catch()`
+and a rejection there would take the whole homepage down for a social widget. The fallback
+reports its counts as `null`, never `0`: the rail hides the engagement row entirely rather
+than telling a visitor a reel has no likes.
+
+**The tile is a link, not a player, and that reversed an earlier decision.** The first
+implementation opened the embed in a `Sheet`. Rendered in a real browser, Instagram's reel
+embed contains **no `<video>` element at all** — before or after clicking, it is a poster, a
+"Watch on Instagram" overlay and a click-through. So the sheet spent 1.29MB and an open
+`frame-src` to insert a step in front of the thing the reader wanted. An `<a>` to the
+permalink opens the Instagram app on a phone and a new tab on a desktop, where the reel
+actually plays. `frame-src` was handed back; **this feature opens no CSP directive at all.**
+
+**The covers are proxied, and the proxy is the risky part.** Instagram serves thumbnails from
+per-request hostnames (`instagram.fdel93-3.fna.fbcdn.net` one minute, another shard the next)
+on signed URLs that expire, and `next.config.ts` bans wildcard hostnames in
+`images.remotePatterns` — so there is no honest allowlist entry to write. `/api/social/reel-cover`
+fetches server-side and returns the bytes from this origin, which `img-src 'self'` already
+covers; no image host was added either.
+
+That route takes a URL and fetches it, which is the textbook SSRF sink: left open it fetches
+cloud metadata at 169.254.169.254 or this stack's own Redis on localhost:6379 and hands the
+result to an anonymous caller. The guard is an allowlist of hosts rather than a denylist of
+addresses — a denylist loses to DNS rebinding and to the many spellings of localhost, while a
+host that is not Instagram's simply never matches. https is pinned, `redirect: 'manual'` stops
+an allowed host bouncing the request onward after the check has passed, and a non-image
+content type is refused so the route cannot relay HTML from our own origin.
+
+`route.test.ts` pins all of it, including the two mistakes a hand-rolled host check usually
+makes: `evil-cdninstagram.com` (no dot boundary) and `cdninstagram.com.attacker.test` (a
+suffix that only looks terminal). Both were also confirmed to 400 against the running server.

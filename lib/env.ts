@@ -56,6 +56,22 @@ const serverSchema = z.object({
   SMS_PROVIDER_KEY: z.string().optional(),
 
   /**
+   * Instagram — the homepage reels rail (D-124).
+   *
+   * Optional, and the optionality is the design rather than a convenience: with no token the
+   * rail falls back to the checked-in reels in `lib/social/reels.ts`, so the section renders
+   * in development, in CI and on a fresh clone without anyone holding a Meta credential. The
+   * same fallback catches an expired token in production, which matters because these expire
+   * every 60 days — see the note in `lib/social/instagram.ts`.
+   *
+   * `INSTAGRAM_ACCESS_TOKEN` is a long-lived Instagram user access token. It is a SECRET: it
+   * reads the account's media on the shop's behalf, and it is used server-side only, never
+   * shipped to the browser. `INSTAGRAM_USER_ID` is the numeric IG user id and is not secret.
+   */
+  INSTAGRAM_ACCESS_TOKEN: z.string().optional(),
+  INSTAGRAM_USER_ID: z.string().optional(),
+
+  /**
    * Cloudinary — direct-to-provider signed uploads (Phase 7 §7.8).
    *
    * Replaces MASTER-SPEC §9's single `UPLOAD_PROVIDER_KEY`, because Cloudinary needs three

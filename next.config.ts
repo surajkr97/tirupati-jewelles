@@ -119,6 +119,13 @@ function contentSecurityPolicy(): string {
     /**
      * The modern form of `X-Frame-Options: DENY`, which is also still sent below. Browsers
      * that understand CSP enforce this one; the header covers the rest.
+     *
+     * Note for anyone adding an embed later: there is deliberately no `frame-src` here, so
+     * it falls back to `default-src 'self'` and third-party iframes are blocked. The Stage 7
+     * reels rail briefly opened it for Instagram and then gave it back — the embed turned out
+     * to contain no `<video>` at all, so it cost 1.29MB to add a step in front of a link.
+     * The rail proxies its covers through `/api/social/reel-cover` instead, which needs
+     * nothing loosened. D-124.
      */
     'frame-ancestors': ["'none'"],
   };
