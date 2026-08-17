@@ -3271,3 +3271,63 @@ A first attempt at the containment check read `getPropertyValue('--text-body')` 
 a leak that did not exist: Tailwind v4 does not expose `@theme` variables where that read
 finds them, and it returned empty at `:root` too. Rendered font sizes are the fact; the
 variable read was measuring the measurement.
+
+## D-126 — the hero takes a background video, and the owner can set one
+
+Closes UI_REDESIGN_DEBT-001, which the audit recorded as needing its own phase because the
+fix is a schema change: `HeroMedia` was built in Stage 4A already accepting an optional
+`videoSrc` and already doing the poster-then-video sequence, and `MediaSlot` had no column to
+put a video in. So the component is untouched here. What was missing was the data path.
+
+**The sequence was already right and is worth restating**, because it is the feature: a
+`sand` ground paints in the first frame, the poster fades in when it decodes, and the video
+is not in the DOM at all until the poster has loaded — verified in a browser, 0 `<video>`
+elements immediately after load, 1 video request afterwards, then `paused: false`,
+`currentTime` advancing, muted and looping. Under `prefers-reduced-motion` the video is
+never requested: **0** video requests, not a paused element.
+
+**`videoUrl` is nullable and additive.** One `ALTER TABLE ... ADD COLUMN`, no backfill, no
+data touched. An absent video is the ordinary case rather than a half-filled slot.
+
+**Two rules live in the action, not only in the form**, because the action is reachable
+directly:
+
+- Only a slot declaring `supportsVideo` may store one. That is the hero and nothing else —
+  `HeroMedia` is the only component that knows what to do with a video, so any other slot
+  storing one would be storing something nothing renders, invisible to the owner.
+- A video without an image is refused. The video mounts only after the poster loads, so a
+  slot with a video and no poster would download nothing and show nothing: a save that looks
+  like it worked and does not. Clearing the image clears the video with it.
+
+**`checkVideoUrl` reuses the image path's SSRF machinery and departs from it in one place.**
+Same https-only rule, same default-deny host allowlist, same DNS pinning, same re-validation
+after every redirect — it lives in `fetch-image.ts` precisely so there is not a second
+implementation of that to get wrong. What it cannot reuse is the proof: `checkImageUrl`
+downloads up to 10MB and sniffs magic bytes, and a hero video is tens of megabytes, so that
+would either reject every legitimate file or raise the cap to something that makes the
+endpoint a memory-exhaustion lever. There is also no short magic number spanning MP4, WebM
+and fragmented-MP4. So this reads the headers, requires `content-type: video/*`, and destroys
+the socket without reading a byte.
+
+That trusts a header, which is a real weakening, and it is bounded by the control that was
+already doing the work: the host must be on `ALLOWED_IMAGE_HOSTS` first. A hostile answer
+requires the shop's own CDN to be serving hostile content, at which point the video URL is
+not the exposure. The browser is not trusting us either — `<video>` plays what it can decode
+and ignores the rest, so a mislabelled file fails to play rather than doing something.
+
+Confirmed against live hosts: a real Cloudinary MP4 passes, **an image on the same allowed
+host is rejected** `not_a_video`, and a disallowed host, plain http and the metadata endpoint
+are all refused.
+
+**`media-src` had to be added to the CSP.** Without it the directive falls back to
+`default-src 'self'` and the video is blocked in a way that looks like a bug rather than a
+policy: the element mounts, never fires `canplay`, and the poster simply stays — nothing in
+any log. It is deliberately the same list as `img-src`, from `ALLOWED_IMAGE_HOSTS`, because
+the admin can only save a URL that already passed that allowlist; a second list could only
+disagree with the one that admits the data.
+
+**The hero is also shorter** — `62svh` → `54svh`, `560px` → `480px`. Only empty field comes
+off: the type is unchanged, and D-125 pinned it deliberately, so shrinking the headline again
+is exactly what this must not do. The floor is §4.5's fold criterion rather than taste, and
+cutting height moves that measurement the safe way — `e2e/smoke.spec.ts` still asserts the
+rate ticker sits above the fold at 375×667.

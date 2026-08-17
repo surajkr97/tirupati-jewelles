@@ -138,6 +138,9 @@ export default async function HomePage() {
         select: {
           imageUrl: true,
           blurDataUrl: true,
+          // The optional looping background video (D-126). Null on every slot until the
+          // owner sets one, which `HeroMedia` treats as an ordinary complete state.
+          videoUrl: true,
           headline: true,
           subtext: true,
           isActive: true,
@@ -170,6 +173,7 @@ export default async function HomePage() {
         // Decorative unless the owner has given the slot a headline to describe it.
         imageAlt={heroActive?.headline ?? ''}
         blurDataURL={heroActive?.blurDataUrl ?? undefined}
+        videoUrl={heroActive?.videoUrl ?? undefined}
         headline={heroActive?.headline}
         subtext={heroActive?.subtext}
       />

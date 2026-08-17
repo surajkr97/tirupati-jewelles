@@ -219,6 +219,13 @@ model MediaSlot {
   imageUrl    String?
   /// See ProductImage.blurDataUrl.
   blurDataUrl String?
+  /// Optional looping background video, hero only. Closes UI_REDESIGN_DEBT-001.
+  ///
+  /// Nullable and additive on purpose: `HeroMedia` has always taken an optional `videoSrc`
+  /// and treated its absence as a complete state, so a row without one is not a half-filled
+  /// slot — it is the ordinary case. The image stays REQUIRED for a video to play at all;
+  /// it is the poster, and the video is only ever an enhancement on top of it.
+  videoUrl    String?
   linkUrl     String?
   headline    String?
   subtext     String?

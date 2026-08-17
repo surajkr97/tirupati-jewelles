@@ -37,10 +37,13 @@ export interface MediaSlotCardProps {
   recommended: string;
   ratio: string;
   supportsText: boolean;
+  /** May this slot carry a looping background video? See `SlotDefinition.supportsVideo`. */
+  supportsVideo: boolean;
   /** Does anything on the site render this slot? See `SlotDefinition.live`. */
   live: boolean;
   initial: {
     imageUrl: string | null;
+    videoUrl: string | null;
     linkUrl: string | null;
     headline: string | null;
     subtext: string | null;
@@ -55,10 +58,12 @@ export function MediaSlotCard({
   recommended,
   ratio,
   supportsText,
+  supportsVideo,
   live,
   initial,
 }: MediaSlotCardProps) {
   const [imageUrl, setImageUrl] = useState(initial.imageUrl ?? '');
+  const [videoUrl, setVideoUrl] = useState(initial.videoUrl ?? '');
   const [linkUrl, setLinkUrl] = useState(initial.linkUrl ?? '');
   const [headline, setHeadline] = useState(initial.headline ?? '');
   const [subtext, setSubtext] = useState(initial.subtext ?? '');
@@ -66,6 +71,7 @@ export function MediaSlotCard({
   /** What the database holds, so the save button can tell whether anything has moved. */
   const [saved, setSaved] = useState({
     imageUrl: initial.imageUrl ?? '',
+    videoUrl: initial.videoUrl ?? '',
     linkUrl: initial.linkUrl ?? '',
     headline: initial.headline ?? '',
     subtext: initial.subtext ?? '',
@@ -102,6 +108,7 @@ export function MediaSlotCard({
       const result = await saveMediaSlot({
         slotKey,
         imageUrl,
+        videoUrl,
         linkUrl,
         headline,
         subtext,
@@ -113,7 +120,13 @@ export function MediaSlotCard({
         return;
       }
       setPreview(result.data.imageUrl);
-      setSaved({ imageUrl: result.data.imageUrl ?? '', linkUrl, headline, subtext });
+      setSaved({
+        imageUrl: result.data.imageUrl ?? '',
+        videoUrl,
+        linkUrl,
+        headline,
+        subtext,
+      });
       // §7 DESIGN: "Save state always clear."
       toast(result.data.imageUrl ? `${label} updated` : `${label} cleared`);
     });
@@ -125,6 +138,10 @@ export function MediaSlotCard({
       const result = await saveMediaSlot({
         slotKey,
         imageUrl: '',
+        // The video goes with it. `HeroMedia` only mounts a video once the poster has
+        // loaded, so a video left behind on a cleared slot could never play — and the
+        // action refuses that combination anyway.
+        videoUrl: '',
         linkUrl,
         headline,
         subtext,
@@ -135,8 +152,9 @@ export function MediaSlotCard({
         return;
       }
       setImageUrl('');
+      setVideoUrl('');
       setPreview(null);
-      setSaved({ imageUrl: '', linkUrl, headline, subtext });
+      setSaved({ imageUrl: '', videoUrl: '', linkUrl, headline, subtext });
       setConfirmClear(false);
       toast(`${label} cleared`);
     });
@@ -144,6 +162,7 @@ export function MediaSlotCard({
 
   const dirty =
     imageUrl !== saved.imageUrl ||
+    videoUrl !== saved.videoUrl ||
     linkUrl !== saved.linkUrl ||
     headline !== saved.headline ||
     subtext !== saved.subtext;
@@ -189,6 +208,39 @@ export function MediaSlotCard({
           setConfirmClear(false);
         }}
       />
+
+      {/*
+        The background video, hero only (D-126).
+
+        No preview beside the image one, deliberately. The video is not an alternative to the
+        poster and showing them side by side would suggest it is — it plays OVER the poster,
+        only after it has loaded, and only for visitors who have not asked for reduced
+        motion. The hint says that, because an owner who expects it to replace the picture
+        will otherwise read a working hero as a broken one.
+
+        The field is disabled until there is an image to be the poster, which is the same
+        rule `saveMediaSlot` enforces server-side — here it is only there to explain itself
+        before the save fails.
+      */}
+      {supportsVideo && (
+        <Input
+          label="Background video URL (optional)"
+          inputMode="url"
+          placeholder="https://res.cloudinary.com/…/hero.mp4"
+          value={videoUrl}
+          disabled={imageUrl.trim() === ''}
+          hint={
+            imageUrl.trim() === ''
+              ? 'Add an image first — the video plays over it once it has downloaded.'
+              : 'Plays silently on a loop over the image, once it has downloaded. Visitors on slow connections, or who have asked for reduced motion, keep the image.'
+          }
+          onChange={(event) => {
+            setVideoUrl(event.target.value);
+            setError(null);
+            setConfirmClear(false);
+          }}
+        />
+      )}
 
       <div className="flex flex-wrap gap-2">
         <Button

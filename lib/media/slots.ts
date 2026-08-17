@@ -42,6 +42,15 @@ export interface SlotDefinition {
    * changes is that the screen stops claiming they are live. UI_REDESIGN_DEBT-011.
    */
   live: boolean;
+  /**
+   * May this slot carry a looping background video behind its image?
+   *
+   * Only the hero. `HeroMedia` is the one component built for the poster-then-video
+   * sequence, and a video is meaningless in a category tile or an invoice logo. Gating it
+   * here rather than in the form means the admin action can refuse a video on a slot that
+   * does not support one, instead of trusting the screen not to have offered it.
+   */
+  supportsVideo: boolean;
 }
 
 export const MEDIA_SLOTS: SlotDefinition[] = [
@@ -52,6 +61,9 @@ export const MEDIA_SLOTS: SlotDefinition[] = [
     recommended: '1600×900',
     ratio: '16/9',
     supportsText: true,
+    // The only slot with a video, and the only one whose component knows what to do with
+    // one. Closes UI_REDESIGN_DEBT-001.
+    supportsVideo: true,
     live: true,
   },
   {
@@ -61,6 +73,7 @@ export const MEDIA_SLOTS: SlotDefinition[] = [
     recommended: '1200×400',
     ratio: '3/1',
     supportsText: true,
+    supportsVideo: false,
     live: false,
   },
   ...Array.from({ length: 6 }, (_, index) => ({
@@ -71,6 +84,7 @@ export const MEDIA_SLOTS: SlotDefinition[] = [
     recommended: '800×800',
     ratio: '1/1',
     supportsText: false,
+    supportsVideo: false,
     live: false,
   })),
   {
@@ -80,6 +94,7 @@ export const MEDIA_SLOTS: SlotDefinition[] = [
     recommended: '1200×600',
     ratio: '2/1',
     supportsText: true,
+    supportsVideo: false,
     live: false,
   },
   {
@@ -91,6 +106,7 @@ export const MEDIA_SLOTS: SlotDefinition[] = [
     recommended: '1200×800',
     ratio: '3/2',
     supportsText: false,
+    supportsVideo: false,
     live: false,
   },
   {
@@ -100,6 +116,7 @@ export const MEDIA_SLOTS: SlotDefinition[] = [
     recommended: '1600×400',
     ratio: '4/1',
     supportsText: false,
+    supportsVideo: false,
     live: false,
   },
   /**
@@ -121,6 +138,7 @@ export const MEDIA_SLOTS: SlotDefinition[] = [
     recommended: '600×200 (PNG or JPEG)',
     ratio: '3/1',
     supportsText: false,
+    supportsVideo: false,
     live: true,
   },
 ];
@@ -129,4 +147,17 @@ export const SLOT_BY_KEY = new Map(MEDIA_SLOTS.map((slot) => [slot.key, slot]));
 
 export function isKnownSlot(key: string): boolean {
   return SLOT_BY_KEY.has(key);
+}
+
+/**
+ * May this slot store a looping background video?
+ *
+ * Read by `saveMediaSlot` as well as by the form, so a video posted directly to the action
+ * for, say, `BILL_LOGO` is refused rather than stored somewhere nothing renders it. Defaults
+ * to `false` for an unknown key, which cannot happen — `isKnownSlot` runs first — but a
+ * permission helper that says "yes" when it does not recognise the subject is the wrong
+ * shape regardless.
+ */
+export function slotSupportsVideo(key: string): boolean {
+  return SLOT_BY_KEY.get(key)?.supportsVideo ?? false;
 }

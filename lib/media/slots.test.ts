@@ -21,7 +21,7 @@ import { extname, join, relative, resolve } from 'node:path';
 
 import { describe, expect, it } from 'vitest';
 
-import { MEDIA_SLOTS } from '@/lib/media/slots';
+import { MEDIA_SLOTS, slotSupportsVideo } from '@/lib/media/slots';
 
 const ROOT = resolve(__dirname, '../..');
 
@@ -62,10 +62,12 @@ function sourceFiles(dir: string, out: string[] = []): string[] {
   return out;
 }
 
-const SOURCES = SEARCH_ROOTS.flatMap((dir) => sourceFiles(join(ROOT, dir))).map((file) => ({
-  path: relative(ROOT, file),
-  text: readFileSync(file, 'utf8'),
-}));
+const SOURCES = SEARCH_ROOTS.flatMap((dir) => sourceFiles(join(ROOT, dir))).map(
+  (file) => ({
+    path: relative(ROOT, file),
+    text: readFileSync(file, 'utf8'),
+  }),
+);
 
 describe('every media slot is honest about whether it is on the site', () => {
   it.each(MEDIA_SLOTS.map((slot) => [slot.key, slot.live] as const))(
@@ -104,5 +106,38 @@ describe('every media slot is honest about whether it is on the site', () => {
       'HERO_BANNER',
       'BILL_LOGO',
     ]);
+  });
+});
+
+/**
+ * D-126 — video is a hero-only capability, and the helper is a permission check.
+ *
+ * `saveMediaSlot` calls `slotSupportsVideo` rather than trusting the form, because the
+ * action is reachable directly. A slot storing a video nothing renders is not a security
+ * problem, but it is data the owner cannot see and cannot explain.
+ */
+describe('slotSupportsVideo', () => {
+  it('is true for the hero and nothing else', () => {
+    const withVideo = MEDIA_SLOTS.filter((slot) => slot.supportsVideo).map((s) => s.key);
+    expect(withVideo).toEqual(['HERO_BANNER']);
+  });
+
+  it('agrees with the slot table for every key', () => {
+    for (const slot of MEDIA_SLOTS) {
+      expect(slotSupportsVideo(slot.key), slot.key).toBe(slot.supportsVideo);
+    }
+  });
+
+  it('says no to a key it does not recognise', () => {
+    // A permission helper that answers "yes" to an unknown subject is the wrong shape,
+    // even where `isKnownSlot` already ran first.
+    expect(slotSupportsVideo('NOT_A_SLOT')).toBe(false);
+  });
+
+  it('only offers video where something renders it', () => {
+    for (const slot of MEDIA_SLOTS) {
+      if (!slot.supportsVideo) continue;
+      expect(slot.live, `${slot.key} offers video but nothing renders it`).toBe(true);
+    }
   });
 });

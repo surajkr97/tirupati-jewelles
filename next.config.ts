@@ -95,6 +95,23 @@ function contentSecurityPolicy(): string {
     'font-src': ["'self'", 'data:'],
 
     /**
+     * The hero's optional background video (D-126).
+     *
+     * Without this directive `media-src` falls back to `default-src 'self'` and a `<video>`
+     * pointing at the shop's CDN is blocked — silently, from the page's point of view: the
+     * element mounts, never fires `canplay`, and `HeroMedia` simply keeps showing the
+     * poster. The feature would look like it had been built and then not worked, with
+     * nothing in the server logs.
+     *
+     * Deliberately the SAME list as `img-src`, from `ALLOWED_IMAGE_HOSTS`, rather than a new
+     * variable. The admin can only save a video URL that passed `checkVideoUrl`, which
+     * enforces that exact allowlist — so a second list could only ever disagree with the one
+     * that admits the data, and the failure mode of that disagreement is a stored URL the
+     * browser refuses to load.
+     */
+    'media-src': ["'self'", ...imageHosts.map((h) => `https://${h}`)],
+
+    /**
      * `connect-src` is the one that breaks a feature if it is wrong.
      *
      * Phase 7 §7.8's signed upload POSTs image bytes from the BROWSER straight to

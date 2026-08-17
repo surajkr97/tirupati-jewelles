@@ -50,9 +50,11 @@ export default async function AdminMediaPage() {
         recommended={slot.recommended}
         ratio={slot.ratio}
         supportsText={slot.supportsText}
+        supportsVideo={slot.supportsVideo}
         live={slot.live}
         initial={{
           imageUrl: row?.imageUrl ?? null,
+          videoUrl: row?.videoUrl ?? null,
           linkUrl: row?.linkUrl ?? null,
           headline: row?.headline ?? null,
           subtext: row?.subtext ?? null,

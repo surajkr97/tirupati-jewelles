@@ -64,6 +64,18 @@ vi.mock('next/headers', () => ({
 
 // The SSRF guard makes real network calls; product/media image tests stub it so they test
 // the action rather than the internet. The guard has its own suite in lib/media/ssrf.test.ts.
+const { videoCheck } = vi.hoisted(() => ({
+  videoCheck: {
+    result: {
+      ok: true,
+      url: 'https://res.cloudinary.com/ok.mp4',
+      contentType: 'video/mp4',
+    } as
+      | { ok: true; url: string; contentType: string }
+      | { ok: false; reason: string; detail: string },
+  },
+}));
+
 const { urlCheck } = vi.hoisted(() => ({
   urlCheck: {
     result: {
@@ -77,6 +89,10 @@ const { urlCheck } = vi.hoisted(() => ({
 
 vi.mock('@/lib/media/fetch-image', () => ({
   checkImageUrl: async () => urlCheck.result,
+  // D-126. The real one is exercised against live servers in lib/media/ssrf.test.ts; here
+  // it is stubbed so the ACTION's own rules — hero-only, and never without a poster — are
+  // what the assertions below are measuring.
+  checkVideoUrl: async () => videoCheck.result,
   FAILURE_MESSAGE: new Proxy({}, { get: () => 'Rejected.' }),
 }));
 
@@ -692,7 +708,11 @@ describeDb('admin mutations', () => {
         });
 
         // Exactly what the visibility toggle sends: no `imageUrl` at all.
-        const hidden = await saveCategory({ id: ringsId, name: 'Rings', isActive: false });
+        const hidden = await saveCategory({
+          id: ringsId,
+          name: 'Rings',
+          isActive: false,
+        });
 
         expect(hidden.ok).toBe(true);
         const after = await db.category.findUniqueOrThrow({ where: { id: ringsId } });
@@ -701,7 +721,11 @@ describeDb('admin mutations', () => {
       });
 
       it('refuses an image the guard rejects, and says which field', async () => {
-        urlCheck.result = { ok: false, reason: 'host_not_allowed', detail: 'evil.example' };
+        urlCheck.result = {
+          ok: false,
+          reason: 'host_not_allowed',
+          detail: 'evil.example',
+        };
 
         const result = await saveCategory({
           id: ringsId,
@@ -758,6 +782,97 @@ describeDb('admin mutations', () => {
       });
       expect(slot.imageUrl).toBe('https://res.cloudinary.com/ok.jpg');
       expect(slot.headline).toBe('New season');
+    });
+
+    /**
+     * D-126 — the video is an enhancement on a poster, and only on the hero.
+     *
+     * Both rules live in the action rather than only in the form, because the action is
+     * reachable directly. The second one is the subtle one: `HeroMedia` mounts the video
+     * only after the poster has loaded, so a slot holding a video and no image would
+     * download nothing and show nothing — a save that looks like it worked and does not.
+     */
+    describe('the background video', () => {
+      it('saves alongside an image on the hero', async () => {
+        const result = await saveMediaSlot({
+          slotKey: 'HERO_BANNER',
+          imageUrl: 'https://res.cloudinary.com/hero.jpg',
+          videoUrl: 'https://res.cloudinary.com/hero.mp4',
+          linkUrl: '',
+          headline: '',
+          subtext: '',
+          isActive: true,
+        });
+
+        expect(result.ok).toBe(true);
+        const slot = await db.mediaSlot.findUniqueOrThrow({
+          where: { slotKey: 'HERO_BANNER' },
+        });
+        // The FINAL url after redirects, exactly as the image path stores it.
+        expect(slot.videoUrl).toBe('https://res.cloudinary.com/ok.mp4');
+      });
+
+      it('refuses a video on a slot that does not render one', async () => {
+        const result = await saveMediaSlot({
+          slotKey: 'BILL_LOGO',
+          imageUrl: 'https://res.cloudinary.com/logo.png',
+          videoUrl: 'https://res.cloudinary.com/hero.mp4',
+          linkUrl: '',
+          headline: '',
+          subtext: '',
+          isActive: true,
+        });
+        expect(result.ok).toBe(false);
+      });
+
+      it('refuses a video with no image to be its poster', async () => {
+        const result = await saveMediaSlot({
+          slotKey: 'HERO_BANNER',
+          imageUrl: '',
+          videoUrl: 'https://res.cloudinary.com/hero.mp4',
+          linkUrl: '',
+          headline: '',
+          subtext: '',
+          isActive: true,
+        });
+        expect(result.ok).toBe(false);
+      });
+
+      it('is optional — omitting it saves an image-only hero', async () => {
+        const result = await saveMediaSlot({
+          slotKey: 'HERO_BANNER',
+          imageUrl: 'https://res.cloudinary.com/hero.jpg',
+          linkUrl: '',
+          headline: '',
+          subtext: '',
+          isActive: true,
+        });
+        expect(result.ok).toBe(true);
+        const slot = await db.mediaSlot.findUniqueOrThrow({
+          where: { slotKey: 'HERO_BANNER' },
+        });
+        expect(slot.videoUrl).toBeNull();
+      });
+
+      it('surfaces a rejected video URL against the video field', async () => {
+        videoCheck.result = { ok: false, reason: 'not_a_video', detail: 'It is a PDF.' };
+        const result = await saveMediaSlot({
+          slotKey: 'HERO_BANNER',
+          imageUrl: 'https://res.cloudinary.com/hero.jpg',
+          videoUrl: 'https://res.cloudinary.com/not-a-video.pdf',
+          linkUrl: '',
+          headline: '',
+          subtext: '',
+          isActive: true,
+        });
+        expect(result.ok).toBe(false);
+        if (!result.ok) expect(result.field).toBe('videoUrl');
+        videoCheck.result = {
+          ok: true,
+          url: 'https://res.cloudinary.com/ok.mp4',
+          contentType: 'video/mp4',
+        };
+      });
     });
 
     it('clears a slot back to the branded empty frame', async () => {

@@ -42,6 +42,14 @@ export interface HeroProps {
   imageUrl: string | null;
   imageAlt: string;
   blurDataURL?: string;
+  /**
+   * Optional looping background video from the HERO_BANNER slot (D-126).
+   *
+   * `HeroMedia` mounts it only after the poster has loaded and only when the visitor has not
+   * asked for reduced motion, so an absent video is the ordinary case rather than a
+   * degraded one.
+   */
+  videoUrl?: string;
   /** Owner-set copy from the HERO_BANNER MediaSlot; falls back to the brand line. */
   headline?: string | null;
   subtext?: string | null;
@@ -58,7 +66,14 @@ export interface HeroProps {
 const DEFAULT_HEADLINE = 'Every gram, accounted for.';
 const DEFAULT_SUBTEXT = 'Today’s rates, honest making charges, hallmarked pieces.';
 
-export function Hero({ imageUrl, imageAlt, blurDataURL, headline, subtext }: HeroProps) {
+export function Hero({
+  imageUrl,
+  imageAlt,
+  blurDataURL,
+  videoUrl,
+  headline,
+  subtext,
+}: HeroProps) {
   const onPhoto = Boolean(imageUrl);
 
   return (
@@ -93,6 +108,7 @@ export function Hero({ imageUrl, imageAlt, blurDataURL, headline, subtext }: Her
             src={imageUrl}
             alt={imageAlt}
             blurDataURL={blurDataURL}
+            videoSrc={videoUrl}
             priority
             className="absolute inset-0 -z-10 size-full"
           />
@@ -137,10 +153,23 @@ export function Hero({ imageUrl, imageAlt, blurDataURL, headline, subtext }: Her
           `svh`, not `vh`: mobile browser chrome makes `vh` taller than the visible viewport,
           which would push the rate card below the fold on exactly the devices §4.5 measures.
         */}
+        {/*
+          Trimmed from 62svh / 560px (D-126).
+
+          The type inside is unchanged — D-125 pinned it back to its original size on purpose,
+          and shrinking the headline again is exactly what this must not do. What comes off is
+          empty field above and below the block, which is the part that was only ever there to
+          make the hero tall.
+
+          The floor is §4.5's fold criterion, not taste: `e2e/smoke.spec.ts` asserts the rate
+          ticker's top sits under 667px at 375×667, so a hero that grows pushes the one thing
+          most visitors came for off the screen. Cutting height moves that measurement the
+          safe way, and the test still guards the direction that matters.
+        */}
         <div
           className={cn(
-            'flex min-h-[62svh] flex-col justify-end py-12',
-            'md:min-h-[560px] md:max-w-[560px] md:justify-center md:py-16',
+            'flex min-h-[54svh] flex-col justify-end py-12',
+            'md:min-h-[480px] md:max-w-[560px] md:justify-center md:py-16',
           )}
         >
           <h1
