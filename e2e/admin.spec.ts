@@ -22,6 +22,15 @@ import { ADMIN_STATE } from './admin-state';
  * regression. The tolerance is 0.01px: far below anything a human or a layout can produce,
  * and the next size down the scale is 40px, so a real miss still fails.
  */
+/**
+ * Still 44px, deliberately, while `e2e/auth.spec.ts` moved to 40 (D-122).
+ *
+ * Not an inconsistency. D-122 lowered `--spacing-control`, the height of full-width form
+ * controls, and explicitly did NOT move `--spacing-tap` — the floor a small, isolated
+ * control reaches for. Everything this spec measures is admin navigation chrome built on
+ * `h-tap` / `min-h-tap`, so 44 is the number it should still be held to, and this assertion
+ * is what stops that floor being quietly lowered later.
+ */
 const TAP_MIN = 44 - 0.01;
 
 const ADMIN_ROUTES = [

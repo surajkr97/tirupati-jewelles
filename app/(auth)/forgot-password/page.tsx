@@ -22,21 +22,21 @@ export default function ForgotPasswordPage() {
         </Link>
       }
     >
-        {/* `useSearchParams` (for `?next=`) opts this subtree into client rendering, so
+      {/* `useSearchParams` (for `?next=`) opts this subtree into client rendering, so
             without a boundary Next cannot prerender the static shell around it and the build
             fails. The fallback matches the form's height so nothing shifts when it swaps in
             — the same pattern /login has used since Phase 3. */}
-        <Suspense
-          fallback={
-            <div className="flex flex-col gap-4">
-              <Skeleton className="h-[76px] w-full" />
-              <Skeleton className="h-[76px] w-full" />
-              <Skeleton className="h-control w-full rounded-pill" />
-            </div>
-          }
-        >
-          <ForgotPasswordForm />
-        </Suspense>
+      <Suspense
+        fallback={
+          <div className="flex flex-col gap-4">
+            <Skeleton className="h-field-block w-full" />
+            <Skeleton className="h-field-block w-full" />
+            <Skeleton className="h-control w-full rounded-pill" />
+          </div>
+        }
+      >
+        <ForgotPasswordForm />
+      </Suspense>
     </AuthShell>
   );
 }

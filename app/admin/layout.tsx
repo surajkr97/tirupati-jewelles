@@ -22,6 +22,7 @@ import Link from 'next/link';
 import type { Metadata } from 'next';
 
 import { AdminNav, AdminNavSpacer, AdminSidebar } from '@/components/admin/admin-nav';
+import { CONTAINER_GUTTER } from '@/components/shell/container';
 import { requireAdminPage } from '@/lib/auth/guard';
 
 /** Per-admin and never cacheable (§7.1, MASTER-SPEC §6). */
@@ -75,7 +76,9 @@ export default async function AdminLayout({ children }: { children: React.ReactN
           unpredictable-contrast problem the storefront's chrome had over the wine footer.
         */}
         <header className="sticky top-0 z-20 border-b border-line bg-cream">
-          <div className="mx-auto flex w-full max-w-[1200px] items-center justify-between gap-4 px-[20px] py-4 md:px-[40px]">
+          <div
+            className={`mx-auto flex w-full max-w-[1200px] items-center justify-between gap-4 ${CONTAINER_GUTTER} py-4`}
+          >
             <Link
               href="/admin"
               className="font-display text-h3 font-medium text-ink md:hidden"

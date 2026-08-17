@@ -25,6 +25,7 @@
 
 import { useEffect, useRef } from 'react';
 
+import { CONTAINER_GUTTER } from '@/components/shell/container';
 import { cn } from '@/lib/utils/cn';
 
 /** Read by the `(app)` layout as `pb-[var(--sticky-bar-height,0px)]`. */
@@ -140,7 +141,9 @@ export function StickyBar({
         where the bottom nav is hidden and this bar is the thing sitting over the footer.
       */}
       <div className="pointer-events-auto border-t border-line bg-cream">
-        <div className="mx-auto flex w-full max-w-[1200px] items-center gap-4 px-[20px] py-4 md:px-[40px]">
+        <div
+          className={`mx-auto flex w-full max-w-[1200px] items-center gap-4 ${CONTAINER_GUTTER} py-4`}
+        >
           {children}
         </div>
       </div>

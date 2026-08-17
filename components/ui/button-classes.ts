@@ -51,21 +51,30 @@ export const buttonClasses = cva(
           'bg-transparent text-cream ring-1 ring-inset ring-cream/30 hover:bg-cream/10',
       },
       /**
-       * Every size starts at the 44px minimum tap target and grows from `sm` — Stage 6 §3.
+       * Heights come from the control tokens, which are themselves fluid — Stage 7.
        *
-       * The complaint was that buttons feel oversized on a phone, and the numbers agreed:
-       * the default was 52px and the large one 56px, on screens where 44px is already the
-       * comfortable floor. §3 draws the distinction this fix turns on — "touch target ≠
-       * visual size" — so nothing dropped below 44px anywhere. What changed is that the
-       * EXTRA height is now a desktop affordance, where a pointer is precise and a button
-       * can afford presence, rather than something a thumb pays for.
+       * Stage 6 wrote this as `h-tap sm:h-control`: a hard 44px step up to 52px at the `sm`
+       * breakpoint, which was the right instinct (the extra height is a desktop affordance,
+       * not something a thumb pays for) implemented the only way it could be at the time,
+       * because the tokens were fixed numbers.
+       *
+       * Now that `--spacing-control` interpolates 40 → 52px, the step is unnecessary and
+       * actively worse: a breakpoint jump means a 639px window and a 641px window render
+       * visibly different buttons. `h-control` alone gives the same 52px on a desktop, 40px
+       * on a phone, and a continuous ramp between — and the `sm:` variants that survive now
+       * only carry horizontal padding, which genuinely is a two-state decision.
+       *
+       * `sm` keeps `h-tap`. It is the smallest button in the system, it is the one most
+       * likely to sit alone in a toolbar, and 44px is the floor precisely so that the
+       * smallest control still cannot become unreliable. Same reason `--spacing-tap` did
+       * not become fluid.
        *
        * Done here rather than per call site: one definition, and no page can drift.
        */
       size: {
         sm: 'h-tap px-4 text-small',
-        md: 'h-tap px-4 text-body sm:h-control sm:px-6',
-        lg: 'h-tap px-6 text-body sm:h-control-lg sm:px-8',
+        md: 'h-control px-4 text-body sm:px-6',
+        lg: 'h-control-lg px-6 text-body sm:px-8',
       },
       full: { true: 'w-full', false: '' },
     },

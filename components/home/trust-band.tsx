@@ -30,6 +30,8 @@
  */
 import { BadgeCheck, Receipt, Scale, ShieldCheck } from 'lucide-react';
 
+import { CONTAINER_GUTTER } from '@/components/shell/container';
+
 const ITEMS = [
   {
     icon: ShieldCheck,
@@ -66,7 +68,7 @@ export function TrustBand() {
          back from the white sections above and below it without going dark. */
       className="bg-sand text-ink"
     >
-      <div className="mx-auto w-full max-w-[1200px] px-[20px] py-12 md:px-[40px] md:py-16">
+      <div className={`mx-auto w-full max-w-[1200px] ${CONTAINER_GUTTER} py-12 md:py-16`}>
         <h2 id="trust-heading" className="sr-only">
           Why buy from Tirupati J.
         </h2>

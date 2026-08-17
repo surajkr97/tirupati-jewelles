@@ -54,10 +54,29 @@ test.describe('/__design gallery', () => {
     expect(overflows.scroll).toBeLessThanOrEqual(overflows.client);
   });
 
-  // Acceptance criterion 4 — MASTER-SPEC §3: "Every interactive element >= 44x44px."
-  test('every interactive element meets the 44px tap target', async ({ page }) => {
+  /**
+   * Acceptance criterion 4 — MASTER-SPEC §3, as amended by D-122.
+   *
+   * The figure was 44px, which is Apple's HIG recommendation and was this project's house
+   * rule from Phase 2 until Stage 7. D-121 made the control tokens fluid and D-122 took the
+   * mobile end to 40px deliberately; §3 was amended to match, so this assertion moves with
+   * it rather than being deleted.
+   *
+   * 40 and not lower, and the floor is not arbitrary in either direction:
+   *
+   * - WCAG 2.2 AA (SC 2.5.8) sets the minimum at 24×24px, so 40 clears the accessibility
+   *   requirement with 16px to spare. This amendment relaxes a house convention, not a
+   *   standard.
+   * - `--spacing-tap` is still 44px and did NOT become fluid. Controls that are small and
+   *   isolated — icon buttons, nav links, `Button size="sm"` — still reach for it. What
+   *   changed is that a full-width form control on a phone no longer has to.
+   *
+   * If this number is ever lowered again, the thing to check is SC 2.5.8, not this comment.
+   */
+  test('every interactive element meets the 40px tap target', async ({ page }) => {
     const undersized = await page.evaluate(() => {
-      const MIN = 44;
+      // D-122. WCAG 2.2 AA's own floor is 24px; this stays well above it.
+      const MIN = 40;
       const selector =
         'button, a[href], select, input:not([type="hidden"]), [role="radio"]';
       const bad: { tag: string; text: string; w: number; h: number }[] = [];
@@ -85,15 +104,27 @@ test.describe('/__design gallery', () => {
 
   /**
    * MASTER-SPEC §3 states two things that only coexist under one reading:
-   *   "Small 14/20"                        — 14px is a legitimate scale step
-   *   "Never below 15px for body copy"     — prose has a 15px floor
+   *   "Small 14/20"                        — a legitimate scale step
+   *   "Never below 15px for body copy"     — prose has its own, higher floor
    *
-   * So 14px is for microcopy — field labels, hints, validation messages, badges,
-   * captions, metadata — and 15px+ is for running prose. See DECISIONS.md D-008.
-   * Both halves are asserted: a hard 14px floor everywhere, and 15px for prose.
+   * So the smaller step is for microcopy — field labels, hints, validation messages,
+   * badges, captions, metadata — and prose sits above it. See DECISIONS.md D-008.
+   * Both halves are still asserted; only the numbers moved.
+   *
+   * ── Why they moved (D-121, D-122) ──
+   *
+   * Both figures were fixed, so a 390px phone rendered them at their desktop size. They are
+   * now the bottom of a ramp that reaches 14 and 16 at `md`, and this gallery is measured at
+   * phone width — so it reads the mobile end. §3 was amended rather than contradicted.
+   *
+   * The floors below are the MOBILE ends, deliberately, because that is the only place they
+   * bind: at any width from 768px up the ramps have clamped and the old 14/15 figures are
+   * what renders. A regression that pushed desktop type down would still fail here.
    */
-  test('no text anywhere is below the 14px scale floor', async ({ page }) => {
+  test('no text anywhere is below the 13px scale floor', async ({ page }) => {
     const belowFloor = await page.evaluate(() => {
+      // D-122: `--text-small` reaches 13px at 390px and 14px from `md`.
+      const FLOOR = 13;
       const bad: { text: string; size: number }[] = [];
 
       for (const el of Array.from(document.querySelectorAll('body *'))) {
@@ -106,18 +137,18 @@ test.describe('/__design gallery', () => {
         if (!own) continue;
 
         const size = parseFloat(getComputedStyle(el).fontSize);
-        if (size < 14) bad.push({ text: own.slice(0, 40), size });
+        if (size < FLOOR) bad.push({ text: own.slice(0, 40), size });
       }
       return bad;
     });
 
     expect(
       belowFloor,
-      `text under the 14px floor: ${JSON.stringify(belowFloor)}`,
+      `text under the 13px floor: ${JSON.stringify(belowFloor)}`,
     ).toEqual([]);
   });
 
-  test('running prose is never below 15px', async ({ page }) => {
+  test('running prose is never below 14px', async ({ page }) => {
     const tooSmall = await page.evaluate(() => {
       const bad: { text: string; size: number }[] = [];
 
@@ -130,13 +161,16 @@ test.describe('/__design gallery', () => {
         const text = (el.textContent ?? '').trim();
         if (text.length < 40) continue;
 
+        // D-122: `--text-body` reaches 14px at 390px and 16px from `md`. Its line-height
+        // tightens faster than its size (26 → 20), which is the ratio that actually made
+        // the old mobile page feel loose.
         const size = parseFloat(getComputedStyle(el).fontSize);
-        if (size < 15) bad.push({ text: text.slice(0, 40), size });
+        if (size < 14) bad.push({ text: text.slice(0, 40), size });
       }
       return bad;
     });
 
-    expect(tooSmall, `prose under 15px: ${JSON.stringify(tooSmall)}`).toEqual([]);
+    expect(tooSmall, `prose under 14px: ${JSON.stringify(tooSmall)}`).toEqual([]);
   });
 });
 
