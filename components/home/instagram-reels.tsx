@@ -61,14 +61,31 @@ export function InstagramReels({ reels }: { reels: readonly ReelCard[] }) {
 
   return (
     <ul
-      // The negative margin bleeds the rail to the screen edge on a phone, so the cut-off
-      // tile reaches the actual edge rather than stopping at the gutter — which is what
-      // makes it read as "there is more" instead of "this is clipped". The padding puts the
-      // first tile back on the gutter line so it still aligns with the heading above it.
+      /**
+       * The rail sits inside the section gutter — the first tile lines up with the heading
+       * above it.
+       *
+       * An earlier version bled to the screen edge with `-mx-[gutter] px-[gutter]`, on the
+       * theory that a tile cut off at the true edge reads as "there is more" rather than as
+       * "this is clipped". It did not survive contact: measured at 390px the rail had
+       * `padding-left: 16px` and the first tile still rendered at x=0, because
+       * `scroll-snap-align: start` snaps a tile's edge to the SCROLLPORT edge and ignores
+       * padding unless `scroll-padding` is set to match. So the padding was real, inert, and
+       * the tile sat flush in the corner while the heading was indented — which just looks
+       * like a bug.
+       *
+       * Aligning to the gutter is the simpler thing and needs no scroll-padding to stay
+       * correct. The swipe is still signalled: the second tile is cut off at the gutter line.
+       *
+       * The scrollbar is hidden on both engines. This is a four-item rail with a visible
+       * peek, so the bar adds a grey slab under the tiles and tells the reader nothing the
+       * cut-off tile has not already told them. It stays keyboard- and wheel-scrollable —
+       * hiding the bar is not the same as disabling the scroll.
+       */
       className={[
         'flex snap-x snap-mandatory gap-4 overflow-x-auto',
-        '-mx-[clamp(16px,-8.7623px+6.3493vw,40px)] px-[clamp(16px,-8.7623px+6.3493vw,40px)]',
-        'md:mx-0 md:grid md:grid-cols-4 md:overflow-visible md:px-0',
+        'scrollbar-none [&::-webkit-scrollbar]:hidden',
+        'md:grid md:grid-cols-4 md:overflow-visible',
       ].join(' ')}
       aria-label={`Recent reels from @${INSTAGRAM_HANDLE}`}
     >

@@ -70,6 +70,31 @@ const CACHE_SECONDS = 60 * 30;
 export const REEL_COUNT = 4;
 
 /**
+ * Which four reels the rail shows. Change this one word to switch the rail.
+ *
+ *   'recent'  — the four most recently posted. What the account is doing now.
+ *   'popular' — the four most liked of the last 24 posts. What worked best.
+ *
+ * `popular` costs no extra request: `like_count` already arrives on every item in the same
+ * response, so this is a sort over data we have, not a second call.
+ *
+ * Two things worth knowing before switching:
+ *
+ * - It ranks the last 24 media only, not the whole account. The endpoint is paginated and
+ *   walking it to find an all-time best would be several round trips on every cache miss,
+ *   for a homepage rail.
+ * - There is no view count to sort by. `play_count` and the insights metrics need the
+ *   Facebook Login flow and the `instagram_manage_insights` permission; this integration
+ *   deliberately uses Instagram Login (see the header), so likes are the engagement signal
+ *   available. Comments arrive too and could be a tiebreak, but a like is the closer proxy
+ *   for "this one landed".
+ *
+ * With no token neither ordering applies — the fallback set has no counts, so it renders in
+ * the order it is written in `lib/social/reels.ts`.
+ */
+export const REEL_ORDER: 'recent' | 'popular' = 'recent';
+
+/**
  * The cover, proxied through our own origin.
  *
  * Instagram serves thumbnails from per-request hostnames — `instagram.fdel93-3.fna.fbcdn.net`
@@ -151,11 +176,17 @@ export async function getRecentReels(): Promise<ReelCard[]> {
             typeof media.comments_count === 'number' ? media.comments_count : null,
         };
       })
-      .filter((c): c is ReelCard => c !== null)
-      .slice(0, REEL_COUNT);
+      .filter((c): c is ReelCard => c !== null);
+
+    // `/media` already returns newest first, so 'recent' is the identity order and only
+    // 'popular' has to do anything. `?? -1` sinks an item whose count is missing below one
+    // with a real zero — an unknown is not the same as "nobody liked it".
+    if (REEL_ORDER === 'popular') {
+      cards.sort((a, z) => (z.likes ?? -1) - (a.likes ?? -1));
+    }
 
     // A successful call that yields nothing usable is still a failure for the reader.
-    return cards.length > 0 ? cards : fallbackCards();
+    return cards.length > 0 ? cards.slice(0, REEL_COUNT) : fallbackCards();
   } catch {
     return fallbackCards();
   }

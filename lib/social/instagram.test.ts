@@ -142,6 +142,16 @@ describe('the live path', () => {
     expect(reel?.comments).toBeNull();
   });
 
+  it('takes the newest four, in the order the API returned them', async () => {
+    // `/media` returns newest first, so 'recent' must not reorder anything — and it must
+    // take the FIRST four rather than any four.
+    fetchMock.mockResolvedValue(
+      ok(['a', 'b', 'c', 'd', 'e', 'f'].map((id) => media({ id }))),
+    );
+    const reels = await getRecentReels();
+    expect(reels.map((r) => r.id)).toEqual(['a', 'b', 'c', 'd']);
+  });
+
   it('sends the token and asks for the engagement fields', async () => {
     fetchMock.mockResolvedValue(ok([media()]));
     await getRecentReels();

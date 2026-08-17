@@ -81,6 +81,23 @@ export function Section({
       {seeAllHref && (
         <Link
           href={seeAllHref}
+          /**
+           * An absolute URL leaves the site, so it opens in a new tab and carries `rel`.
+           *
+           * Derived from the href rather than given as a prop, deliberately. The `rel` is
+           * not decoration: without `noopener` the opened tab receives a live
+           * `window.opener` handle and can navigate this one somewhere else, which is the
+           * classic reverse-tabnabbing setup. A `seeAllExternal` prop would make that
+           * protection something a future caller has to remember, and the one who forgets
+           * is the one shipping an external link.
+           *
+           * `startsWith('http')` and not a `URL` parse: every internal href in this codebase
+           * is root-relative (`/collections`, `/admin/bills`), so the two cases are already
+           * unambiguous, and a parse would need a base URL to not throw on them.
+           */
+          {...(seeAllHref.startsWith('http')
+            ? { target: '_blank', rel: 'noopener noreferrer' }
+            : {})}
           className="flex h-tap shrink-0 items-center text-small font-semibold text-rose-deep hover:underline"
         >
           {seeAllLabel}

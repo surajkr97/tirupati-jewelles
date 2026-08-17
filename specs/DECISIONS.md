@@ -3197,3 +3197,26 @@ content type is refused so the route cannot relay HTML from our own origin.
 `route.test.ts` pins all of it, including the two mistakes a hand-rolled host check usually
 makes: `evil-cdninstagram.com` (no dot boundary) and `cdninstagram.com.attacker.test` (a
 suffix that only looks terminal). Both were also confirmed to 400 against the running server.
+
+### Three corrections after the first look at it on a phone
+
+**The rail no longer bleeds to the screen edge.** It did, on the theory that a tile cut off at
+the true edge reads as "there is more" rather than as "this is clipped". Measured at 390px the
+rail had `padding-left: 16px` and the first tile still rendered at x=0, because
+`scroll-snap-align: start` snaps a tile's edge to the SCROLLPORT edge and ignores padding
+unless `scroll-padding` is set to match. So the padding was real, applied, and inert — the
+tile sat flush in the corner while the heading beside it was indented, which just looks like a
+bug. Aligning the rail to the section gutter needs no `scroll-padding` to stay correct, and
+the swipe is still signalled by the second tile being cut at the gutter line.
+
+**The see-all link says "View all", not the handle.** `@_tirupati_jewelers_` in the top-right
+corner sat where every other section on the site puts a short action, so it read as a stray
+label rather than as something to press.
+
+**`Section` opens an absolute `seeAllHref` in a new tab**, with `rel="noopener noreferrer"`.
+Derived from the href rather than added as a prop, because the `rel` is not decoration:
+without `noopener` the opened tab gets a live `window.opener` handle on ours and can navigate
+it elsewhere. A `seeAllExternal` prop would make that protection something the next caller has
+to remember, and the caller who forgets is by definition the one shipping an external link.
+`section.test.tsx` pins both directions — the twelve internal call sites must keep opening in
+the same tab.

@@ -36,7 +36,7 @@ import { listProducts } from '@/lib/catalog/products';
 import { db } from '@/lib/db';
 import { getCurrentRates, getRateHistory, RATE_FACES } from '@/lib/rates';
 import { getRecentReels } from '@/lib/social/instagram';
-import { INSTAGRAM_HANDLE, INSTAGRAM_PROFILE_URL } from '@/lib/social/reels';
+import { INSTAGRAM_PROFILE_URL } from '@/lib/social/reels';
 import { serialiseRates } from '@/lib/rates-view';
 import { canonical } from '@/lib/seo';
 import { ogImageFrom, OG_HEIGHT, OG_WIDTH } from '@/lib/seo/og-image';
@@ -227,17 +227,22 @@ export default async function HomePage() {
         `seeAllHref` is an external URL. `Section` renders it through `next/link`, which
         handles an absolute href by emitting a plain anchor, so no special case is needed.
 
-        The eyebrow is the word "Instagram" and NOT the handle: `Section` styles every
-        eyebrow `uppercase`, which rendered `@_tirupati_jewelers_` as `@_TIRUPATI_JEWELERS_`
-        — a handle that does not exist, printed as though it did. The account name belongs
-        somewhere that preserves its case, so it is the link label instead.
+        The link reads "View all", matching the "See all" / "View all" wording every other
+        section on the site uses for the same affordance. It briefly carried the handle
+        instead — that put `@_tirupati_jewelers_` in the top-right corner where every other
+        section has a short action, and read as a stray label rather than as something to
+        press. The handle is still one tap away, on the profile the link opens.
+
+        The eyebrow is the word "Instagram" and NOT the handle, for a separate reason:
+        `Section` styles every eyebrow `uppercase`, which rendered `@_tirupati_jewelers_` as
+        `@_TIRUPATI_JEWELERS_` — a handle that does not exist, printed as though it did.
       */}
       <Section
         display
         heading="From our Instagram"
         eyebrow="Instagram"
         seeAllHref={INSTAGRAM_PROFILE_URL}
-        seeAllLabel={`@${INSTAGRAM_HANDLE}`}
+        seeAllLabel="View all"
       >
         <InstagramReels reels={reels} />
       </Section>
