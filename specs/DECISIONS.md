@@ -3158,6 +3158,7 @@ reader should believe.
 They remain unreferenced, and they are now explicitly the HIG/house figures that §3's
 desktop end still states — not the mobile floors, which live in the Playwright specs.
 
+
 ## D-123 — the calculator's loading skeleton is measured, not estimated
 
 Unrelated to the fluid scale except that measuring exposed it: the skeleton standing in for
