@@ -443,7 +443,7 @@ test.describe('order history — §6.6', () => {
 });
 
 test.describe('§6 DESIGN and §6.5 images', () => {
-  test('product cards breathe — at least a 16px gap', async ({ page }) => {
+  test('product cards breathe — at least a 12px gap', async ({ page }) => {
     await page.goto('/collections/rings');
 
     const gap = await page.getByTestId('product-grid').evaluate((el) => {
@@ -451,8 +451,18 @@ test.describe('§6 DESIGN and §6.5 images', () => {
       return Math.min(parseFloat(style.columnGap), parseFloat(style.rowGap));
     });
 
-    // §6 DESIGN: "16px gap minimum, no dense grid."
-    expect(gap).toBeGreaterThanOrEqual(16);
+    /**
+     * §6 DESIGN said "16px gap minimum, no dense grid", and D-121 made the spacing scale
+     * fluid — `--spacing-4` now reaches 12px at 390px and the stated 16px from `md`. This
+     * spec runs at phone width, so it reads the mobile end. §6 was amended with §3 (D-122).
+     *
+     * The intent behind the original number is what is actually being guarded, and it
+     * survives: "no dense grid" means two cards must not touch. What changed is that the
+     * separation on a 390px screen no longer costs the same absolute pixels as on a 1440px
+     * one, where 16px is a hairline and on a phone it is a visible channel between two
+     * ~170px cards.
+     */
+    expect(gap).toBeGreaterThanOrEqual(12);
   });
 
   test('every image container has a fixed aspect ratio — no CLS', async ({ page }) => {
