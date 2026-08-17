@@ -3119,11 +3119,44 @@ line-height, an editorial measure for a 700px column and simply loose in a 350px
 mobile ramps tighten line-height faster than size (26 → 20 against 16 → 14) because that
 ratio, not the glyph size, is what made the page feel airy.
 
-`lib/design/tokens.ts` still exports `MIN_TAP_TARGET = 44` and `MIN_BODY_TEXT = 15`. Both
-are unreferenced — nothing imports them, and the `tokens.test.ts` that file's own header
-claims asserts them does not exist — so neither figure was ever enforced by anything. They
-are left in place as the statement of the house rule these two deviations are measured
-against.
+### Correction — these rules WERE enforced, and the enforcement was missed
+
+The paragraph that stood here said the two figures "were never enforced by anything",
+on the evidence that `lib/design/tokens.ts` exports `MIN_TAP_TARGET = 44` and
+`MIN_BODY_TEXT = 15` with no importer, and that the `tokens.test.ts` its header claims
+asserts them does not exist. Both of those facts are true and the conclusion drawn from them
+was wrong: the search stopped at the unit layer. **Four Playwright assertions enforce the
+same rules independently**, and they had been failing on the Stage 7 branch from the first
+push:
+
+| Gate | Rule |
+| :--- | :--- |
+| `e2e/design-system.spec.ts` | every interactive element ≥ 44×44px |
+| `e2e/design-system.spec.ts` | no text below 14px |
+| `e2e/design-system.spec.ts` | running prose ≥ 15px |
+| `e2e/catalog.spec.ts` | product grid gap ≥ 16px |
+
+They were not seen because the Stage 7 verification ran `responsive`, `a11y`, `keyboard`,
+`screen-reader` and `smoke` — the specs that looked topical — and never the whole suite. A
+green partial run was then reported as green. The lesson is the cheaper of the two available
+ones: for a change that moves a global token, the relevant spec is not the one whose name
+matches the change.
+
+### What was decided, now that the premise is right
+
+The deviation stands, and the four assertions were amended to the mobile ends of the ramps
+rather than deleted — each still fails if type or targets regress past the new floor, and all
+four are unchanged above `md`, where the ramps have clamped and the original figures are what
+renders.
+
+MASTER-SPEC §3 was amended in the same pass. That is the part that makes this honest: the
+alternative was a spec stating 44px and 15px, tests asserting 40px and 14px, and a decision
+record explaining the gap — three sources of truth and no way to tell which one a future
+reader should believe.
+
+`lib/design/tokens.ts` keeps `MIN_TAP_TARGET` and `MIN_BODY_TEXT` at their original values.
+They remain unreferenced, and they are now explicitly the HIG/house figures that §3's
+desktop end still states — not the mobile floors, which live in the Playwright specs.
 
 ## D-123 — the calculator's loading skeleton is measured, not estimated
 

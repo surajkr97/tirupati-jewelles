@@ -97,6 +97,28 @@ borderRadius: {
 - Type: Inter or General Sans. H1 32/36 mobile → 48/52 desktop. Body 16/26. Small 14/20.
   **Never below 15px for body copy.**
 - Every interactive element ≥ 44×44px.
+
+> **AMENDED by D-122 (Stage 7).** The three figures above — the spacing scale, the type
+> floors and the 44px target — were written as single values, so a phone rendered the
+> desktop design at desktop dimensions. D-121 made the tokens interpolate 390px → 768px;
+> every number stated in this section is now the **desktop end of a ramp** and is unchanged
+> at `md` and above. The mobile ends are:
+>
+> | | this section | mobile (390px) |
+> | :--- | ---: | ---: |
+> | body copy | 16/26 | 14/20 |
+> | small | 14/20 | 13/18 |
+> | interactive element | 44px | 40px |
+> | spacing step `4` | 16px | 12px |
+> | section padding | 48px | 28px |
+>
+> The 44px figure is Apple's HIG convention, not a standard: WCAG 2.2 AA (SC 2.5.8) sets
+> the floor at 24×24px, so 40px clears the accessibility requirement with room to spare.
+> `--spacing-tap` remains 44px and is what a small isolated control still reaches for.
+>
+> `e2e/design-system.spec.ts` and `e2e/catalog.spec.ts` assert the mobile ends, because the
+> mobile end is the only one that can bind — above `md` the ramps have clamped and the
+> figures in this section are what renders.
 - Images: always `<Image>`, always `sizes`, `blurDataURL` placeholder, `priority` only on
   the hero.
 

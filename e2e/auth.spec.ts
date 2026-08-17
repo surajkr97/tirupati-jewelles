@@ -16,7 +16,21 @@ import type { BrowserContext, Page } from '@playwright/test';
 
 import { ADMIN_STATE } from './admin-state';
 
-const TAP_MIN = 44 - 0.01;
+/**
+ * The mobile tap-target floor, 40px — MASTER-SPEC §3 as amended by D-122.
+ *
+ * Was 44px, which is Apple's HIG figure and was the house rule until Stage 7. D-121 made
+ * the control tokens fluid and D-122 took the mobile end to 40px; §3 and the design-system
+ * spec were amended in the same pass, so this constant moves with them rather than becoming
+ * the one place that still disagrees.
+ *
+ * WCAG 2.2 AA (SC 2.5.8) sets the real floor at 24×24px, so 40 clears the standard with
+ * 16px to spare — what moved is a convention, not a requirement. `--spacing-tap` is still
+ * 44px for controls that are small and isolated.
+ *
+ * The 0.01 slack is unchanged and is for sub-pixel layout noise, not for the rule.
+ */
+const TAP_MIN = 40 - 0.01;
 
 /**
  * A customer row inserted directly, then signed in through the real endpoint.
