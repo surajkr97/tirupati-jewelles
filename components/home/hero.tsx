@@ -77,6 +77,12 @@ export function Hero({ imageUrl, imageAlt, blurDataURL, headline, subtext }: Her
        */
       className={cn(
         'relative isolate -mt-header pt-header md:-mt-header-lg md:pt-header-lg',
+        /**
+         * The hero keeps the pre-D-121 type and spacing — see `.hero-scale` in globals.css
+         * for why this one section opts out of the fluid scale (D-125). It affects nothing
+         * outside this element: the tokens are re-declared here and inherited downwards.
+         */
+        'hero-scale',
         onPhoto ? 'surface-wine text-white' : 'bg-sand text-ink',
       )}
       aria-labelledby="hero-heading"
@@ -168,11 +174,24 @@ export function Hero({ imageUrl, imageAlt, blurDataURL, headline, subtext }: Her
           <Link
             href="/collections"
             className={cn(
-              'mt-8 w-fit',
               buttonClasses({
                 variant: onPhoto ? 'onWine' : 'primary',
                 size: 'md',
               }),
+              'mt-8 w-fit',
+              /**
+               * The CTA's height, restored to what it was before D-121 (D-125).
+               *
+               * This one cannot come from `.hero-scale`. The button reads `h-control`, and
+               * pinning that token would give the hero a 52px button on a phone — bigger
+               * than it ever was, because before D-121 this button was `h-tap sm:h-control`
+               * and measured 44px there. So the two-step form is restored explicitly.
+               *
+               * Written AFTER `buttonClasses(...)` on purpose: `cn` resolves the `h-*`
+               * conflict in favour of the last one, so ordering is what makes this override
+               * take effect rather than silently lose to the variant it is overriding.
+               */
+              'h-tap sm:h-control',
             )}
           >
             Explore the collection

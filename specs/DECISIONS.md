@@ -3220,3 +3220,54 @@ it elsewhere. A `seeAllExternal` prop would make that protection something the n
 to remember, and the caller who forgets is by definition the one shipping an external link.
 `section.test.tsx` pins both directions — the twelve internal call sites must keep opening in
 the same tab.
+
+## D-125 — the hero opts out of the fluid scale
+
+D-121 made the type and spacing tokens interpolate 390 → 768px. That is right for the ~60
+components that were rendering desktop dimensions on a phone, and wrong for exactly one
+place.
+
+Measured against `origin/master`, the hero was the section D-121 changed most. At 390px:
+
+| | before D-121 | after |
+| :--- | ---: | ---: |
+| `h1` size / line-height | 40 / 44 | 28 / 32 |
+| `h1` rendered height | 88 | 32 |
+| subtext size / line-height | 18 / 28 | 15 / 22 |
+| CTA height / label | 44 / 16 | 40 / 14 |
+| block padding-top | 48 | 28 |
+| ornament rule width | 64 | 36 |
+
+At 768px and 1280px it measured **identical** to master, because the ramps had already
+clamped. So this was never a desktop question.
+
+The `h1` row is the one that decided it. The default headline went from filling two lines to
+sitting on one — the difference between a statement and a caption. The hero is not UI: it is
+one viewport of brand, holding a single headline that is supposed to dominate, and D-121's
+premise ("a phone should not render desktop dimensions") does not apply to an element whose
+job is to be large. §4.5's fold criterion is what constrains it instead, and that is asserted
+separately.
+
+**Implemented as a scoped token re-declaration, not as fixed sizes in the markup.**
+`.hero-scale` in globals.css re-declares the six tokens the hero uses; custom properties
+inherit, so every utility inside picks them up with no class changes and no `md:` variants to
+keep in step. `hero.tsx` goes on reading `text-display`, `py-12`, `mt-8` — the same names as
+the rest of the site — so the exception lives in one place with its reasoning attached rather
+than as a dozen arbitrary values indistinguishable from typos.
+
+One value could not come from the class. The CTA reads `h-control`, and pinning that token
+would have given the hero a **52px** button on a phone — larger than it ever was, since
+before D-121 the button was `h-tap sm:h-control` and measured 44px. The two-step form is
+restored explicitly at the call site, written after `buttonClasses(...)` so `cn` resolves the
+`h-*` conflict in its favour.
+
+Verified twice, because a re-declared inherited property is exactly the kind of change that
+escapes its container: the hero now measures identical to master at 390 / 768 / 1280 on all
+twelve properties, and elements outside it still measure the D-121 values (body 14px, section
+headings 18px). `e2e/smoke.spec.ts`'s above-the-fold assertion — the reason the hero's height
+is constrained at all — still passes at 375×667.
+
+A first attempt at the containment check read `getPropertyValue('--text-body')` and reported
+a leak that did not exist: Tailwind v4 does not expose `@theme` variables where that read
+finds them, and it returned empty at `:root` too. Rendered font sizes are the fact; the
+variable read was measuring the measurement.
