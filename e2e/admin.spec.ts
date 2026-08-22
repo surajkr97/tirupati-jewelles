@@ -139,24 +139,44 @@ test.describe('the admin panel', () => {
     test.skip(testInfo.project.name !== 'mobile-375', 'Mutates the shared rate');
     await page.goto('/admin/rates');
 
-    const field = page.getByLabel('New rate (per 10 grams)').first();
+    // One gold field, holding the 24K figure the shop reads off the market. 916 and 750
+    // are derived from it — there is deliberately no field for either.
+    const field = page.getByLabel('New rate (per 10 grams)');
     const before = await field.inputValue();
 
     // Ten times the current rate: the fat-finger typo §7.3 calls the most damaging
     // available.
     await field.fill(String(Number(before) * 10));
-    await page.getByTestId('save-K22_916').click();
+    await page.getByTestId('save-GOLD_24K').click();
 
     // It must not save on the first press.
-    const confirm = page.getByTestId('confirm-K22_916');
+    const confirm = page.getByTestId('confirm-GOLD_24K');
     await expect(confirm).toBeVisible();
     // And the confirmation must name the size of the change, not just ask "are you sure?".
     await expect(page.getByText(/% change/)).toBeVisible();
 
-    // Walk away rather than confirming — the rate must be untouched.
+    // Walk away rather than confirming — BOTH gold rows must be untouched, which is the
+    // property the single field exists to guarantee. A guard that stopped 916 and let 750
+    // through would leave the catalogue pricing two different golds.
     await page.getByRole('button', { name: 'Cancel' }).click();
     await page.reload();
-    await expect(page.getByLabel('New rate (per 10 grams)').first()).toHaveValue(before);
+    await expect(page.getByLabel('New rate (per 10 grams)')).toHaveValue(before);
+  });
+
+  test('gold is one field, and it shows what both purities become — §7.3', async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== 'mobile-375', 'Reads the shared rate');
+    await page.goto('/admin/rates');
+
+    // The regression this whole change guards: a second gold field reappearing, and the
+    // owner typing the 916 and 750 rates by hand off one number again.
+    await expect(page.getByLabel('New rate (per 10 grams)')).toHaveCount(1);
+
+    // Both derived purities are named, so nothing the app stores is hidden from the person
+    // responsible for it.
+    await expect(page.getByText('22K (916)')).toBeVisible();
+    await expect(page.getByText('18K (750)')).toBeVisible();
   });
 
   /**

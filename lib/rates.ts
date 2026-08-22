@@ -20,8 +20,28 @@ import { Metal, Purity } from '@prisma/client';
 import { revalidatePath, revalidateTag } from 'next/cache';
 
 import { db } from '@/lib/db';
+import {
+  GOLD_PURITIES,
+  goldRateFromPure,
+  pureFromGoldRate,
+  type GoldPurityKey,
+} from '@/lib/gold-purity';
 import type { RatesByPurity } from '@/lib/pricing';
 import { cached, invalidate, redis } from '@/lib/redis';
+
+/**
+ * Re-exported so server callers have one import for "rates", while the derivation itself
+ * stays in a module the client bundle can reach. `lib/gold-purity.ts` explains the split.
+ */
+export {
+  GOLD_FINENESS,
+  GOLD_PURITIES,
+  GOLD_PURITY_LABELS,
+  goldRateFromPure,
+  pureFromGoldRate,
+  quotedPureRate,
+  type GoldPurityKey,
+} from '@/lib/gold-purity';
 
 export const RATES_CACHE_KEY = 'rates:current';
 export const RATES_CACHE_TTL = 300;
@@ -297,26 +317,21 @@ export type SetRateResult =
 export async function setRate(input: SetRateInput): Promise<SetRateResult> {
   const { metal, purity, ratePerGram, userId, ip, confirmed = false } = input;
 
-  const previous = await db.metalRate.findFirst({
-    where: { metal, purity },
-    orderBy: { effectiveAt: 'desc' },
-    select: { ratePerGram: true },
-  });
+  const previous = await previousRatePerGram(metal, purity);
 
   /**
    * Sanity guard (§4.2): "A fat-fingered extra zero on a gold rate is the most damaging
    * typo available in this app." It would flow straight into every product page and every
    * bill generated before someone noticed.
    */
-  if (previous && previous.ratePerGram > 0n && !confirmed) {
-    const before = Number(previous.ratePerGram);
-    const changePct = Math.abs(Number(ratePerGram) - before) / before;
+  if (!confirmed) {
+    const changePct = changeFraction(previous, ratePerGram);
 
-    if (changePct > SANITY_THRESHOLD) {
+    if (changePct !== null && changePct > SANITY_THRESHOLD) {
       return {
         ok: false,
         reason: 'needs_confirmation',
-        previous: previous.ratePerGram,
+        previous: previous as bigint,
         changePct,
       };
     }
@@ -333,16 +348,178 @@ export async function setRate(input: SetRateInput): Promise<SetRateResult> {
         action: 'RATE_SET',
         entity: 'MetalRate',
         entityId: `${metal}:${purity}`,
-        before: previous ? { ratePerGram: previous.ratePerGram.toString() } : undefined,
+        before: previous !== null ? { ratePerGram: previous.toString() } : undefined,
         after: { ratePerGram: ratePerGram.toString() },
         ip,
       },
     });
   });
 
+  await publishRateChange([{ metal, purity, ratePerGram }]);
+
+  return { ok: true, ratePerGram };
+}
+
+// ── Gold: one typed rate, both hallmarked rows ─────────────────────────────
+
+export interface SetGoldRatesInput {
+  /** PAISE per gram of PURE (24K) gold. Callers convert from the display unit first. */
+  purePerGram: bigint;
+  userId: string;
+  ip?: string;
+  /** Required to accept a change beyond ±20% on either derived purity (§4.2). */
+  confirmed?: boolean;
+}
+
+export type SetGoldRatesResult =
+  | { ok: true; purePerGram: bigint; rates: Record<GoldPurityKey, bigint> }
+  | {
+      ok: false;
+      reason: 'needs_confirmation';
+      /** The pure rate implied by the live 22K row — what the admin is moving away from. */
+      previousPure: bigint;
+      changePct: number;
+    };
+
+/**
+ * Record today's gold rate from the single 24K figure the shop reads off the market.
+ *
+ * ── Why this is not two `setRate` calls ──
+ * It was, in the first cut, and that version could half-succeed: 916 written, 750 tripping
+ * the ±20% guard, and the catalogue left pricing 22K off today and 18K off yesterday. The
+ * guard has to be answered for BOTH purities before EITHER row is written, and both rows
+ * have to land in one transaction, or a crash between them leaves exactly the inconsistency
+ * this whole change exists to remove.
+ *
+ * The two derived rates are the same number times two constants, so in the ordinary case
+ * they breach the guard together. They can still disagree when the stored rows are
+ * themselves inconsistent — a shop that set 916 and 750 by hand for months — so the guard
+ * takes the WORST of the two and the confirmation covers the pair. After one confirmed save
+ * the rows are consistent by construction and this stops arising.
+ */
+export async function setGoldRates(
+  input: SetGoldRatesInput,
+): Promise<SetGoldRatesResult> {
+  const { purePerGram, userId, ip, confirmed = false } = input;
+
+  const writes = await Promise.all(
+    GOLD_PURITIES.map(async (purity) => ({
+      purity,
+      ratePerGram: goldRateFromPure(purePerGram, purity),
+      previous: await previousRatePerGram(Metal.GOLD, purity as Purity),
+    })),
+  );
+
+  if (!confirmed) {
+    // The worst breach across the pair, and the purity that produced it — the confirmation
+    // has to name a figure the admin recognises, so the "previous" it reports is that row's
+    // rate read back as a pure rate.
+    let worst: { changePct: number; previousPure: bigint } | null = null;
+
+    for (const write of writes) {
+      const changePct = changeFraction(write.previous, write.ratePerGram);
+      if (changePct === null || changePct <= SANITY_THRESHOLD) continue;
+      if (worst && worst.changePct >= changePct) continue;
+
+      worst = {
+        changePct,
+        previousPure: pureFromGoldRate(write.previous as bigint, write.purity),
+      };
+    }
+
+    if (worst) return { ok: false, reason: 'needs_confirmation', ...worst };
+  }
+
+  await db.$transaction(async (tx) => {
+    for (const { purity, ratePerGram, previous } of writes) {
+      await tx.metalRate.create({
+        data: {
+          metal: Metal.GOLD,
+          purity: purity as Purity,
+          ratePerGram,
+          setByUserId: userId,
+        },
+      });
+
+      /**
+       * One audit row PER PURITY, not one for the 24K input.
+       *
+       * §7.3 shows this log back as rate-change history, and what a bill was priced from is
+       * a 916 rate or a 750 rate — never a 24K rate, which is quoted and never sold. An
+       * entry saying "gold set to ₹1,29,280" would not match any figure on any invoice.
+       */
+      await tx.auditLog.create({
+        data: {
+          actorId: userId,
+          action: 'RATE_SET',
+          entity: 'MetalRate',
+          entityId: `${Metal.GOLD}:${purity}`,
+          before: previous !== null ? { ratePerGram: previous.toString() } : undefined,
+          after: { ratePerGram: ratePerGram.toString() },
+          ip,
+        },
+      });
+    }
+  });
+
+  await publishRateChange(
+    writes.map(({ purity, ratePerGram }) => ({
+      metal: Metal.GOLD,
+      purity: purity as Purity,
+      ratePerGram,
+    })),
+  );
+
+  return {
+    ok: true,
+    purePerGram,
+    rates: Object.fromEntries(
+      writes.map(({ purity, ratePerGram }) => [purity, ratePerGram]),
+    ) as Record<GoldPurityKey, bigint>,
+  };
+}
+
+// ── Shared write plumbing ──────────────────────────────────────────────────
+
+/** The rate in force for a metal/purity, or null if none has ever been set. */
+async function previousRatePerGram(metal: Metal, purity: Purity): Promise<bigint | null> {
+  const row = await db.metalRate.findFirst({
+    where: { metal, purity },
+    orderBy: { effectiveAt: 'desc' },
+    select: { ratePerGram: true },
+  });
+
+  return row?.ratePerGram ?? null;
+}
+
+/**
+ * How far `next` moves from `previous`, as a fraction — or null when there is nothing to
+ * compare against. The first rate a shop ever sets has no baseline, and a stored zero is
+ * not one either: dividing by it yields Infinity, which trips the guard on every save and
+ * teaches the admin to click through the confirmation without reading it.
+ */
+function changeFraction(previous: bigint | null, next: bigint): number | null {
+  if (previous === null || previous <= 0n) return null;
+
+  const before = Number(previous);
+  return Math.abs(Number(next) - before) / before;
+}
+
+/**
+ * Everything that has to happen after rate rows land, for one write or for a batch.
+ *
+ * Called ONCE per admin action rather than once per row: `revalidatePath` on every rate
+ * surface is not free, and two gold rows set from one figure are one change to the shop's
+ * prices, not two.
+ */
+async function publishRateChange(
+  writes: readonly { metal: Metal; purity: Purity; ratePerGram: bigint }[],
+): Promise<void> {
   // Bust the cache before revalidating, or the regenerated page reads a stale value.
   await invalidate(RATES_CACHE_KEY);
-  await appendHistory(metal, purity, ratePerGram);
+  for (const { metal, purity, ratePerGram } of writes) {
+    await appendHistory(metal, purity, ratePerGram);
+  }
 
   /**
    * Next.js 16 changed the signature to `revalidateTag(tag, profile)` — the profile is
@@ -360,8 +537,6 @@ export async function setRate(input: SetRateInput): Promise<SetRateResult> {
   // `type: 'page'` is required for a path containing a dynamic segment, and is what makes
   // one call cover every product rather than one product.
   for (const pattern of RATE_SURFACE_PATTERNS) revalidatePath(pattern, 'page');
-
-  return { ok: true, ratePerGram };
 }
 
 /** Sorted set for the sparkline (MASTER-SPEC §7). Best-effort; Postgres is the truth. */
