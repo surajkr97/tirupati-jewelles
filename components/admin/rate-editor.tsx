@@ -193,9 +193,14 @@ export function RateEditor({
         what keeps the single field honest: it is a smaller thing to trust than two fields,
         not a more opaque one. `aria-live` because for a screen-reader user these numbers
         change with no focus event to announce them.
+
+        The heading sits OUTSIDE the `<dl>`: a definition list may only directly contain
+        `<dt>`/`<dd>` groups, `<div>`, `<script>` and `<template>`, and a stray `<p>` in
+        there is a serious axe violation (§9.7 gates on it). Each pair keeps its wrapping
+        `<div>`, which is what makes the two-column layout legal as well as legible.
       */}
       {derived && derived.length > 0 && (
-        <dl
+        <div
           className="flex flex-col gap-2 rounded-field border border-line bg-sand p-4"
           aria-live="polite"
         >
@@ -203,33 +208,35 @@ export function RateEditor({
             {dirty && valid ? 'Would be saved as' : 'Saved as'}
           </p>
 
-          {derived.map(
-            ({ purity, label: purityLabel, currentDisplay: currentDerived }) => (
-              <div
-                key={purity}
-                className="flex flex-wrap items-baseline justify-between gap-x-4"
-              >
-                <dt className="text-body text-muted">{purityLabel}</dt>
-                <dd className="text-body num text-ink">
-                  {dirty && valid ? (
-                    <>
-                      <span className="text-muted line-through">
+          <dl className="flex flex-col gap-2">
+            {derived.map(
+              ({ purity, label: purityLabel, currentDisplay: currentDerived }) => (
+                <div
+                  key={purity}
+                  className="flex flex-wrap items-baseline justify-between gap-x-4"
+                >
+                  <dt className="text-body text-muted">{purityLabel}</dt>
+                  <dd className="text-body num text-ink">
+                    {dirty && valid ? (
+                      <>
+                        <span className="text-muted line-through">
+                          {formatINR(BigInt(currentDerived))}
+                        </span>{' '}
+                        <strong className="font-semibold">
+                          {formatINR(derivedNext(purity))}
+                        </strong>
+                      </>
+                    ) : (
+                      <span className="font-semibold">
                         {formatINR(BigInt(currentDerived))}
-                      </span>{' '}
-                      <strong className="font-semibold">
-                        {formatINR(derivedNext(purity))}
-                      </strong>
-                    </>
-                  ) : (
-                    <span className="font-semibold">
-                      {formatINR(BigInt(currentDerived))}
-                    </span>
-                  )}
-                </dd>
-              </div>
-            ),
-          )}
-        </dl>
+                      </span>
+                    )}
+                  </dd>
+                </div>
+              ),
+            )}
+          </dl>
+        </div>
       )}
 
       {confirming ? (
