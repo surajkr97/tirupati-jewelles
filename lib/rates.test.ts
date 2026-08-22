@@ -31,12 +31,17 @@ import { db } from '@/lib/db';
 import { formatINR, formatPercent } from '@/lib/money';
 import {
   fromDisplayUnit,
+  GOLD_PURITIES,
+  goldRateFromPure,
   isValidCombination,
   perGramToPer10g,
   perGramToPerKg,
   per10gToPerGram,
   perKgToPerGram,
+  pureFromGoldRate,
+  quotedPureRate,
   SANITY_THRESHOLD,
+  setGoldRates,
   setRate,
   toDisplayUnit,
 } from '@/lib/rates';
@@ -250,5 +255,221 @@ describeDb('setRate — the fat-finger guard', () => {
     });
 
     expect(result.ok).toBe(true);
+  });
+});
+
+/**
+ * The "one gold field" change — `lib/gold-purity.ts` and `setGoldRates`.
+ *
+ * The property that matters is not "916 is 91.6% of 24K", which is arithmetic. It is that
+ * the two stored rows can no longer disagree about what gold costs, which is a property of
+ * how they are WRITTEN — hence the transaction and all-or-nothing guard tests below.
+ */
+describe('gold purity derivation', () => {
+  it('applies the fineness — 22K is 91.6% of pure, 18K is 75%', () => {
+    // ₹1,29,000 per 10g of 24K → per gram.
+    const pure = 1_290_000n;
+
+    expect(goldRateFromPure(pure, 'K22_916')).toBe(1_181_640n);
+    expect(goldRateFromPure(pure, 'K18_750')).toBe(967_500n);
+  });
+
+  /**
+   * The inverse is lossy and the test says so rather than picking figures that hide it.
+   *
+   * Rates are integer paise per gram, so applying a fineness throws away up to half a paise
+   * with nothing left to recover it from. One paise per gram is the real bound; asserting
+   * exact equality here would only mean the fixtures were chosen to divide cleanly.
+   */
+  it('reads back within a paise per gram of the pure rate that made it', () => {
+    // Deliberately awkward figures — the ones divisible by 1000 would pass a truncating
+    // implementation too, and truncation is what biases every rate down by a paise.
+    for (const pure of [1_290_000n, 1_184_207n, 999_999n, 1n, 12_345_678n]) {
+      for (const purity of GOLD_PURITIES) {
+        const back = pureFromGoldRate(goldRateFromPure(pure, purity), purity);
+        const drift = back > pure ? back - pure : pure - back;
+        expect(drift).toBeLessThanOrEqual(1n);
+      }
+    }
+  });
+
+  /**
+   * What the admin actually experiences, which is the property worth guarding.
+   *
+   * They type whole rupees per 10 grams, the app derives and stores 916, and tomorrow the
+   * field is pre-filled from that stored row. If this drifts, the page shows a rate they
+   * did not type — `quotedPureRate` exists for exactly this and the snap is what makes it
+   * hold.
+   */
+  it('shows an admin back the whole-rupee figure they typed', () => {
+    for (const rupeesPer10g of [129_000n, 118_420n, 99_999n, 5_000n, 250_001n]) {
+      const typedDisplay = rupeesPer10g * 100n;
+      // The write path: display paise → per gram → apply fineness. Then read it back.
+      const stored22 = goldRateFromPure(per10gToPerGram(typedDisplay), 'K22_916');
+
+      expect(quotedPureRate(perGramToPer10g(stored22), 'K22_916')).toBe(typedDisplay);
+    }
+  });
+
+  it('rounds half-up rather than truncating — no systematic discount', () => {
+    // 1n × 750 / 1000 = 0.75. Truncation stores 0, which is a free gram of gold.
+    expect(goldRateFromPure(1n, 'K18_750')).toBe(1n);
+    // 3n × 916 / 1000 = 2.748 — nearest is 3, not 2.
+    expect(goldRateFromPure(3n, 'K22_916')).toBe(3n);
+  });
+
+  it('is exact — bigint, never float', () => {
+    // 0.916 is not representable in binary floating point. `12_345_678 * 0.916` is
+    // 11_308_641.048 in JS and rounds to ...641; the integer path is what makes it exact.
+    expect(goldRateFromPure(12_345_678n, 'K22_916')).toBe(11_308_641n);
+  });
+});
+
+describeDb('setGoldRates — one typed rate, both rows', () => {
+  let adminId: string;
+
+  beforeEach(async () => {
+    await db.auditLog.deleteMany();
+    await db.metalRate.deleteMany();
+    await db.user.deleteMany();
+
+    const admin = await db.user.create({
+      data: { email: `gold-${Date.now()}@example.com`, role: Role.ADMIN },
+      select: { id: true },
+    });
+    adminId = admin.id;
+  });
+
+  afterAll(async () => {
+    await db.auditLog.deleteMany();
+    await db.metalRate.deleteMany();
+    await db.user.deleteMany();
+    await db.$disconnect();
+  });
+
+  /** The 916 and 750 rates in force, newest row per purity. */
+  async function liveGold(): Promise<Record<string, bigint | undefined>> {
+    const rows = await db.metalRate.findMany({
+      where: { metal: Metal.GOLD },
+      orderBy: { effectiveAt: 'desc' },
+    });
+
+    return Object.fromEntries(
+      GOLD_PURITIES.map((purity) => [
+        purity,
+        rows.find((row) => row.purity === purity)?.ratePerGram,
+      ]),
+    );
+  }
+
+  it('writes a row for BOTH purities from one figure', async () => {
+    const result = await setGoldRates({ purePerGram: 1_290_000n, userId: adminId });
+
+    expect(result.ok).toBe(true);
+    expect(await liveGold()).toEqual({ K22_916: 1_181_640n, K18_750: 967_500n });
+  });
+
+  it('leaves the two rows describing the same metal', async () => {
+    await setGoldRates({ purePerGram: 1_290_000n, userId: adminId });
+    const live = await liveGold();
+
+    // The whole point of the single field: read either row back as a pure rate and you get
+    // the same number. Two hand-typed fields could not promise this.
+    expect(pureFromGoldRate(live.K22_916 as bigint, 'K22_916')).toBe(
+      pureFromGoldRate(live.K18_750 as bigint, 'K18_750'),
+    );
+  });
+
+  it('audits per purity, not per keystroke — a bill is priced from 916 or 750', async () => {
+    await setGoldRates({ purePerGram: 1_290_000n, userId: adminId, ip: '203.0.113.7' });
+
+    const logs = await db.auditLog.findMany({ where: { action: 'RATE_SET' } });
+
+    expect(logs).toHaveLength(2);
+    expect(logs.map((log) => log.entityId).sort()).toEqual([
+      'GOLD:K18_750',
+      'GOLD:K22_916',
+    ]);
+    expect(logs.every((log) => log.actorId === adminId && log.ip === '203.0.113.7')).toBe(
+      true,
+    );
+  });
+
+  it('REJECTS a 10× rate without confirmation, and writes NEITHER row', async () => {
+    await setGoldRates({ purePerGram: 1_290_000n, userId: adminId });
+
+    const result = await setGoldRates({ purePerGram: 12_900_000n, userId: adminId });
+
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.changePct).toBeGreaterThan(SANITY_THRESHOLD);
+      // Named in the unit the admin typed in, so the dialog can quote it back to them.
+      expect(result.previousPure).toBe(1_290_000n);
+    }
+
+    // All-or-nothing. A half-applied gold change is the exact inconsistency this whole
+    // change exists to remove — 22K priced off today, 18K off yesterday.
+    expect(await db.metalRate.count()).toBe(2);
+  });
+
+  it('accepts the same 10× change when confirmed', async () => {
+    await setGoldRates({ purePerGram: 1_290_000n, userId: adminId });
+
+    const result = await setGoldRates({
+      purePerGram: 12_900_000n,
+      userId: adminId,
+      confirmed: true,
+    });
+
+    expect(result.ok).toBe(true);
+    expect(await db.metalRate.count()).toBe(4);
+  });
+
+  it('holds back both rows when only ONE purity trips the guard', async () => {
+    // A shop that set 916 and 750 by hand can hold a pair that no single 24K rate implies.
+    // Here 750 is left far below where the new pure rate puts it, so the 18K row breaches
+    // the threshold while the 22K row does not.
+    await db.metalRate.createMany({
+      data: [
+        {
+          metal: Metal.GOLD,
+          purity: Purity.K22_916,
+          ratePerGram: 1_181_640n,
+          setByUserId: adminId,
+        },
+        {
+          metal: Metal.GOLD,
+          purity: Purity.K18_750,
+          ratePerGram: 500_000n,
+          setByUserId: adminId,
+        },
+      ],
+    });
+
+    const result = await setGoldRates({ purePerGram: 1_290_000n, userId: adminId });
+
+    expect(result.ok).toBe(false);
+    // Reported against the row that actually breached, so the figure in the dialog is one
+    // the admin can recognise as wrong.
+    if (!result.ok) expect(result.previousPure).toBe(666_667n);
+    expect(await db.metalRate.count()).toBe(2);
+  });
+
+  it('accepts the first gold rate — nothing to compare against', async () => {
+    const result = await setGoldRates({ purePerGram: 1_290_000n, userId: adminId });
+    expect(result.ok).toBe(true);
+  });
+
+  it('does not disturb silver', async () => {
+    await setRate({
+      metal: Metal.SILVER,
+      purity: Purity.SILVER_999,
+      ratePerGram: 15_890n,
+      userId: adminId,
+    });
+
+    await setGoldRates({ purePerGram: 1_290_000n, userId: adminId });
+
+    expect(await db.metalRate.count({ where: { metal: Metal.SILVER } })).toBe(1);
   });
 });

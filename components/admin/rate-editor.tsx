@@ -16,12 +16,23 @@ import { useState, useTransition } from 'react';
 
 import { updateRate } from '@/app/admin/rates/actions';
 import { Badge, Button, Card, Input, toast } from '@/components/ui';
+import { goldRateFromPure, type GoldPurityKey } from '@/lib/gold-purity';
 import { formatINR } from '@/lib/money';
 import { cn } from '@/lib/utils/cn';
 
+/** One editable FIELD — not one stored purity. See `app/admin/rates/actions.ts`. */
+export type RateTarget = 'GOLD_24K' | 'SILVER_999';
+
+/** A purity this field derives rather than asks for. */
+export interface DerivedRate {
+  purity: GoldPurityKey;
+  label: string;
+  /** The rate currently in force for that purity, display unit, in paise. */
+  currentDisplay: string;
+}
+
 export interface RateEditorProps {
-  metal: 'GOLD' | 'SILVER';
-  purity: 'K22_916' | 'K18_750' | 'SILVER_999';
+  target: RateTarget;
   label: string;
   unit: string;
   /** Current rate in the display unit, in paise. */
@@ -29,16 +40,22 @@ export interface RateEditorProps {
   effectiveAt: string;
   /** Older than §7.2's 48-hour rule. Flagged here because this is where it gets fixed. */
   stale?: boolean;
+  /**
+   * Purities computed from this field instead of typed. Shown live, because a number the
+   * admin does not type is still a number they are responsible for — and 916 and 750 are
+   * what every product page and every bill will actually price from.
+   */
+  derived?: DerivedRate[];
 }
 
 export function RateEditor({
-  metal,
-  purity,
+  target,
   label,
   unit,
   currentDisplay,
   effectiveAt,
   stale = false,
+  derived,
 }: RateEditorProps) {
   const currentPaise = BigInt(currentDisplay);
   const currentRupees = (Number(currentPaise) / 100).toFixed(2).replace(/\.00$/, '');
@@ -62,16 +79,22 @@ export function RateEditor({
       ? ((typed * 100 - Number(currentPaise)) / Number(currentPaise)) * 100
       : null;
 
+  /**
+   * What the typed 24K figure would make each hallmarked purity.
+   *
+   * Deliberately the SAME arithmetic, in the same order, as the server: rupees → paise per
+   * 10g → truncate to per-gram → apply the fineness. A preview that rounds differently from
+   * the write is a preview that lies, and it lies by a rupee, which is exactly the size of
+   * discrepancy nobody investigates.
+   */
+  const derivedNext = (purity: GoldPurityKey): bigint =>
+    goldRateFromPure(BigInt(Math.round(typed * 100)) / 10n, purity) * 10n;
+
   const save = (confirmed: boolean) => {
     setError(null);
 
     startTransition(async () => {
-      const result = await updateRate({
-        metal,
-        purity,
-        displayRupees: typed,
-        confirmed,
-      });
+      const result = await updateRate({ target, displayRupees: typed, confirmed });
 
       if (result.ok) {
         setConfirming(null);
@@ -163,6 +186,52 @@ export function RateEditor({
         </p>
       )}
 
+      {/*
+        ── The rows this field writes ──
+
+        The admin types 24K; the shop sells 916 and 750. Showing the derived pair, live, is
+        what keeps the single field honest: it is a smaller thing to trust than two fields,
+        not a more opaque one. `aria-live` because for a screen-reader user these numbers
+        change with no focus event to announce them.
+      */}
+      {derived && derived.length > 0 && (
+        <dl
+          className="flex flex-col gap-2 rounded-field border border-line bg-sand p-4"
+          aria-live="polite"
+        >
+          <p className="text-small font-medium tracking-[0.08em] text-muted uppercase">
+            {dirty && valid ? 'Would be saved as' : 'Saved as'}
+          </p>
+
+          {derived.map(
+            ({ purity, label: purityLabel, currentDisplay: currentDerived }) => (
+              <div
+                key={purity}
+                className="flex flex-wrap items-baseline justify-between gap-x-4"
+              >
+                <dt className="text-body text-muted">{purityLabel}</dt>
+                <dd className="text-body num text-ink">
+                  {dirty && valid ? (
+                    <>
+                      <span className="text-muted line-through">
+                        {formatINR(BigInt(currentDerived))}
+                      </span>{' '}
+                      <strong className="font-semibold">
+                        {formatINR(derivedNext(purity))}
+                      </strong>
+                    </>
+                  ) : (
+                    <span className="font-semibold">
+                      {formatINR(BigInt(currentDerived))}
+                    </span>
+                  )}
+                </dd>
+              </div>
+            ),
+          )}
+        </dl>
+      )}
+
       {confirming ? (
         // The §7.3 confirmation step. Deliberately loud, and it names both figures.
         <div className="flex flex-col gap-4 rounded-field bg-down/10 p-4">
@@ -189,7 +258,7 @@ export function RateEditor({
               onClick={() => save(true)}
               loading={pending}
               loadingLabel="Saving…"
-              data-testid={`confirm-${purity}`}
+              data-testid={`confirm-${target}`}
             >
               Yes, set it
             </Button>
@@ -213,7 +282,7 @@ export function RateEditor({
           loading={pending}
           loadingLabel="Saving…"
           onClick={() => save(false)}
-          data-testid={`save-${purity}`}
+          data-testid={`save-${target}`}
         >
           {dirty ? 'Save new rate' : 'No change'}
         </Button>
